@@ -44,5 +44,5 @@ pulled forward when they do not change the VLM contract. Product behavior should
 follow `whichvlm`'s VLM package graph, vision workload, backend priorities, model
 inventory, and runtime constraints.
 
-## 2026-06-05 14:00 checkpoint
-- Added GPU backend matrix notes covering Apple, NVIDIA, and AMD probing behaviors to keep platform coverage consistent.
+## 2026-06-06 14:00 checkpoint
+- Added cross-vendor consistency notes after Intel/Windows path additions and simulator hardening.
