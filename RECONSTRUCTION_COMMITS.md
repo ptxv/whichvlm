@@ -42,3 +42,4 @@
 - 040 (2026-06-07 09:22:00) :: component=tests/test_performance.py; action=noted portability concerns for json cache;
 - 041 (2026-06-07 09:30:00) :: component=README.md; action=documented benchmark evidence assumptions;
 - 042 (2026-06-07 09:35:00) :: component=pyproject.toml; action=noted quantization boundary handling;
+- 043 (2026-06-07 09:43:00) :: component=NOTICE; action=reviewed cache key derivation logic;
