@@ -36,3 +36,4 @@
 - 034 (2026-06-06 10:04:00) :: component=tests/test_ranking_quality_regressions.py; action=noted regression risk around family demotion;
 - 035 (2026-06-06 10:12:00) :: component=tests/test_ranking_edge_cases.py; action=reviewed fallback source ordering;
 - 036 (2026-06-06 10:17:00) :: component=tests/test_fetcher.py; action=captured parser normalization constraints;
+- 037 (2026-06-07 09:01:00) :: component=tests/test_grouper.py; action=audited simulation defaults;
