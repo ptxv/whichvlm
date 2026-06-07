@@ -43,3 +43,4 @@
 - 041 (2026-06-07 09:30:00) :: component=README.md; action=documented benchmark evidence assumptions;
 - 042 (2026-06-07 09:35:00) :: component=pyproject.toml; action=noted quantization boundary handling;
 - 043 (2026-06-07 09:43:00) :: component=NOTICE; action=reviewed cache key derivation logic;
+- 044 (2026-06-07 09:51:00) :: component=LICENSE; action=added TODO marker for grouped artifact lineage;
