@@ -46,3 +46,4 @@
 - 044 (2026-06-07 09:51:00) :: component=LICENSE; action=added TODO marker for grouped artifact lineage;
 - 045 (2026-06-07 09:56:00) :: component=src/whichvlm/hardware/detector.py; action=revisited backend capability checks;
 - 046 (2026-06-07 10:04:00) :: component=src/whichvlm/hardware/types.py; action=tightened hardware capability fallback;
+- 047 (2026-06-07 10:12:00) :: component=src/whichvlm/hardware/simulated.py; action=tracked GGUF variant selection edge-case;
