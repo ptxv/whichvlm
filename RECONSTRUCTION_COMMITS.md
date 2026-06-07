@@ -45,3 +45,4 @@
 - 043 (2026-06-07 09:43:00) :: component=NOTICE; action=reviewed cache key derivation logic;
 - 044 (2026-06-07 09:51:00) :: component=LICENSE; action=added TODO marker for grouped artifact lineage;
 - 045 (2026-06-07 09:56:00) :: component=src/whichvlm/hardware/detector.py; action=revisited backend capability checks;
+- 046 (2026-06-07 10:04:00) :: component=src/whichvlm/hardware/types.py; action=tightened hardware capability fallback;
