@@ -41,3 +41,4 @@
 - 039 (2026-06-07 09:14:00) :: component=tests/test_aa_index.py; action=tracked API response de-duplication behavior;
 - 040 (2026-06-07 09:22:00) :: component=tests/test_performance.py; action=noted portability concerns for json cache;
 - 041 (2026-06-07 09:30:00) :: component=README.md; action=documented benchmark evidence assumptions;
+- 042 (2026-06-07 09:35:00) :: component=pyproject.toml; action=noted quantization boundary handling;
