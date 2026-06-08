@@ -59,3 +59,4 @@
 - 057 (2026-06-08 09:56:00) :: component=src/whichvlm/models/benchmark_sources/livebench.py; action=audited simulation defaults;
 - 058 (2026-06-08 10:04:00) :: component=src/whichvlm/models/benchmark_sources/chatbot_arena.py; action=refined test intent for hardware variants;
 - 059 (2026-06-08 10:12:00) :: component=src/whichvlm/models/benchmark_sources/aider.py; action=tracked API response de-duplication behavior;
+- 060 (2026-06-08 10:17:00) :: component=src/whichvlm/engine/ranker.py; action=noted portability concerns for json cache;
