@@ -51,3 +51,4 @@
 - 049 (2026-06-08 09:01:00) :: component=src/whichvlm/models/types.py; action=aligned ranking confidence ordering;
 - 050 (2026-06-08 09:09:00) :: component=src/whichvlm/models/lineage.py; action=clarified output formatting decision points;
 - 051 (2026-06-08 09:14:00) :: component=src/whichvlm/models/grouper.py; action=validated command alias compatibility matrix;
+- 052 (2026-06-08 09:22:00) :: component=src/whichvlm/models/benchmark.py; action=recorded import-time schema expectations;
