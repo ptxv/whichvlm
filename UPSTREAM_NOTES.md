@@ -44,5 +44,5 @@ pulled forward when they do not change the VLM contract. Product behavior should
 follow `whichvlm`'s VLM package graph, vision workload, backend priorities, model
 inventory, and runtime constraints.
 
-## 2026-06-07 14:00 checkpoint
-- Added a benchmark-source integration checkpoint confirming VLM-first score sources are preferred over text-only traces.
+## 2026-06-08 14:00 checkpoint
+- Added model cache/key stability notes to support family-aware benchmark resolution and VLM artifact indexing.
