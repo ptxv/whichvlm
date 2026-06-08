@@ -54,3 +54,4 @@
 - 052 (2026-06-08 09:22:00) :: component=src/whichvlm/models/benchmark.py; action=recorded import-time schema expectations;
 - 053 (2026-06-08 09:30:00) :: component=src/whichvlm/models/benchmark_sources/__init__.py; action=documented memory estimation guardrails;
 - 054 (2026-06-08 09:35:00) :: component=src/whichvlm/models/benchmark_sources/open_llm_leaderboard.py; action=noted regression risk around family demotion;
+- 055 (2026-06-08 09:43:00) :: component=src/whichvlm/models/benchmark_sources/vision.py; action=reviewed fallback source ordering;
