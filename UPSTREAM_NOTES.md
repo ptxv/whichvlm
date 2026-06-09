@@ -44,5 +44,5 @@ pulled forward when they do not change the VLM contract. Product behavior should
 follow `whichvlm`'s VLM package graph, vision workload, backend priorities, model
 inventory, and runtime constraints.
 
-## 2026-06-08 14:00 checkpoint
-- Added model cache/key stability notes to support family-aware benchmark resolution and VLM artifact indexing.
+## 2026-06-09 14:00 checkpoint
+- Added parser-hardening notes for model metadata, architecture, tags, and lineage extraction behavior.
