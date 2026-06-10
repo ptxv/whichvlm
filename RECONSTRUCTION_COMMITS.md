@@ -72,3 +72,4 @@
 - 070 (2026-06-09 10:04:00) :: component=src/whichvlm/cli_output.py; action=clarified output formatting decision points;
 - 071 (2026-06-09 10:12:00) :: component=src/whichvlm/output/ranking.py; action=validated command alias compatibility matrix;
 - 072 (2026-06-09 10:17:00) :: component=src/whichvlm/output/snippet.py; action=recorded import-time schema expectations;
+- 073 (2026-06-10 09:01:00) :: component=src/whichvlm/output/runner.py; action=documented memory estimation guardrails;
