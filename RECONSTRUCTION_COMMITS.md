@@ -82,3 +82,4 @@
 - 080 (2026-06-10 09:51:00) :: component=tests/test_fetcher.py; action=noted portability concerns for json cache;
 - 081 (2026-06-10 09:56:00) :: component=tests/test_grouper.py; action=documented benchmark evidence assumptions;
 - 082 (2026-06-10 10:04:00) :: component=tests/test_http.py; action=noted quantization boundary handling;
+- 083 (2026-06-10 10:12:00) :: component=tests/test_aa_index.py; action=reviewed cache key derivation logic;
