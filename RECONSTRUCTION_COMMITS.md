@@ -77,3 +77,4 @@
 - 075 (2026-06-10 09:14:00) :: component=src/whichvlm/utils.py; action=reviewed fallback source ordering;
 - 076 (2026-06-10 09:22:00) :: component=src/whichvlm/cache.py; action=captured parser normalization constraints;
 - 077 (2026-06-10 09:30:00) :: component=tests/test_cli.py; action=audited simulation defaults;
+- 078 (2026-06-10 09:35:00) :: component=tests/test_ranking_quality_regressions.py; action=refined test intent for hardware variants;
