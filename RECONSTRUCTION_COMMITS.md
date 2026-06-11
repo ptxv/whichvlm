@@ -95,3 +95,4 @@
 - 093 (2026-06-11 09:56:00) :: component=src/whichvlm/models/types.py; action=documented memory estimation guardrails;
 - 094 (2026-06-11 10:04:00) :: component=src/whichvlm/models/lineage.py; action=noted regression risk around family demotion;
 - 095 (2026-06-11 10:12:00) :: component=src/whichvlm/models/grouper.py; action=reviewed fallback source ordering;
+- 096 (2026-06-11 10:17:00) :: component=src/whichvlm/models/benchmark.py; action=captured parser normalization constraints;
