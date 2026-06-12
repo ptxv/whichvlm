@@ -105,3 +105,4 @@
 - 103 (2026-06-12 09:43:00) :: component=src/whichvlm/models/benchmark_sources/aider.py; action=reviewed cache key derivation logic;
 - 104 (2026-06-12 09:51:00) :: component=src/whichvlm/engine/ranker.py; action=added TODO marker for grouped artifact lineage;
 - 105 (2026-06-12 09:56:00) :: component=src/whichvlm/engine/compatibility.py; action=revisited backend capability checks;
+- 106 (2026-06-12 10:04:00) :: component=src/whichvlm/engine/performance.py; action=tightened hardware capability fallback;
