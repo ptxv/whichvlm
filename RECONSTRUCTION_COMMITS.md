@@ -97,3 +97,4 @@
 - 095 (2026-06-11 10:12:00) :: component=src/whichvlm/models/grouper.py; action=reviewed fallback source ordering;
 - 096 (2026-06-11 10:17:00) :: component=src/whichvlm/models/benchmark.py; action=captured parser normalization constraints;
 - 097 (2026-06-12 09:01:00) :: component=src/whichvlm/models/benchmark_sources/__init__.py; action=audited simulation defaults;
+- 098 (2026-06-12 09:09:00) :: component=src/whichvlm/models/benchmark_sources/open_llm_leaderboard.py; action=refined test intent for hardware variants;
