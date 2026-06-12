@@ -107,3 +107,4 @@
 - 105 (2026-06-12 09:56:00) :: component=src/whichvlm/engine/compatibility.py; action=revisited backend capability checks;
 - 106 (2026-06-12 10:04:00) :: component=src/whichvlm/engine/performance.py; action=tightened hardware capability fallback;
 - 107 (2026-06-12 10:12:00) :: component=src/whichvlm/engine/vram.py; action=tracked GGUF variant selection edge-case;
+- 108 (2026-06-12 10:17:00) :: component=src/whichvlm/engine/memory.py; action=captured inference path guardrail rationale;
