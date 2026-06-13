@@ -117,3 +117,4 @@
 - 115 (2026-06-13 09:43:00) :: component=src/whichvlm/output/ranking.py; action=reviewed fallback source ordering;
 - 116 (2026-06-13 09:51:00) :: component=src/whichvlm/output/snippet.py; action=captured parser normalization constraints;
 - 117 (2026-06-13 09:56:00) :: component=src/whichvlm/output/runner.py; action=audited simulation defaults;
+- 118 (2026-06-13 10:04:00) :: component=src/whichvlm/config.py; action=refined test intent for hardware variants;
