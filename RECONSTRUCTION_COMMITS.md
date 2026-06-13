@@ -114,3 +114,4 @@
 - 112 (2026-06-13 09:22:00) :: component=src/whichvlm/cli.py; action=recorded import-time schema expectations;
 - 113 (2026-06-13 09:30:00) :: component=src/whichvlm/cli_flags.py; action=documented memory estimation guardrails;
 - 114 (2026-06-13 09:35:00) :: component=src/whichvlm/cli_output.py; action=noted regression risk around family demotion;
+- 115 (2026-06-13 09:43:00) :: component=src/whichvlm/output/ranking.py; action=reviewed fallback source ordering;
