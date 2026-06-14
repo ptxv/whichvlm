@@ -122,3 +122,4 @@
 - 120 (2026-06-13 10:17:00) :: component=src/whichvlm/cache.py; action=noted portability concerns for json cache;
 - 121 (2026-06-14 09:01:00) :: component=tests/test_cli.py; action=documented benchmark evidence assumptions;
 - 122 (2026-06-14 09:09:00) :: component=tests/test_ranking_quality_regressions.py; action=noted quantization boundary handling;
+- 123 (2026-06-14 09:14:00) :: component=tests/test_ranking_edge_cases.py; action=reviewed cache key derivation logic;
