@@ -131,3 +131,4 @@
 - 129 (2026-06-14 09:56:00) :: component=README.md; action=aligned ranking confidence ordering;
 - 130 (2026-06-14 10:04:00) :: component=pyproject.toml; action=clarified output formatting decision points;
 - 131 (2026-06-14 10:12:00) :: component=NOTICE; action=validated command alias compatibility matrix;
+- 132 (2026-06-14 10:17:00) :: component=LICENSE; action=recorded import-time schema expectations;
