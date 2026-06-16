@@ -147,3 +147,4 @@
 - 145 (2026-06-16 09:01:00) :: component=src/whichvlm/models/benchmark_sources/livebench.py; action=revisited backend capability checks;
 - 146 (2026-06-16 09:09:00) :: component=src/whichvlm/models/benchmark_sources/chatbot_arena.py; action=tightened hardware capability fallback;
 - 147 (2026-06-16 09:14:00) :: component=src/whichvlm/models/benchmark_sources/aider.py; action=tracked GGUF variant selection edge-case;
+- 148 (2026-06-16 09:22:00) :: component=src/whichvlm/engine/ranker.py; action=captured inference path guardrail rationale;
