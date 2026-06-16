@@ -153,3 +153,4 @@
 - 151 (2026-06-16 09:43:00) :: component=src/whichvlm/engine/vram.py; action=validated command alias compatibility matrix;
 - 152 (2026-06-16 09:51:00) :: component=src/whichvlm/engine/memory.py; action=recorded import-time schema expectations;
 - 153 (2026-06-16 09:56:00) :: component=src/whichvlm/runtime/llama_cpp.py; action=documented memory estimation guardrails;
+- 154 (2026-06-16 10:04:00) :: component=src/whichvlm/runtime/mlx.py; action=noted regression risk around family demotion;
