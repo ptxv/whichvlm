@@ -162,3 +162,4 @@
 - 160 (2026-06-17 09:29:00) :: component=src/whichvlm/output/snippet.py; action=noted portability concerns for json cache;
 - 161 (2026-06-17 09:37:00) :: component=src/whichvlm/output/runner.py; action=documented benchmark evidence assumptions;
 - 162 (2026-06-17 09:42:00) :: component=src/whichvlm/config.py; action=noted quantization boundary handling;
+- 163 (2026-06-17 09:50:00) :: component=src/whichvlm/utils.py; action=reviewed cache key derivation logic;
