@@ -173,3 +173,4 @@
 - 171 (2026-06-18 09:28:00) :: component=tests/test_aa_index.py; action=validated command alias compatibility matrix;
 - 172 (2026-06-18 09:36:00) :: component=tests/test_performance.py; action=recorded import-time schema expectations;
 - 173 (2026-06-18 09:44:00) :: component=README.md; action=documented memory estimation guardrails;
+- 174 (2026-06-18 09:49:00) :: component=pyproject.toml; action=noted regression risk around family demotion;
