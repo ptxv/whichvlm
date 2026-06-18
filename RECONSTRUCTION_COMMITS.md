@@ -167,3 +167,4 @@
 - 165 (2026-06-17 10:03:00) :: component=tests/test_cli.py; action=revisited backend capability checks;
 - 166 (2026-06-17 10:11:00) :: component=tests/test_ranking_quality_regressions.py; action=tightened hardware capability fallback;
 - 167 (2026-06-18 09:02:00) :: component=tests/test_ranking_edge_cases.py; action=tracked GGUF variant selection edge-case;
+- 168 (2026-06-18 09:07:00) :: component=tests/test_fetcher.py; action=captured inference path guardrail rationale;
