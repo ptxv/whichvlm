@@ -170,3 +170,4 @@
 - 168 (2026-06-18 09:07:00) :: component=tests/test_fetcher.py; action=captured inference path guardrail rationale;
 - 169 (2026-06-18 09:15:00) :: component=tests/test_grouper.py; action=aligned ranking confidence ordering;
 - 170 (2026-06-18 09:23:00) :: component=tests/test_http.py; action=clarified output formatting decision points;
+- 171 (2026-06-18 09:28:00) :: component=tests/test_aa_index.py; action=validated command alias compatibility matrix;
