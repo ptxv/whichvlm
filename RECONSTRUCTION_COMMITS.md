@@ -186,3 +186,4 @@
 - 184 (2026-06-19 09:43:00) :: component=src/whichvlm/models/benchmark.py; action=added TODO marker for grouped artifact lineage;
 - 185 (2026-06-19 09:51:00) :: component=src/whichvlm/models/benchmark_sources/__init__.py; action=revisited backend capability checks;
 - 186 (2026-06-19 09:56:00) :: component=src/whichvlm/models/benchmark_sources/open_llm_leaderboard.py; action=tightened hardware capability fallback;
+- 187 (2026-06-19 10:04:00) :: component=src/whichvlm/models/benchmark_sources/vision.py; action=tracked GGUF variant selection edge-case;
