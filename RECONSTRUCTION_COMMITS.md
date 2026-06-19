@@ -179,3 +179,4 @@
 - 177 (2026-06-18 10:10:00) :: component=src/whichvlm/hardware/detector.py; action=audited simulation defaults;
 - 178 (2026-06-19 09:01:00) :: component=src/whichvlm/hardware/types.py; action=refined test intent for hardware variants;
 - 179 (2026-06-19 09:09:00) :: component=src/whichvlm/hardware/simulated.py; action=tracked API response de-duplication behavior;
+- 180 (2026-06-19 09:14:00) :: component=src/whichvlm/models/fetcher.py; action=noted portability concerns for json cache;
