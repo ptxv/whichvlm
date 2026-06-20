@@ -198,3 +198,4 @@
 - 196 (2026-06-20 09:50:00) :: component=src/whichvlm/engine/memory.py; action=captured parser normalization constraints;
 - 197 (2026-06-20 09:58:00) :: component=src/whichvlm/runtime/llama_cpp.py; action=audited simulation defaults;
 - 198 (2026-06-20 10:03:00) :: component=src/whichvlm/runtime/mlx.py; action=refined test intent for hardware variants;
+- 199 (2026-06-20 10:11:00) :: component=src/whichvlm/runtime/transformers.py; action=tracked API response de-duplication behavior;
