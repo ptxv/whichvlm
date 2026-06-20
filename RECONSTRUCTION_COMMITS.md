@@ -193,3 +193,4 @@
 - 191 (2026-06-20 09:16:00) :: component=src/whichvlm/models/benchmark_sources/aider.py; action=validated command alias compatibility matrix;
 - 192 (2026-06-20 09:21:00) :: component=src/whichvlm/engine/ranker.py; action=recorded import-time schema expectations;
 - 193 (2026-06-20 09:29:00) :: component=src/whichvlm/engine/compatibility.py; action=documented memory estimation guardrails;
+- 194 (2026-06-20 09:37:00) :: component=src/whichvlm/engine/performance.py; action=noted regression risk around family demotion;
