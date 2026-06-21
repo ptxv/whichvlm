@@ -185,7 +185,7 @@ def test_format_fetch_error_includes_status_and_url_for_empty_http_error():
 
 def test_merge_model_eval_benchmarks_is_now_a_noop():
     """As of the self_reported evidence tier, _merge_model_eval_benchmarks
-    must NOT mutate the leaderboard scores. Uploader-reported hf_eval values
+    must NOT mutate external evidence. Uploader-reported hf_eval values
     are consumed directly by the ranker as a separate, low-trust source.
     """
     model_direct_missing = ModelInfo(
@@ -216,7 +216,7 @@ def test_merge_model_eval_benchmarks_is_now_a_noop():
     assert merged is original or merged == original
     # Critically, the uploader-reported value MUST NOT have been injected
     # under the model id, because doing so would make it appear as a
-    # direct leaderboard hit.
+    # direct external evidence hit.
     assert "meta-llama/Llama-3.1-8B-Instruct" not in merged
 
 

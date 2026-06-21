@@ -1,4 +1,4 @@
-"""Tests for the Artificial Analysis Intelligence Index source.
+"""Tests for the frontier-capability index source.
 
 These cover the Next.js App Router (RSC) scraper that replaced the old
 ``__NEXT_DATA__`` extraction, the variant-stripping name canonicalization,
@@ -26,9 +26,8 @@ from whichvlm.models.benchmark_sources.aa_index import (
 
 
 def _rsc_page(records: list[dict]) -> str:
-    """Build a minimal HTML page that embeds ``records`` the way the live
-    artificialanalysis.ai App Router page does: as a JSON-string-escaped
-    fragment inside ``self.__next_f.push([n, "..."])``."""
+    """Build a minimal HTML page that embeds ``records`` inside a JSON-string-escaped
+    stream fragment like ``self.__next_f.push([n, \"...\"])``."""
     # The fragment is an arbitrary slice of the RSC stream; the scraper only
     # cares that it contains the "name"/"intelligenceIndex" key pairs.
     fragment = ",".join(

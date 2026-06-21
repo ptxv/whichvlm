@@ -14,16 +14,15 @@ LEADERBOARD_ROWS_URL = "https://datasets-server.huggingface.co/rows"
 LEADERBOARD_DATASET = "open-llm-leaderboard/contents"
 
 # --- Leaderboard normalization ---
-# OLLB v2 averages range ~5 to ~52. The leaderboard is archived 2025-06 with
-# the top slot held by Qwen2.5-32B (47.6 raw = 91.5 if uncapped); capping at
-# 78 prevents an older generation with a strong-but-frozen OLLB score from
-# dominating rankings that now have AA Index / LiveBench coverage too.
+# Legacy archive averages range ~5 to ~52. Capping at this value prevents older
+# high-score historical entries from dominating newer releases now covered by
+# recency-updated sources.
 _LB_AVG_MAX = 52
-_OLLB_MAX_NORMALIZED = 78.0
+_ARCHIVE_SOURCE_MAX_NORMALIZED = 78.0
 
 
 async def _fetch_leaderboard_parquet(client: httpx.AsyncClient) -> dict[str, float]:
-    """Download Open LLM Leaderboard parquet (requires pyarrow)."""
+    """Download legacy parquet snapshot (requires pyarrow)."""
     import pyarrow.parquet as pq
 
     resp = await get_with_retries(
@@ -45,7 +44,7 @@ async def _fetch_leaderboard_parquet(client: httpx.AsyncClient) -> dict[str, flo
 
 
 async def _fetch_leaderboard_api(client: httpx.AsyncClient) -> dict[str, float]:
-    """Fetch Open LLM Leaderboard via rows API (no pyarrow needed)."""
+    """Fetch legacy rows via API (no pyarrow needed)."""
     scores: dict[str, float] = {}
     offset = 0
 
@@ -83,9 +82,9 @@ async def _fetch_leaderboard_api(client: httpx.AsyncClient) -> dict[str, float]:
 
 
 def _normalize_leaderboard_avg(avg: float) -> float:
-    """Normalize Open LLM Leaderboard average to 0-_OLLB_MAX_NORMALIZED scale."""
-    score = avg / _LB_AVG_MAX * _OLLB_MAX_NORMALIZED
-    return max(0.0, min(_OLLB_MAX_NORMALIZED, round(score, 1)))
+    """Normalize legacy-archive average to 0-archive-source scale."""
+    score = avg / _LB_AVG_MAX * _ARCHIVE_SOURCE_MAX_NORMALIZED
+    return max(0.0, min(_ARCHIVE_SOURCE_MAX_NORMALIZED, round(score, 1)))
 
 
 async def fetch_leaderboard_with_fallback(

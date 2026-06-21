@@ -255,8 +255,10 @@ class TestReasoningSurface:
             "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
             "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         ):
-            assert mid in LIVEBENCH_RAW_DATA, f"{mid} missing in LB"
-            assert mid in AA_INDEX_FALLBACK_2026_05_14, f"{mid} missing in AA"
+            assert mid in LIVEBENCH_RAW_DATA, f"{mid} missing in current snapshot"
+            assert mid in AA_INDEX_FALLBACK_2026_05_14, (
+                f"{mid} missing in capability fallback"
+            )
 
     def test_qwq32b_surfaces_with_curated_score(self):
         qwq = ModelInfo(

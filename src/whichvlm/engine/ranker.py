@@ -51,7 +51,7 @@ def _family_selection_key(
     adjustment. Keep final selection close to that displayed score so strong
     partial-offload candidates do not get discounted again while sorting.
 
-    - ``direct_bonus`` (+5) gives independent leaderboard evidence a
+    - ``direct_bonus`` (+5) gives independent external benchmark evidence a
       small edge at the same fit; cannot overturn a 6+ point quality gap
     """
     if require_direct_top and result.benchmark_status == "direct":
@@ -108,7 +108,7 @@ def _partial_offload_quality_factor(model: ModelInfo, offload_ratio: float) -> f
 
 # Per-source benchmark weight applied to the raw 0-100 score before it is
 # combined with size, quant penalty, etc. The widest gap is between "direct"
-# (independent leaderboard) and "self_reported" (uploader card claim).
+# (independent external benchmark) and "self_reported" (uploader card claim).
 _SOURCE_WEIGHTS: dict[str, float] = {
     "direct": 0.62,
     "base_model": 0.55,
@@ -584,7 +584,7 @@ def _compute_quality_score(
 
     # Benchmarks lead, but raw model size also matters: a 70B at Q4_K_M
     # carries far more world knowledge than a 7B Q4_K_M even when the
-    # leaderboard score gap is modest. For MoE models, knowledge capacity
+    # External score gap is modest. For MoE models, knowledge capacity
     # tracks *total* params (every expert contributes to what the model
     # knows), while routing keeps per-token compute small. Use total params
     # for the size score and let the speed term separately reward MoE

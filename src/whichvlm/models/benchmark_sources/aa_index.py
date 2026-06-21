@@ -1,14 +1,8 @@
-"""Artificial Analysis Intelligence Index source.
+"""Frontier-capability index source.
 
-AA publishes a model-quality index (https://artificialanalysis.ai/) that
-covers post-2025-08 frontier releases (DeepSeek V4, GLM-5, Kimi K2.6,
-MiMo V2.5, Qwen3.6, etc.) that whichvlm's primary sources have stopped
-tracking. The index is exposed via the JSON payload embedded in
-``__NEXT_DATA__`` on the leaderboard page.
-
-The fetcher is defensive: any failure (network, schema drift, parsing) is
-caught and an empty dict is returned so it never blocks the main benchmark
-pipeline.
+This source is an external leaderboard stream for frontier-oriented score data.
+The fetcher is defensive: network/schema/parse failures are handled by returning
+an empty parse result and falling back to a cached snapshot.
 """
 
 from __future__ import annotations
@@ -43,9 +37,8 @@ def walk_json_dicts(obj, depth: int = 0):
         for item in obj:
             yield from walk_json_dicts(item, depth + 1)
 
-# Display name -> list of (org_prefix, repo_name_candidates) tuples used to
-# map AA-reported labels back to HuggingFace model IDs. Only the most common
-# fully-open-weights releases need entries here; anything else is dropped.
+# Display-name -> HF ID map for leaderboard labels. Only common open-weight
+# releases are included; anything else is dropped to avoid false matches.
 AA_NAME_TO_HF_IDS: dict[str, list[str]] = {
     "Kimi K2": ["moonshotai/Kimi-K2-Instruct", "moonshotai/Kimi-K2-Base"],
     "Kimi K2-Thinking": ["moonshotai/Kimi-K2-Thinking"],
@@ -104,22 +97,17 @@ AA_NAME_TO_HF_IDS: dict[str, list[str]] = {
     ],
 }
 
-# AA Intelligence Index typically ranges 12..56 for open-weights models
-# (2026-Q2 frontier tops out at 54; 8B-class lands ~30). The 12..56 window
-# is anchored by a two-point fit: top open frontier (Kimi K2.6 = 54) → 95
-# normalized, and 8B-class (Qwen3-8B = 30) → 40 normalized. This keeps a
-# strong 8B model competitive with frozen-OLLB 7B scores while still leaving
-# clear headroom for frontier-tier models.
+# Frontier-capability index values typically sit in a 12..56 band for open-weights.
+# A two-point calibration keeps current smaller models competitive while
+# preserving clear headroom for frontier entries.
 _AA_INDEX_MIN = 12.5
 _AA_INDEX_MAX = 56.2
 
 AA_LEADERBOARD_URL = "https://artificialanalysis.ai/leaderboards/models"
 
-# Snapshot of the AA Intelligence Index (open-weights only) verified on
-# 2026-05-14 from artificialanalysis.ai. This is used as a fallback when the
-# live HTML scrape returns no results (e.g. because Next.js __NEXT_DATA__
-# format changes again). All entries map directly to HuggingFace model IDs
-# and are normalized through _normalize_aa_index().
+# Snapshot fallback (open-weights only) used when live scraping fails to return
+# usable values. All entries map directly to HuggingFace model IDs and are
+# normalized through _normalize_aa_index().
 AA_INDEX_FALLBACK_2026_05_14: dict[str, float] = {
     # Frontier MoE / very large
     "moonshotai/Kimi-K2-Thinking": 50.0,
@@ -161,7 +149,7 @@ AA_INDEX_FALLBACK_2026_05_14: dict[str, float] = {
     "Qwen/Qwen3-4B": 26.0,
     "Qwen/Qwen3-1.7B": 20.0,
     "Qwen/Qwen3-0.6B": 16.0,
-    # 8B-class peers (no AA tracking but realistic LB-equivalents)
+    # 8B-class peers (no direct external label but realistic equivalents)
     "meta-llama/Llama-3.1-8B-Instruct": 22.0,
     "meta-llama/Meta-Llama-3-8B-Instruct": 20.0,
     "google/gemma-2-9b-it": 23.0,
@@ -213,30 +201,30 @@ def _normalize_aa_index(index: float) -> float:
 
 # --- Next.js App Router (RSC) scraping -------------------------------------
 #
-# artificialanalysis.ai migrated off the classic ``__NEXT_DATA__`` blob to the
-# App Router streaming format: model data arrives in ``self.__next_f.push([n,
-# "…"])`` calls whose second element is a JSON-string-escaped fragment of the
-# RSC payload. We concatenate + unescape those chunks, then pull every
-# ``{"name": …, …, "intelligenceIndex": …}`` record out with a bounded regex
-# (the payload is a flat RSC stream, not a single parseable JSON document).
+# The upstream moved from the classic ``__NEXT_DATA__`` blob to App Router
+# streaming: model data arrives in ``self.__next_f.push([n, "…"])`` calls where
+# the second element is a JSON-string-escaped fragment. We concatenate and unescape
+# these chunks, then pull every ``{"name": …, …, "intelligenceIndex": …}`` record
+# using a bounded regex (the payload is a flat stream, not a single parseable JSON
+# document).
 
 _RSC_CHUNK_RE = re.compile(r'self\.__next_f\.push\(\[\d+,(?P<s>"(?:[^"\\]|\\.)*")\]\)')
-# A model record: a "name" string followed, within the SAME object, by its
-# "intelligenceIndex". The middle group forbids another '"name":"' so the
-# match cannot leak across into a neighbouring record that lacks an index.
+# A model record is a "name" string followed by its "intelligenceIndex" within the
+# same object. The bounded pattern prevents matching across neighboring objects.
 _AA_RECORD_RE = re.compile(
     r'"name":"(?P<name>(?:[^"\\]|\\.)*)"'
     r'(?:(?!"name":").)*?'
     r'"intelligenceIndex":(?P<idx>-?\d+(?:\.\d+)?)',
     re.DOTALL,
 )
-# Variant qualifiers AA appends that don't change the underlying HF weights:
+# Variant qualifiers appended by the upstream that do not change underlying model
+# weights:
 # "(Reasoning)", "(Non-reasoning)", "(high)", "(Reasoning, Max Effort)", etc.
 _PAREN_RE = re.compile(r"\([^)]*\)")
 
 
 def _canonical_name(name: str) -> str:
-    """Normalize an AA display name for fuzzy matching against the HF map.
+    """Normalize index display names for fuzzy matching against the HF map.
 
     Drops parenthetical variant qualifiers and collapses separator/case noise
     so ``"Qwen3 14B (Reasoning)"`` and ``"Qwen3-14B"`` both canonicalize to
@@ -247,7 +235,7 @@ def _canonical_name(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip()
 
 
-# Canonical-name -> HF ids, derived once from AA_NAME_TO_HF_IDS. Several display
+# Canonical-name -> HF IDs, derived once from AA_NAME_TO_HF_IDS. Several display
 # names can collapse to one canonical key; we union their HF ids.
 _AA_CANON_TO_HF_IDS: dict[str, list[str]] = {}
 for _disp, _ids in AA_NAME_TO_HF_IDS.items():
@@ -287,7 +275,7 @@ def _extract_aa_pairs(payload: dict) -> list[tuple[str, float]]:
     objects regardless of where they are nested."""
     pairs: list[tuple[str, float]] = []
     for node in walk_json_dicts(payload):
-        # Look for the most common shapes AA has used in past iterations.
+        # Accept common payload shapes regardless of nesting changes.
         name = None
         score = None
         for name_key in ("model_name", "modelName", "name", "displayName"):
@@ -312,10 +300,10 @@ def _extract_aa_pairs(payload: dict) -> list[tuple[str, float]]:
 
 
 async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
-    """Fetch Artificial Analysis Intelligence Index scores.
+    """Fetch frontier-capability index scores.
 
-    Returns ``{hf_id: normalized_score_0_100}`` for every model AA reports
-    that we can map back to a HuggingFace repo via :data:`AA_NAME_TO_HF_IDS`.
+    Returns ``{hf_id: normalized_score_0_100}`` for every report that maps to a
+    HuggingFace repo via :data:`AA_NAME_TO_HF_IDS`.
 
     Raises on HTTP / parse failure.
     """
@@ -333,7 +321,7 @@ async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
                 pairs = []
     if not pairs:
         raise ExtractionFailed(
-            "AA leaderboard: no (name, score) pairs found "
+            "frontier index: no (name, score) pairs found "
             "(neither RSC __next_f nor __NEXT_DATA__ matched)"
         )
     # When the same display name appears multiple times (different size /
@@ -360,26 +348,22 @@ async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
             if normalized > live.get(hf_id, 0.0):
                 live[hf_id] = normalized
     if not live:
-        raise ExtractionFailed("AA index: live fetch returned 0 mapped scores")
+        raise ExtractionFailed("frontier index: live fetch returned 0 mapped scores")
 
     # Overlay live scores on top of the curated snapshot so a successful live
     # fetch can only ADD coverage, never shrink it below the fallback. Live
     # numbers win wherever both exist; the snapshot fills the long tail of
-    # models AA labels in a way we can't map (or no longer tracks).
+    # models labeled in the stream that cannot be mapped currently.
     scores = get_aa_curated_fallback()
     for hf_id, normalized in live.items():
         if normalized > scores.get(hf_id, 0.0):
             scores[hf_id] = normalized
-    logger.debug(f"AA index: {len(live)} live + {len(scores)} merged scores")
+    logger.debug(f"frontier index: {len(live)} live + {len(scores)} merged scores")
     return scores
 
 
 def get_aa_curated_fallback() -> dict[str, float]:
-    """Return the 2026-05-14 curated snapshot, normalized to the 0-100 scale.
-
-    Used whenever the live HTML scrape cannot extract data — for example
-    when artificialanalysis.ai changes its Next.js payload shape.
-    """
+    """Return the curated snapshot, normalized to the 0-100 scale."""
     result: dict[str, float] = {}
     for hf_id, raw in AA_INDEX_FALLBACK_2026_05_14.items():
         normalized = _normalize_aa_index(raw)

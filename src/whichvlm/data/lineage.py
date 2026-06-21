@@ -4,8 +4,8 @@
 # For each "family stem" we encode a monotone-increasing version map so that
 # the ranker can apply a small bonus/penalty depending on whether a model
 # represents the newest generation of its family. This avoids the situation
-# where an older series with stale Open-LLM-Leaderboard data ranks above a
-# newer release for which the leaderboard simply has no data yet.
+# where an older series with stale historical benchmark data ranks above a
+# newer release with little or no current public benchmark coverage.
 #
 # Each entry is a list of (regex_pattern, generation_index) tuples evaluated
 # in order; first match wins. Patterns match against lowercased model_id.
@@ -196,10 +196,8 @@ MODEL_LINEAGE_VERSIONS: dict[str, list[tuple[str, int]]] = {
 
 # Maximum bonus (in raw quality-score points) applied to the newest generation
 # of a recognized family. The bonus interpolates downwards for older versions.
-# These are larger than the initial pass because frozen leaderboards (OLLB v2,
-# Arena 2025-07) systematically over-reward 2024-era models like Qwen2.5-32B
-# that are no longer the current frontier; the lineage signal pulls newer
-# releases past their older siblings even when the older one has stale-but-high
-# leaderboard data.
+# These are larger than the initial pass because some archived data windows
+# can over-reward older 2024-era entries; the lineage signal pulls newer
+# releases past their older siblings even when older scores are still high.
 MODEL_GENERATION_BONUS_MAX = 10.0
 MODEL_GENERATION_PENALTY_MAX = 6.0

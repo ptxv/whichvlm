@@ -1,14 +1,12 @@
-"""LiveBench (livebench.ai) source.
+"""Periodic multimodal-oriented score source from a vendored CSV snapshot.
 
-LiveBench publishes its leaderboard as a dated CSV (e.g.
-``https://livebench.ai/table_2026_01_08.csv``).
-To refresh: download the latest ``table_YYYY_MM_DD.csv`` from livebench.ai
-and run ``scripts/import_livebench_csv.py`` to regenerate the dict below.
+The data file is exported from an external benchmark page and then converted
+into this in-repo snapshot for deterministic ranking behavior.
 """
 
 from __future__ import annotations
 
-# LiveBench global-average data. Values are raw 0-100; the
+# snapshot raw data. Values are raw 0-100; the
 # normalizer below rescales them onto the project's shared 0-100 axis.
 LIVEBENCH_RAW_DATA: dict[str, float] = {
     # --- 2026-01-08 CSV
@@ -78,11 +76,9 @@ LIVEBENCH_RAW_DATA: dict[str, float] = {
     "mistralai/Mistral-Small-3.1-24B-Instruct-2503": 48.0,
 }
 
-# LiveBench global-average tops out around 72 for current frontier models
-# (DeepSeek V4 Pro 72, Kimi K2.6 71, Qwen3.6-27B 66) with 8B-class around 35.
-# Anchored by a two-point fit: top frontier (72) → 95, mid/8B (35) → 30 — so
-# 8B models get a meaningful but not dominant share and frontier MoE clears
-# the OLLB cap.
+# The snapshot tops out near 72 for current frontier models and around 35 for
+# 8B-class models. It is anchored by a two-point fit so small models can remain
+# competitive while frontier entries stay separated from legacy archive.
 _LB_MIN = 18.0
 _LB_MAX = 75.0
 
@@ -93,7 +89,7 @@ def _normalize_livebench(score: float) -> float:
 
 
 def get_livebench_data() -> dict[str, float]:
-    """Return the inlined LiveBench snapshot, normalized to the 0-100 scale."""
+    """Return the vendored snapshot, normalized to the 0-100 scale."""
     return {
         hf_id: _normalize_livebench(raw)
         for hf_id, raw in LIVEBENCH_RAW_DATA.items()

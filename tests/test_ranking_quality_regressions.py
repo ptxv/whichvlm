@@ -423,8 +423,8 @@ def test_prequantized_repo_skips_synthesis():
 
 
 def test_newer_generation_beats_older_at_same_size():
-    """With the realigned AA/LB normalizers and stronger generation lineage
-    bonus, a current-gen 8B model should outrank a frozen-OLLB-favored
+    """With the realigned recency-aware sources and stronger generation lineage
+    bonus, a current-gen 8B model should outrank a frozen archival-source-favored
     previous-gen 7B."""
     new_gen = ModelInfo(
         id="Qwen/Qwen3-8B",
@@ -447,8 +447,8 @@ def test_newer_generation_beats_older_at_same_size():
         _hw(vram_gb=24),
         top_n=2,
         benchmark_scores={
-            "Qwen/Qwen3-8B": 56.0,  # current AA/LB-derived
-            "Qwen/Qwen2.5-7B-Instruct": 35.0,  # current source supersedes OLLB
+            "Qwen/Qwen3-8B": 56.0,  # current-source derived
+            "Qwen/Qwen2.5-7B-Instruct": 35.0,  # recency source supersedes archived values
         },
     )
     assert [r.model.id for r in results][0] == "Qwen/Qwen3-8B"

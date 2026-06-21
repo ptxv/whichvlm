@@ -10,17 +10,15 @@ from whichvlm.models.http import get_with_retries
 ARENA_ROWS_URL = "https://datasets-server.huggingface.co/rows"
 ARENA_DATASET = "mathewhe/chatbot-arena-elo"
 
-# --- Arena ELO normalization ---
-# Open-source ELO range: ~1030 (worst) to ~1424 (best). Arena is frozen
-# 2025-07-17 (no new models added) so the leaderboard cannot reflect any
-# 2025-Q3+ release; we cap the normalized output at 82 so newer benchmark
-# sources (AA Index / LiveBench, which can reach 95+) decisively win on
-# conflict.
+# --- Legacy ranking normalization ---
+# Legacy ELO range: ~1030 (worst) to ~1424 (best). This source is effectively
+# frozen in coverage, so we cap normalized output at 82 so newer sources can
+# still win when both have evidence for the same model.
 _ARENA_ELO_MIN = 1030
 _ARENA_ELO_MAX = 1430
 _ARENA_MAX_NORMALIZED = 82.0
 
-# --- Arena display name -> HuggingFace org mapping ---
+# --- Scoreboard display-name -> HuggingFace org mapping ---
 _ARENA_ORG_TO_HF: dict[str, list[str]] = {
     "Alibaba": ["Qwen"],
     "Meta": ["meta-llama"],
@@ -59,7 +57,7 @@ _ARENA_ORG_TO_HF: dict[str, list[str]] = {
 
 
 def _normalize_arena_elo(elo: float) -> float:
-    """Normalize Arena ELO to a frozen-source-aware 0-_ARENA_MAX_NORMALIZED scale."""
+    """Normalize secondary-score values to a frozen-source-aware 0-_ARENA_MAX_NORMALIZED scale."""
     score = (
         (elo - _ARENA_ELO_MIN)
         / (_ARENA_ELO_MAX - _ARENA_ELO_MIN)
@@ -69,7 +67,7 @@ def _normalize_arena_elo(elo: float) -> float:
 
 
 def _arena_name_to_hf_ids(model_name: str, org: str) -> list[str]:
-    """Convert Arena display name to potential HuggingFace model IDs."""
+    """Convert source display names to potential HuggingFace model IDs."""
     hf_orgs = _ARENA_ORG_TO_HF.get(org, [])
     candidates = []
 
@@ -91,7 +89,7 @@ def _arena_name_to_hf_ids(model_name: str, org: str) -> list[str]:
 
 
 async def fetch_arena_scores(client: httpx.AsyncClient) -> dict[str, float]:
-    """Fetch Chatbot Arena ELO scores via rows API."""
+    """Fetch secondary benchmark scores via rows API."""
     scores: dict[str, float] = {}
     offset = 0
 

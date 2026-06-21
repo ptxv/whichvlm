@@ -34,8 +34,8 @@ class BenchmarkEvidence:
     """Benchmark evidence with confidence.
 
     source values, ordered from most trusted to least:
-      - "direct"        : independent leaderboard / Arena ELO hit on exact id
-      - "variant"       : suffix-stripped derivative of a direct leaderboard hit
+      - "direct"        : independent external benchmark hit on exact id
+      - "variant"       : suffix-stripped derivative of a direct evidence hit
       - "base_model"    : cardData.base_model pointer to a direct hit
       - "line_interp"   : size-aware interpolation within the same model line
       - "self_reported" : evalResults reported by the uploader themselves
@@ -139,9 +139,9 @@ def _apply_lineage_recency_demotion(
 ) -> dict[str, float]:
     """Multiply frozen-only entries by a lineage-derived recency factor.
 
-    A score is "frozen-only" when no current source (AA Index / LiveBench /
-    Aider) provided a value for that id. Models with current coverage are
-    left alone — their score already reflects 2026 evaluation methodology.
+    A score is "frozen-only" when no current source provided a value for that
+    id. Models with current coverage are left alone — their score already
+    reflects recent evaluation methodology.
     """
     if not combined:
         return combined
@@ -159,12 +159,11 @@ async def fetch_benchmark_scores() -> dict[str, float]:
     """Fetch and combine benchmark scores from multiple sources.
 
     Sources, merged in this order (later overwrites earlier on conflict):
-      1. Open LLM Leaderboard v2 (archived 2025-06, broad legacy coverage)
-      2. Chatbot Arena ELO (frozen 2025-07-17, but still useful older signal)
-      3. LiveBench (monthly refresh, current generation)
-      4. Aider polyglot (coding-specific, current generation)
-      5. Artificial Analysis Intelligence Index (covers DeepSeek V4, GLM-5,
-         Kimi K2.6, MiMo V2.5, Qwen3.6 — fills the Arena/Leaderboard gap)
+      1. Archived legacy corpus (broad legacy coverage)
+      2. Frozen benchmark archive (older but still useful fallback)
+      3. Monthly refresh dataset (current generation)
+      4. Coding-capability dataset (current generation, narrow domain)
+      5. Multimodal-capability index (frontier-focused supplement)
 
     Returns dict mapping model_id -> normalized score (0-100). All sources
     are fetched concurrently; any source that fails is logged and skipped,
@@ -203,62 +202,61 @@ async def fetch_benchmark_scores() -> dict[str, float]:
             return_exceptions=True,
         )
 
-    # Layered merge: build a "current" dict from live sources (AA, LiveBench,
-    # Aider) and a "frozen" dict from archived sources (OLLB v2, Arena). The
-    # current dict OVERRIDES the frozen one per-model — so a 2024-era model
-    # with a stale-but-high OLLB number cannot beat a 2026 model that AA or
-    # LiveBench measure as merely mid-tier. Frozen scores still cover the
-    # long tail of older models that no live source tracks.
+    # Layered merge: build a "current" dict from recent sources and a "frozen"
+    # dict from archival sources. The current dict OVERRIDES the frozen one
+    # per-model — so an older release with a stale high score cannot beat a
+    # current frontier release measured in recent data. Frozen scores still
+    # cover the long tail of older models not tracked by recent feeds.
     frozen: dict[str, float] = {}
     current: dict[str, float] = {}
 
-    # Frozen tier #1: Open LLM Leaderboard v2 (archived 2025-06)
+    # Frozen tier #1: legacy archive (broader historical coverage)
     if isinstance(lb_result, BaseException):
         logger.warning(f"Leaderboard fetch failed: {lb_result}")
     else:
         frozen.update(lb_result)
         logger.debug(f"Leaderboard: {len(lb_result)} scores (frozen)")
 
-    # Frozen tier #2: Chatbot Arena ELO (frozen 2025-07-17)
+    # Frozen tier #2: frozen archive with no recent updates
     if isinstance(arena_result, BaseException):
-        logger.warning(f"Arena fetch failed, using fallback: {arena_result}")
+        logger.warning(f"secondary benchmark fetch failed, using fallback: {arena_result}")
     else:
         for k, v in arena_result.items():
             if frozen.get(k, 0.0) < v:
                 frozen[k] = v
-        logger.debug(f"Arena: {len(arena_result)} scores (frozen)")
+        logger.debug(f"secondary benchmark: {len(arena_result)} scores (frozen)")
 
-    # Current tier: LiveBench
+    # Current tier: recency-updated index
     livebench_result = get_livebench_data()
     for k, v in livebench_result.items():
         if current.get(k, 0.0) < v:
             current[k] = v
-    logger.debug(f"LiveBench: {len(livebench_result)} scores (current)")
+    logger.debug(f"vision index: {len(livebench_result)} scores (current)")
 
-    # Current tier: Artificial Analysis Intelligence Index (~weekly refresh)
+    # Current tier: multimodal-capability index (~weekly refresh)
     if isinstance(aa_result, BaseException):
-        logger.warning(f"AA Index fetch failed, will use fallback: {aa_result}")
+        logger.warning(f"capability index fetch failed, using fallback: {aa_result}")
         aa_result = get_aa_curated_fallback()
 
     for k, v in aa_result.items():
         if current.get(k, 0.0) < v:
             current[k] = v
-    logger.debug(f"AA Index: {len(aa_result)} scores (current)")
+    logger.debug(f"capability index: {len(aa_result)} scores (current)")
 
-    # Current tier: Aider polyglot (coding-specific). Treat as a current
+    # Current tier: coding dataset. Treat as a current
     # source but soft-merged — coding is one axis of capability, so a high
-    # Aider score is informative but shouldn't unilaterally dethrone a
-    # weaker-coding-but-strong-general AA result.
+    # coding score is informative but shouldn't unilaterally dethrone a
+    # weaker-coding-but-strong-general capability-source result.
     if isinstance(aider_result, BaseException):
-        logger.warning(f"Aider fetch failed: {aider_result}")
+        logger.warning(f"coding benchmark fetch failed: {aider_result}")
     else:
         for k, v in aider_result.items():
             if current.get(k, 0.0) < v * 0.85:
                 current[k] = v * 0.85
-        logger.debug(f"Aider polyglot: {len(aider_result)} scores (current, 0.85x)")
+        logger.debug(f"coding benchmark: {len(aider_result)} scores (current, 0.85x)")
 
     # Current tier: vision-language capability index. For VLM-looking IDs,
-    # this is the primary signal; text leaderboards remain fallback evidence.
+    # this is the primary signal; legacy text scores remain fallback evidence.
     if isinstance(vision_result, BaseException):
         logger.warning(f"Vision fetch failed: {vision_result}")
     else:
@@ -273,13 +271,12 @@ async def fetch_benchmark_scores() -> dict[str, float]:
     combined.update(current)
 
     # Apply lineage-aware demotion to frozen-only scores. Without this, models
-    # that have no live coverage (e.g. Qwen2.5-72B-Instruct, Llama-3.1-70B
-    # — both 2024 releases) retain their generous frozen leaderboard score
-    # while their *newer* siblings (Qwen3-32B, Llama-3.3-70B) get held to
-    # the live AA/LiveBench numbers. The result was older-generation 70B+
-    # models ranking *above* the current-gen frontier on H100 / M2 Ultra.
-    # Demote frozen-only entries from non-newest generations of known
-    # families so the staleness penalty is uniform.
+    # without recent coverage can retain a stale high score, which can place
+    # older generation releases above newer frontier releases. This penalty keeps
+    # long-tail historical scores from dominating present-day hardware-relevant
+    # candidates.
+    # Demote frozen-only entries from non-newest generations of known families so
+    # the staleness penalty is uniform.
     combined = _apply_lineage_recency_demotion(combined, frozen, current)
 
     logger.debug(f"Combined: {len(combined)} benchmark scores")
@@ -544,11 +541,11 @@ def lookup_benchmark_evidence(
     """Look up benchmark evidence with confidence.
 
     Resolution order:
-      direct (leaderboard) → variant → base_model → line_interp → self_reported
+      direct evidence → variant → base_model → line_interp → self_reported
 
     self_reported_score should be the uploader-provided evalResults score from
     the model card. It is the lowest-trust source and is only returned when
-    every leaderboard/inheritance path fails.
+    every evidence path fails.
 
     actual_params_b: actual parameter count in billions. When provided, the
     function refuses to inherit from base_model/variant ids whose implied
@@ -560,7 +557,7 @@ def lookup_benchmark_evidence(
     if line_bucket_index is None:
         line_bucket_index = build_line_bucket_index(scores)
 
-    # Only exact model_id match in an independent leaderboard is considered
+    # Only exact model_id match in an independent external benchmark is considered
     # direct evidence. Self-reported evalResults are handled at the very end.
     direct_result = _try_lookup(model_id, scores, ci_index)
     if direct_result is not None:

@@ -9,10 +9,9 @@ from whichvlm.models.types import GGUFVariant, ModelInfo
 
 
 # Per-quant efficiency factors applied to the theoretical bandwidth-bound
-# tok/s. These reflect empirical llama.cpp / vLLM measurements: 4-bit GGUFs
-# achieve the highest fraction of memory-bandwidth-limited theoretical
-# throughput because the dequantization kernel is fast and weight reads
-# dominate; 8-bit and FP16 drop because more compute is required per byte.
+# tok/s. In practice, lower-precision GGUF paths usually achieve the highest
+# fraction of memory-bandwidth-limited throughput, while higher-precision
+# formats lose ground because they increase compute per byte.
 _QUANT_EFFICIENCY: dict[str, float] = {
     "F32": 0.30,
     "F16": 0.40,
@@ -169,9 +168,9 @@ def estimate_speed_uncertainty(
     """Return confidence metadata for the speed point estimate.
 
     The tok/s estimator is intentionally hardware/model-metadata based; it
-    does not know the user's exact llama.cpp, Vulkan, ROCm, Metal, MLX, or
-    runtime kernel versions. This helper keeps that uncertainty visible
-    without mixing it into the ranking score itself.
+    does not know the user's exact runtime or kernel versions. This helper
+    keeps that uncertainty visible without mixing it into the ranking score
+    itself.
     """
     notes = [
         "Speed is estimated from memory bandwidth, quantization, backend, and fit type."

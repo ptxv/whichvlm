@@ -8,15 +8,13 @@ from whichvlm.engine.workload import VisionWorkload
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # Empirical KV-cache coefficient: bytes per B-active-param per K-context-token
-# for FP16 K/V tensors. Calibrated against published llama.cpp memory reports
-# for Qwen2.5-7B (0.45 GB @ 8K), Qwen3-32B (3.1 GB @ 32K), and Llama-3.1-70B
-# (5.4 GB @ 32K with GQA), then bumped slightly because real llama.cpp also
-# allocates a graph-compute buffer proportional to KV size.
+# for FP16 K/V tensors. Calibrated against representative multimodal runtime
+# memory profiles, then bumped slightly because runtimes also allocate a
+# graph-compute buffer proportional to KV size.
 _KV_BYTES_PER_BPARAM_PER_KCTX = 3.5 * 1024 * 1024  # 3.5 MB
 
 # MoE attention scales with the *attention-layer count*, which is roughly
-# proportional to active_params * this multiplier. For Qwen3-Next-80B-A3B
-# (3B active, 48 layers), the multiplier lands near 4.
+# proportional to active_params * this multiplier.
 _MOE_ATTENTION_PARAM_MULTIPLIER = 4.0
 
 # KV cache still follows decoder-tower scaling. VLM overhead is accounted for

@@ -1,12 +1,9 @@
-"""Polyglot code-edit leaderboard source.
+"""Coding-oriented benchmark source.
 
-The polyglot leaderboard ranks LLMs by how well they edit code across six
-languages (C++, Go, Java, JavaScript, Python, Rust). The raw YAML is easier to
-parse than rendered HTML and rarely changes shape.
-
-Used primarily for ``profile=coding`` ranking, but the score is also merged
-into the general benchmark dict so coding-strong models get a small bump
-elsewhere.
+This source ranks models by multi-language code editing outcomes. The raw YAML
+payload is stable enough that it can be parsed with a compact regex extractor.
+It is primarily used for coding-focused ranking and contributes a small bonus
+in general ranking as a secondary signal.
 """
 
 from __future__ import annotations
@@ -107,13 +104,13 @@ def _parse_yaml_lite(text: str) -> list[tuple[str, float]]:
 
 
 async def fetch_aider_polyglot_scores(client: httpx.AsyncClient) -> dict[str, float]:
-    """Fetch polyglot pass-rates. Raises on HTTP / parse failure."""
+    """Fetch coding benchmark pass rates. Raises on HTTP / parse failure."""
     scores: dict[str, float] = {}
     resp = await get_with_retries(client, AIDER_POLYGLOT_YML_URL)
     resp.raise_for_status()
     pairs = _parse_yaml_lite(resp.text)
     if not pairs:
-        logger.debug("Aider polyglot: 0 records parsed")
+        logger.debug("Coding benchmark: 0 records parsed")
         return {}
     best_by_name: dict[str, float] = {}
     for name, rate in pairs:
@@ -130,5 +127,5 @@ async def fetch_aider_polyglot_scores(client: httpx.AsyncClient) -> dict[str, fl
         for hf_id in ids:
             if scores.get(hf_id, 0.0) < normalized:
                 scores[hf_id] = normalized
-    logger.debug(f"Aider polyglot: {len(scores)} mapped scores")
+    logger.debug(f"Coding benchmark: {len(scores)} mapped scores")
     return scores

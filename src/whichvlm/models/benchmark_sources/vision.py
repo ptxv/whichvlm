@@ -1,19 +1,12 @@
-"""Vision-language model benchmark source.
+"""Vision-language benchmark source.
 
-Text leaderboards (LiveBench, AA Index, Aider) do not score VLMs, so a
-``--profile vision`` ranking had only one model with a ``direct`` hit
-(Qwen2-VL-7B, a two-generations-old model) and every current VLM fell
-back to size/popularity heuristics — letting the 8B legacy model
-outrank Qwen3-VL-32B even on an 80 GB H100.
+Text-oriented score sources do not adequately cover multimodal models, so vision
+profiles use this dedicated source. This is a curated snapshot rather than a live
+scrape because a single stable, machine-readable VLM leaderboard is not always
+available.
 
-There is no single stable machine-readable VLM leaderboard (the MMMU /
-OpenCompass spaces change their JSON shape frequently), so this source
-is a curated snapshot rather than a live scrape. Values are a blended
-0-100 capability index drawn from MMMU-Pro, MMBench, and general
-multimodal evaluations as of 2026-05; they are already normalized and
-merged into the combined benchmark dict like any other current source.
-Profile filtering keeps these scores from affecting text rankings —
-only models tagged ``vision`` consume them.
+Values are a blended capability index (0-100) and only affect models tagged
+as vision-capable in profile filtering.
 """
 
 from __future__ import annotations
@@ -21,9 +14,7 @@ from __future__ import annotations
 import httpx
 
 # Curated multimodal capability index (0-100), 2026-05 snapshot.
-# Anchored so the current Qwen3-VL / InternVL3 frontier sits in the
-# mid-50s-to-60s and two-generations-old 7B-class VLMs sit in the low
-# 30s, which restores the correct generational ordering.
+# Anchored so frontier vision releases outrank older two-generation releases.
 VISION_FALLBACK_2026_05: dict[str, float] = {
     # Qwen3-VL (current frontier)
     "Qwen/Qwen3-VL-235B-A22B-Instruct": 62.0,
@@ -71,9 +62,7 @@ VISION_FALLBACK_2026_05: dict[str, float] = {
 async def fetch_vision_scores(client: httpx.AsyncClient) -> dict[str, float]:
     """Return curated VLM capability scores.
 
-    No stable live source exists, so this returns the frozen snapshot.
-    The ``client`` parameter mirrors the other source functions so the
-    caller can treat all sources uniformly and a live scrape can be
-    slotted in later without changing call sites.
+    A snapshot is returned for determinism while preserving a uniform call shape
+    with other sources.
     """
     return dict(VISION_FALLBACK_2026_05)
