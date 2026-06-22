@@ -271,12 +271,6 @@ _EXCLUDED_ORGS = frozenset(
     }
 )
 
-_LOW_TRUST_ORGS = frozenset(
-    {
-        "Civitai",  # benchmark/image asset repos, not canonical model providers
-    }
-)
-
 # Substring patterns in *names* that strongly suggest non-production usage.
 _EXCLUDED_NAME_PATTERNS = (
     "tiny-",
