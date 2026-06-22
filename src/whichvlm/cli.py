@@ -107,6 +107,13 @@ def validate_evidence(evidence: str) -> str:
     return mode
 
 
+def validate_freshness_weight(value: float) -> float:
+    if value < 0.0 or value > 1.0:
+        console.print("[red]Error:[/] --freshness-weight must be between 0 and 1.")
+        raise typer.Exit(code=1)
+    return value
+
+
 def resolve_evidence_mode(evidence: str, direct: bool) -> str:
     mode = validate_evidence(evidence)
     if direct:
@@ -477,6 +484,11 @@ def main(
         "--ram-budget",
         help="RAM budget for CPU/offload fallback: available | 8GB | 50%",
     ),
+    freshness_weight: float = typer.Option(
+        1.0,
+        "--freshness-weight",
+        help="Scale lineage freshness in ranking scores: 0 disables it, 1 uses full weight",
+    ),
 ):
 
     if ctx.invoked_subcommand is not None:
@@ -488,6 +500,7 @@ def main(
     evidence_mode = resolve_evidence_mode(evidence, direct)
     fit_filter = resolve_fit_filter(fit, gpu_only)
     speed_filter = resolve_speed_filter(speed, min_speed)
+    freshness_weight = validate_freshness_weight(freshness_weight)
 
     from whichvlm.engine.ranker import rank_models
     from whichvlm.hardware.detector import detect_hardware
@@ -499,6 +512,7 @@ def main(
     from whichvlm.models.cache import save_cache
     from whichvlm.models.fetcher import (
         fetch_model_published_at,
+        inventory_source_provenance,
         models_to_dicts,
     )
     from whichvlm.models.grouper import group_models
@@ -532,7 +546,7 @@ def main(
                 save_benchmark_cache(bench_scores)
             except FETCH_ERRORS as e:
                 console.print(f"[yellow]Warning:[/] Benchmark data unavailable: {e}")
-                bench_scores = {}
+                bench_scores = load_benchmark_cache(allow_stale=True) or {}
 
         progress.update(task, description="scoring multimodal fit...")
         families = group_models(models)
@@ -569,6 +583,7 @@ def main(
             evidence_filter=evidence_mode,
             fit_filter=fit_filter,
             vision_workload=vision_workload,
+            freshness_weight=freshness_weight,
         )
 
 
@@ -587,6 +602,7 @@ def main(
                 evidence_filter=evidence_mode,
                 fit_filter=fit_filter,
                 vision_workload=vision_workload,
+                freshness_weight=freshness_weight,
             )
 
 
@@ -595,7 +611,12 @@ def main(
                 if fill_missing_published_at(
                     all_models, results, fetch_model_published_at
                 ):
-                    save_cache(models_to_dicts(models))
+                    save_cache(
+                        models_to_dicts(models),
+                        source=inventory_source_provenance(
+                            include_vision=include_vision_candidates(profile)
+                        ),
+                    )
             except FETCH_ERRORS as e:
                 progress.update(
                     task, description=f"Published date backfill skipped: {e}"
@@ -810,7 +831,12 @@ def upgrade(
 def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[ModelInfo]:
     # Model loader. Reuses cache first, then falls back to live HF fetch.
     from whichvlm.models.cache import load_cache, save_cache
-    from whichvlm.models.fetcher import dicts_to_models, fetch_models, models_to_dicts
+    from whichvlm.models.fetcher import (
+        dicts_to_models,
+        fetch_models,
+        inventory_source_provenance,
+        models_to_dicts,
+    )
 
     if not refresh:
         cached = load_cache()
@@ -818,9 +844,19 @@ def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[Model
             return dicts_to_models(cached)
     try:
         models = asyncio.run(fetch_models(include_vision=include_vision))
-        save_cache(models_to_dicts(models))
+        save_cache(
+            models_to_dicts(models),
+            source=inventory_source_provenance(include_vision=include_vision),
+        )
         return models
     except FETCH_ERRORS as e:
+        cached = load_cache(allow_stale=True)
+        if cached is not None:
+            console.print(
+                f"[yellow]Warning:[/] Hugging Face unavailable; using cached model metadata: "
+                f"{format_fetch_error(e)}"
+            )
+            return dicts_to_models(cached)
         console.print(f"[red]Error fetching models:[/] {format_fetch_error(e)}")
         raise typer.Exit(code=1) from e
 

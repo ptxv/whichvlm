@@ -26,6 +26,7 @@ from whichvlm.cli import (
     resolve_speed_filter,
     select_gguf_variant,
     validate_evidence,
+    validate_freshness_weight,
     vision_workload_for_profile,
     app,
 )
@@ -124,6 +125,8 @@ def test_json_simulated_nvidia_gpu_includes_backend_capabilities():
         "cuda",
         "vulkan",
     }
+    assert "ranking" in data
+    assert "cache_snapshots" in data
 
 
 def test_include_vision_candidates_by_profile():
@@ -249,6 +252,15 @@ def test_validate_evidence_accepts_all_modes():
 def test_validate_evidence_rejects_unknown_mode():
     with pytest.raises(Exit):
         validate_evidence("foo")
+
+
+def test_validate_freshness_weight_bounds():
+    assert validate_freshness_weight(0.0) == 0.0
+    assert validate_freshness_weight(1.0) == 1.0
+    with pytest.raises(Exit):
+        validate_freshness_weight(-0.1)
+    with pytest.raises(Exit):
+        validate_freshness_weight(1.1)
 
 
 def test_resolve_evidence_mode_direct_alias_wins():
@@ -414,6 +426,32 @@ def test_main_passes_speed_preset_and_default_runtime_columns(monkeypatch):
     assert result.exit_code == 0
     assert captured["min_speed"] == 10.0
     assert captured["show_status"] is True
+
+
+def test_main_passes_freshness_weight(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_rank_models(models, hardware, **kwargs):
+        captured["freshness_weight"] = kwargs.get("freshness_weight")
+        return []
+
+    monkeypatch.setattr(
+        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+    )
+    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr(
+        "whichvlm.output.display.display_hardware", lambda hardware: None
+    )
+    monkeypatch.setattr(
+        "whichvlm.output.display.display_ranking", lambda results, **kwargs: None
+    )
+
+    result = CliRunner().invoke(app, ["--freshness-weight", "0.25"])
+
+    assert result.exit_code == 0
+    assert captured["freshness_weight"] == 0.25
 
 
 def test_main_details_flag_restores_metadata_columns(monkeypatch):
