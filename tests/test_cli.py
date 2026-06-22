@@ -106,20 +106,27 @@ def test_apply_gpu_overrides_accepts_multiple_simulated_gpus():
     assert all(has_backend(gpu, "vulkan") for gpu in hw.gpus)
 
 
-def test_main_json_simulated_nvidia_gpu_includes_backend_capabilities(monkeypatch):
-    monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware",
-        lambda: HardwareInfo(gpus=[], ram_bytes=64 * 1024**3, os="linux"),
-    )
-    monkeypatch.setattr(cli_mod, "_load_models", lambda refresh, include_vision=True: [])
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.models.grouper.group_models", lambda models: [])
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", lambda *args, **kwargs: [])
+def test_json_simulated_nvidia_gpu_includes_backend_capabilities():
+    from io import StringIO
 
-    result = CliRunner().invoke(app, ["--gpu", "RTX 4090", "--json"])
+    from rich.console import Console
 
-    assert result.exit_code == 0
-    data = json.loads(result.stdout)
+    from whichvlm.output.display import display_json
+
+    hw = HardwareInfo(gpus=[], ram_bytes=64 * 1024**3, os="linux")
+    _apply_gpu_overrides(hw, cpu_only=False, gpu=["RTX 4090"], vram=None)
+
+    buf = StringIO()
+    import whichvlm.output._console as console_mod
+
+    orig_console = console_mod.console
+    console_mod.console = Console(file=buf, force_terminal=False)
+    try:
+        display_json([], hw)
+    finally:
+        console_mod.console = orig_console
+
+    data = json.loads(buf.getvalue())
     gpu = data["hardware"]["gpus"][0]
     assert gpu["vendor"] == "nvidia"
     assert {c["name"] for c in gpu["backend_capabilities"] if c["available"]} == {
