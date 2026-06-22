@@ -614,7 +614,7 @@ def main(
             "and CPU-only candidates."
         )
     if json_output:
-        display_json(results, hardware)
+        display_json(results, hardware, full=details)
     elif markdown_output:
         display_markdown(
             results,

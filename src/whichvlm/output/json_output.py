@@ -58,7 +58,11 @@ def _lineage_dict(lineage: ModelLineage) -> dict:
     }
 
 
-def display_json(results: list[CompatibilityResult], hardware: HardwareInfo) -> None:
+def display_json(
+    results: list[CompatibilityResult],
+    hardware: HardwareInfo,
+    full: bool = False,
+) -> None:
     output = {
         "hardware": {
             "gpus": [
@@ -138,6 +142,44 @@ def display_json(results: list[CompatibilityResult], hardware: HardwareInfo) -> 
             for i, r in enumerate(results, 1)
         ],
     }
+    if not full:
+        output["hardware"].pop("budget_notes")
+        output["hardware"].pop("backend_capabilities")
+        for gpu in output["hardware"]["gpus"]:
+            for key in (
+                "vendor",
+                "memory_bandwidth_gbps",
+                "shared_memory",
+                "backend_capabilities",
+                "neural_engine_available",
+            ):
+                gpu.pop(key)
+        for model in output["models"]:
+            for key in (
+                "family_id",
+                "architecture",
+                "hf_pipeline_tag",
+                "tags",
+                "access",
+                "is_official",
+                "model_format",
+                "variant_kind",
+                "quantization_type",
+                "base_model",
+                "base_models",
+                "variant_of",
+                "artifacts",
+                "components",
+                "lineage",
+                "published_at",
+                "downloads",
+                "uses_multi_gpu",
+                "multi_gpu_effective_vram_bytes",
+                "speed_confidence",
+                "speed_range_tok_per_sec",
+                "speed_notes",
+            ):
+                model.pop(key)
     _console.console.print_json(json.dumps(output, ensure_ascii=False))
 
 

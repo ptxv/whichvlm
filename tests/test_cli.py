@@ -535,9 +535,10 @@ def test_main_json_smoke_profile_vision(monkeypatch):
             )
         ]
 
-    def fake_display_json(results, hardware):
+    def fake_display_json(results, hardware, full=False):
         captured["json_called"] = True
         captured["json_results"] = results
+        captured["json_full"] = full
 
     monkeypatch.setattr(
         "whichvlm.hardware.detector.detect_hardware", lambda: _hw_with_gpu(8)
@@ -554,9 +555,15 @@ def test_main_json_smoke_profile_vision(monkeypatch):
 
     assert result.exit_code == 0
     assert captured["json_called"] is True
+    assert captured["json_full"] is False
     assert captured["task_profile"] == "vision"
     assert captured["vision_workload"].image_count == 2
     assert captured["vision_workload"].image_size == 896
+
+    captured.clear()
+    result = CliRunner().invoke(app, ["--json", "--details"])
+    assert result.exit_code == 0
+    assert captured["json_full"] is True
 
 
 def test_hardware_command_smoke(monkeypatch):
@@ -1070,8 +1077,8 @@ def test_snippet_no_model_found(monkeypatch):
     assert "No model found" in result.stdout
 
 
-def test_json_output_includes_benchmark_source_and_confidence():
-    """display_json should include benchmark_source and benchmark_confidence."""
+def test_json_output_defaults_to_compact_and_supports_full():
+    """display_json should omit diagnostic fields unless full=True."""
     import json as json_mod
     from io import StringIO
 
@@ -1120,25 +1127,28 @@ def test_json_output_includes_benchmark_source_and_confidence():
         budget_notes=["RAM budget: 32.0 GB"],
     )
 
-    buf = StringIO()
     import whichvlm.output._console as console_mod
 
-    orig_console = console_mod.console
-    console_mod.console = Console(file=buf, force_terminal=False)
-    try:
-        display_json([result], hw)
-    finally:
-        console_mod.console = orig_console
+    def render(full: bool = False):
+        buf = StringIO()
+        orig_console = console_mod.console
+        console_mod.console = Console(file=buf, force_terminal=False)
+        try:
+            display_json([result], hw, full=full)
+        finally:
+            console_mod.console = orig_console
+        return json_mod.loads(buf.getvalue().strip())
 
-    data = json_mod.loads(buf.getvalue().strip())
-    entry = data["models"][0]
-    assert data["hardware"]["ram_budget_bytes"] == 32 * 1024**3
-    assert data["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
-    assert entry["benchmark_status"] == "estimated"
-    assert entry["benchmark_source"] == "line_interp"
-    assert entry["benchmark_confidence"] == 0.34
-    assert entry["base_models"] == ["base/Test-7B"]
-    assert entry["artifacts"][0]["format"] == "mlx"
-    assert entry["artifacts"][0]["access"] == "gated"
-    assert entry["artifacts"][0]["backend_support"] == ["mlx", "metal"]
-    assert entry["lineage"]["base_model_ids"] == ["base/Test-7B"]
+    compact = render()
+    compact_entry = compact["models"][0]
+    assert compact_entry["model_id"] == "test-org/Test-7B"
+    assert compact_entry["benchmark_source"] == "line_interp"
+    assert "artifacts" not in compact_entry
+    assert "lineage" not in compact_entry
+    assert "budget_notes" not in compact["hardware"]
+
+    full = render(full=True)
+    full_entry = full["models"][0]
+    assert full["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
+    assert full_entry["artifacts"][0]["format"] == "mlx"
+    assert full_entry["lineage"]["base_model_ids"] == ["base/Test-7B"]
