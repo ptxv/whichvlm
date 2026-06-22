@@ -271,6 +271,12 @@ _EXCLUDED_ORGS = frozenset(
     }
 )
 
+_LOW_TRUST_ORGS = frozenset(
+    {
+        "Civitai",  # benchmark/image asset repos, not canonical model providers
+    }
+)
+
 # Substring patterns in *names* that strongly suggest non-production usage.
 _EXCLUDED_NAME_PATTERNS = (
     "tiny-",
@@ -322,6 +328,7 @@ _DUBIOUS_DERIVATIVE_PATTERNS = (
     "fimbulvetr",
     "wizard-vicuna",
     "kunoichi",
+    "crack",
 )
 
 
@@ -666,7 +673,9 @@ def _compute_quality_score(
     # Source-trust bonus stays small.
     source_bonus_raw = 0.0
     org = model.id.split("/")[0] if "/" in model.id else ""
-    if org in _OFFICIAL_ORGS:
+    if org in _LOW_TRUST_ORGS:
+        source_bonus_raw = -5.0
+    elif org in _OFFICIAL_ORGS:
         source_bonus_raw = 5.0
     elif model.base_model:
         base_org = model.base_model.split("/")[0] if "/" in model.base_model else ""
