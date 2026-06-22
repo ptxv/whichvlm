@@ -1164,6 +1164,13 @@ def test_json_output_includes_diagnostics_when_requested():
     data = _display_json_data(result, hw, include_diagnostics=True)
     entry = data["models"][0]
 
+    assert data["hardware"]["ram_budget_bytes"] == 32 * 1024**3
     assert data["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
+    assert entry["benchmark_status"] == "estimated"
+    assert entry["benchmark_source"] == "line_interp"
+    assert entry["benchmark_confidence"] == 0.34
+    assert entry["base_models"] == ["base/Test-7B"]
     assert entry["artifacts"][0]["format"] == "mlx"
+    assert entry["artifacts"][0]["access"] == "gated"
+    assert entry["artifacts"][0]["backend_support"] == ["mlx", "metal"]
     assert entry["lineage"]["base_model_ids"] == ["base/Test-7B"]
