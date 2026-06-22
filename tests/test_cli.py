@@ -51,6 +51,28 @@ def _hw_with_gpu(vram_gb: int) -> HardwareInfo:
     )
 
 
+def _display_json_data(
+    result: CompatibilityResult, hw: HardwareInfo, full: bool = False
+):
+    import json as json_mod
+    from io import StringIO
+
+    from rich.console import Console
+
+    from whichvlm.output.display import display_json
+
+    import whichvlm.output._console as console_mod
+
+    buf = StringIO()
+    orig_console = console_mod.console
+    console_mod.console = Console(file=buf, force_terminal=False)
+    try:
+        display_json([result], hw, full=full)
+    finally:
+        console_mod.console = orig_console
+    return json_mod.loads(buf.getvalue().strip())
+
+
 def test_auto_min_params_general_by_vram():
     # Updated thresholds: tiny GPUs (4-8GB) get a lower floor so they can
     # surface full-GPU 3-4B models instead of being forced into 7B+
@@ -1079,13 +1101,6 @@ def test_snippet_no_model_found(monkeypatch):
 
 def test_json_output_defaults_to_compact_and_supports_full():
     """display_json should omit diagnostic fields unless full=True."""
-    import json as json_mod
-    from io import StringIO
-
-    from rich.console import Console
-
-    from whichvlm.output.display import display_json
-
     model = ModelInfo(
         id="test-org/Test-7B",
         family_id="test-7b",
@@ -1127,19 +1142,7 @@ def test_json_output_defaults_to_compact_and_supports_full():
         budget_notes=["RAM budget: 32.0 GB"],
     )
 
-    import whichvlm.output._console as console_mod
-
-    def render(full: bool = False):
-        buf = StringIO()
-        orig_console = console_mod.console
-        console_mod.console = Console(file=buf, force_terminal=False)
-        try:
-            display_json([result], hw, full=full)
-        finally:
-            console_mod.console = orig_console
-        return json_mod.loads(buf.getvalue().strip())
-
-    compact = render()
+    compact = _display_json_data(result, hw)
     compact_entry = compact["models"][0]
     assert compact_entry["model_id"] == "test-org/Test-7B"
     assert compact_entry["benchmark_source"] == "line_interp"
@@ -1147,7 +1150,7 @@ def test_json_output_defaults_to_compact_and_supports_full():
     assert "lineage" not in compact_entry
     assert "budget_notes" not in compact["hardware"]
 
-    full = render(full=True)
+    full = _display_json_data(result, hw, full=True)
     full_entry = full["models"][0]
     assert full["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
     assert full_entry["artifacts"][0]["format"] == "mlx"

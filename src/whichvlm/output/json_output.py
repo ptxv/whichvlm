@@ -58,11 +58,66 @@ def _lineage_dict(lineage: ModelLineage) -> dict:
     }
 
 
+def _attr_dict(obj, fields: tuple[str, ...]) -> dict:
+    return {field: getattr(obj, field) for field in fields}
+
+
+def _compact_hardware_dict(hardware: HardwareInfo) -> dict:
+    return {
+        "gpus": [
+            _attr_dict(g, ("name", "vram_bytes", "usable_vram_bytes"))
+            for g in hardware.gpus
+        ],
+        "cpu": hardware.cpu_name,
+        **_attr_dict(hardware, ("cpu_cores", "ram_bytes", "ram_budget_bytes", "os")),
+    }
+
+
+def _compact_result_dict(rank: int, result: CompatibilityResult) -> dict:
+    model = result.model
+    return {
+        "rank": rank,
+        "model_id": model.id,
+        **_attr_dict(model, ("parameter_count", "license")),
+        "quant_type": effective_quant_type(model, result.gguf_variant),
+        "file_size_bytes": (
+            result.gguf_variant.file_size_bytes
+            if result.gguf_variant
+            else estimate_weight_bytes(model, None)
+        ),
+        **_attr_dict(
+            result,
+            (
+                "vram_required_bytes",
+                "vram_available_bytes",
+                "estimated_tok_per_sec",
+                "benchmark_status",
+                "benchmark_source",
+                "fit_type",
+                "can_run",
+                "warnings",
+            ),
+        ),
+        "quality_score": round(result.quality_score, 2),
+        "benchmark_confidence": round(result.benchmark_confidence, 2),
+    }
+
+
 def display_json(
     results: list[CompatibilityResult],
     hardware: HardwareInfo,
     full: bool = False,
 ) -> None:
+    if not full:
+        output = {
+            "hardware": _compact_hardware_dict(hardware),
+            "models": [
+                _compact_result_dict(i, r) for i, r in enumerate(results, 1)
+            ],
+        }
+        _console.console.print_json(json.dumps(output, ensure_ascii=False))
+        return
+
     output = {
         "hardware": {
             "gpus": [
@@ -142,44 +197,6 @@ def display_json(
             for i, r in enumerate(results, 1)
         ],
     }
-    if not full:
-        output["hardware"].pop("budget_notes")
-        output["hardware"].pop("backend_capabilities")
-        for gpu in output["hardware"]["gpus"]:
-            for key in (
-                "vendor",
-                "memory_bandwidth_gbps",
-                "shared_memory",
-                "backend_capabilities",
-                "neural_engine_available",
-            ):
-                gpu.pop(key)
-        for model in output["models"]:
-            for key in (
-                "family_id",
-                "architecture",
-                "hf_pipeline_tag",
-                "tags",
-                "access",
-                "is_official",
-                "model_format",
-                "variant_kind",
-                "quantization_type",
-                "base_model",
-                "base_models",
-                "variant_of",
-                "artifacts",
-                "components",
-                "lineage",
-                "published_at",
-                "downloads",
-                "uses_multi_gpu",
-                "multi_gpu_effective_vram_bytes",
-                "speed_confidence",
-                "speed_range_tok_per_sec",
-                "speed_notes",
-            ):
-                model.pop(key)
     _console.console.print_json(json.dumps(output, ensure_ascii=False))
 
 
