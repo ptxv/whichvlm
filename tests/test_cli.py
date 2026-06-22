@@ -100,6 +100,8 @@ def test_apply_gpu_overrides_accepts_multiple_simulated_gpus():
     assert len(hw.gpus) == 2
     assert all(gpu.vendor == "nvidia" for gpu in hw.gpus)
     assert all(gpu.vram_bytes == 24 * 1024**3 for gpu in hw.gpus)
+    assert all(has_backend(gpu, "cuda") for gpu in hw.gpus)
+    assert all(has_backend(gpu, "vulkan") for gpu in hw.gpus)
 
 
 def test_include_vision_candidates_by_profile():
