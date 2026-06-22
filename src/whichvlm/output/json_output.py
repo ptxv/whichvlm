@@ -58,7 +58,7 @@ def _lineage_dict(lineage: ModelLineage) -> dict:
     }
 
 
-def _compact_hardware_dict(hardware: HardwareInfo) -> dict:
+def _hardware_summary_dict(hardware: HardwareInfo) -> dict:
     return {
         "gpus": [
             {
@@ -76,7 +76,36 @@ def _compact_hardware_dict(hardware: HardwareInfo) -> dict:
     }
 
 
-def _compact_model_dict(rank: int, result: CompatibilityResult) -> dict:
+def _hardware_diagnostics_dict(hardware: HardwareInfo) -> dict:
+    return {
+        "gpus": [
+            {
+                "name": g.name,
+                "vendor": g.vendor,
+                "vram_bytes": g.vram_bytes,
+                "usable_vram_bytes": g.usable_vram_bytes,
+                "memory_bandwidth_gbps": g.memory_bandwidth_gbps,
+                "shared_memory": g.shared_memory,
+                "backend_capabilities": [
+                    _backend_capability_dict(c) for c in g.backend_capabilities
+                ],
+                "neural_engine_available": g.neural_engine_available,
+            }
+            for g in hardware.gpus
+        ],
+        "cpu": hardware.cpu_name,
+        "cpu_cores": hardware.cpu_cores,
+        "ram_bytes": hardware.ram_bytes,
+        "ram_budget_bytes": hardware.ram_budget_bytes,
+        "budget_notes": hardware.budget_notes,
+        "os": hardware.os,
+        "backend_capabilities": [
+            _backend_capability_dict(c) for c in hardware.backend_capabilities
+        ],
+    }
+
+
+def _model_summary_dict(rank: int, result: CompatibilityResult) -> dict:
     model = result.model
     return {
         "rank": rank,
@@ -102,99 +131,57 @@ def _compact_model_dict(rank: int, result: CompatibilityResult) -> dict:
     }
 
 
+def _model_diagnostics_dict(rank: int, result: CompatibilityResult) -> dict:
+    model = result.model
+    return {
+        **_model_summary_dict(rank, result),
+        "family_id": model.family_id,
+        "architecture": model.architecture,
+        "hf_pipeline_tag": model.hf_pipeline_tag,
+        "tags": model.tags,
+        "access": model.access,
+        "is_official": model.is_official,
+        "model_format": model.model_format,
+        "variant_kind": model.variant_kind,
+        "quantization_type": model.quantization_type,
+        "base_model": model.base_model,
+        "base_models": model.base_models,
+        "variant_of": model.variant_of,
+        "artifacts": [_artifact_dict(a) for a in model.artifacts],
+        "components": [_component_dict(c) for c in model.components],
+        "lineage": _lineage_dict(model.lineage),
+        "published_at": model.published_at,
+        "downloads": model.downloads,
+        "uses_multi_gpu": result.uses_multi_gpu,
+        "multi_gpu_effective_vram_bytes": result.multi_gpu_effective_vram_bytes,
+        "speed_confidence": result.speed_confidence,
+        "speed_range_tok_per_sec": (
+            list(result.speed_range_tok_per_sec)
+            if result.speed_range_tok_per_sec
+            else None
+        ),
+        "speed_notes": result.speed_notes,
+    }
+
+
 def display_json(
     results: list[CompatibilityResult],
     hardware: HardwareInfo,
     include_diagnostics: bool = False,
 ) -> None:
-    if not include_diagnostics:
-        output = {
-            "hardware": _compact_hardware_dict(hardware),
-            "models": [
-                _compact_model_dict(i, r) for i, r in enumerate(results, 1)
-            ],
-        }
-        _console.console.print_json(json.dumps(output, ensure_ascii=False))
-        return
-
+    hardware_dict = (
+        _hardware_diagnostics_dict(hardware)
+        if include_diagnostics
+        else _hardware_summary_dict(hardware)
+    )
+    model_dict = (
+        _model_diagnostics_dict
+        if include_diagnostics
+        else _model_summary_dict
+    )
     output = {
-        "hardware": {
-            "gpus": [
-                {
-                    "name": g.name,
-                    "vendor": g.vendor,
-                    "vram_bytes": g.vram_bytes,
-                    "usable_vram_bytes": g.usable_vram_bytes,
-                    "memory_bandwidth_gbps": g.memory_bandwidth_gbps,
-                    "shared_memory": g.shared_memory,
-                    "backend_capabilities": [
-                        _backend_capability_dict(c) for c in g.backend_capabilities
-                    ],
-                    "neural_engine_available": g.neural_engine_available,
-                }
-                for g in hardware.gpus
-            ],
-            "cpu": hardware.cpu_name,
-            "cpu_cores": hardware.cpu_cores,
-            "ram_bytes": hardware.ram_bytes,
-            "ram_budget_bytes": hardware.ram_budget_bytes,
-            "budget_notes": hardware.budget_notes,
-            "os": hardware.os,
-            "backend_capabilities": [
-                _backend_capability_dict(c) for c in hardware.backend_capabilities
-            ],
-        },
-        "models": [
-            {
-                "rank": i,
-                "model_id": r.model.id,
-                "family_id": r.model.family_id,
-                "architecture": r.model.architecture,
-                "hf_pipeline_tag": r.model.hf_pipeline_tag,
-                "tags": r.model.tags,
-                "access": r.model.access,
-                "is_official": r.model.is_official,
-                "model_format": r.model.model_format,
-                "variant_kind": r.model.variant_kind,
-                "quantization_type": r.model.quantization_type,
-                "base_model": r.model.base_model,
-                "base_models": r.model.base_models,
-                "variant_of": r.model.variant_of,
-                "artifacts": [_artifact_dict(a) for a in r.model.artifacts],
-                "components": [_component_dict(c) for c in r.model.components],
-                "lineage": _lineage_dict(r.model.lineage),
-                "parameter_count": r.model.parameter_count,
-                "published_at": r.model.published_at,
-                "downloads": r.model.downloads,
-                "quant_type": effective_quant_type(r.model, r.gguf_variant),
-                "file_size_bytes": (
-                    r.gguf_variant.file_size_bytes
-                    if r.gguf_variant
-                    else estimate_weight_bytes(r.model, None)
-                ),
-                "vram_required_bytes": r.vram_required_bytes,
-                "vram_available_bytes": r.vram_available_bytes,
-                "uses_multi_gpu": r.uses_multi_gpu,
-                "multi_gpu_effective_vram_bytes": r.multi_gpu_effective_vram_bytes,
-                "estimated_tok_per_sec": r.estimated_tok_per_sec,
-                "speed_confidence": r.speed_confidence,
-                "speed_range_tok_per_sec": (
-                    list(r.speed_range_tok_per_sec)
-                    if r.speed_range_tok_per_sec
-                    else None
-                ),
-                "speed_notes": r.speed_notes,
-                "quality_score": round(r.quality_score, 2),
-                "benchmark_status": r.benchmark_status,
-                "benchmark_source": r.benchmark_source,
-                "benchmark_confidence": round(r.benchmark_confidence, 2),
-                "fit_type": r.fit_type,
-                "can_run": r.can_run,
-                "warnings": r.warnings,
-                "license": r.model.license,
-            }
-            for i, r in enumerate(results, 1)
-        ],
+        "hardware": hardware_dict,
+        "models": [model_dict(i, r) for i, r in enumerate(results, 1)],
     }
     _console.console.print_json(json.dumps(output, ensure_ascii=False))
 

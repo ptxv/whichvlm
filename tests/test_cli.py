@@ -1,11 +1,17 @@
 """Tests for CLI helper logic."""
 
+import json
+from io import StringIO
+
 import httpx
 import pytest
+from rich.console import Console
 from typer import Exit
+from typer.testing import CliRunner
 
 import whichvlm.cli as cli_mod
 import whichvlm.__main__ as main_mod
+import whichvlm.output._console as console_mod
 from whichvlm.cli import (
     _apply_memory_budgets,
     _apply_gpu_overrides,
@@ -30,7 +36,7 @@ from whichvlm.utils import current_version
 from whichvlm.engine.types import CompatibilityResult
 from whichvlm.hardware.types import GPUInfo, HardwareInfo, has_backend
 from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
-from typer.testing import CliRunner
+from whichvlm.output.display import display_json
 
 
 def _hw_with_gpu(vram_gb: int) -> HardwareInfo:
@@ -49,30 +55,6 @@ def _hw_with_gpu(vram_gb: int) -> HardwareInfo:
         disk_free_bytes=100 * 1024**3,
         os="linux",
     )
-
-
-def _display_json_data(
-    result: CompatibilityResult,
-    hw: HardwareInfo,
-    include_diagnostics: bool = False,
-):
-    import json as json_mod
-    from io import StringIO
-
-    from rich.console import Console
-
-    from whichvlm.output.display import display_json
-
-    import whichvlm.output._console as console_mod
-
-    buf = StringIO()
-    orig_console = console_mod.console
-    console_mod.console = Console(file=buf, force_terminal=False)
-    try:
-        display_json([result], hw, include_diagnostics=include_diagnostics)
-    finally:
-        console_mod.console = orig_console
-    return json_mod.loads(buf.getvalue().strip())
 
 
 def test_auto_min_params_general_by_vram():
@@ -1101,7 +1083,22 @@ def test_snippet_no_model_found(monkeypatch):
     assert "No model found" in result.stdout
 
 
-def _json_output_case() -> tuple[CompatibilityResult, HardwareInfo]:
+def _render_json_output(
+    result: CompatibilityResult,
+    hardware: HardwareInfo,
+    include_diagnostics: bool = False,
+) -> dict:
+    buffer = StringIO()
+    original_console = console_mod.console
+    console_mod.console = Console(file=buffer, force_terminal=False)
+    try:
+        display_json([result], hardware, include_diagnostics=include_diagnostics)
+    finally:
+        console_mod.console = original_console
+    return json.loads(buffer.getvalue().strip())
+
+
+def _json_output_fixture() -> tuple[CompatibilityResult, HardwareInfo]:
     model = ModelInfo(
         id="test-org/Test-7B",
         family_id="test-7b",
@@ -1147,8 +1144,8 @@ def _json_output_case() -> tuple[CompatibilityResult, HardwareInfo]:
 
 def test_json_output_defaults_to_compact():
     """display_json should omit nested diagnostic fields by default."""
-    result, hw = _json_output_case()
-    compact = _display_json_data(result, hw)
+    result, hardware = _json_output_fixture()
+    compact = _render_json_output(result, hardware)
     compact_entry = compact["models"][0]
 
     assert compact_entry["model_id"] == "test-org/Test-7B"
@@ -1160,9 +1157,10 @@ def test_json_output_defaults_to_compact():
 
 def test_json_output_includes_diagnostics_when_requested():
     """display_json should preserve the previous diagnostic payload."""
-    result, hw = _json_output_case()
-    data = _display_json_data(result, hw, include_diagnostics=True)
+    result, hardware = _json_output_fixture()
+    data = _render_json_output(result, hardware, include_diagnostics=True)
     entry = data["models"][0]
+    artifact = entry["artifacts"][0]
 
     assert data["hardware"]["ram_budget_bytes"] == 32 * 1024**3
     assert data["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
@@ -1170,7 +1168,7 @@ def test_json_output_includes_diagnostics_when_requested():
     assert entry["benchmark_source"] == "line_interp"
     assert entry["benchmark_confidence"] == 0.34
     assert entry["base_models"] == ["base/Test-7B"]
-    assert entry["artifacts"][0]["format"] == "mlx"
-    assert entry["artifacts"][0]["access"] == "gated"
-    assert entry["artifacts"][0]["backend_support"] == ["mlx", "metal"]
+    assert artifact["format"] == "mlx"
+    assert artifact["access"] == "gated"
+    assert artifact["backend_support"] == ["mlx", "metal"]
     assert entry["lineage"]["base_model_ids"] == ["base/Test-7B"]
