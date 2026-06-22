@@ -52,7 +52,9 @@ def _hw_with_gpu(vram_gb: int) -> HardwareInfo:
 
 
 def _display_json_data(
-    result: CompatibilityResult, hw: HardwareInfo, full: bool = False
+    result: CompatibilityResult,
+    hw: HardwareInfo,
+    include_diagnostics: bool = False,
 ):
     import json as json_mod
     from io import StringIO
@@ -67,7 +69,7 @@ def _display_json_data(
     orig_console = console_mod.console
     console_mod.console = Console(file=buf, force_terminal=False)
     try:
-        display_json([result], hw, full=full)
+        display_json([result], hw, include_diagnostics=include_diagnostics)
     finally:
         console_mod.console = orig_console
     return json_mod.loads(buf.getvalue().strip())
@@ -557,10 +559,10 @@ def test_main_json_smoke_profile_vision(monkeypatch):
             )
         ]
 
-    def fake_display_json(results, hardware, full=False):
+    def fake_display_json(results, hardware, include_diagnostics=False):
         captured["json_called"] = True
         captured["json_results"] = results
-        captured["json_full"] = full
+        captured["json_include_diagnostics"] = include_diagnostics
 
     monkeypatch.setattr(
         "whichvlm.hardware.detector.detect_hardware", lambda: _hw_with_gpu(8)
@@ -577,7 +579,7 @@ def test_main_json_smoke_profile_vision(monkeypatch):
 
     assert result.exit_code == 0
     assert captured["json_called"] is True
-    assert captured["json_full"] is False
+    assert captured["json_include_diagnostics"] is False
     assert captured["task_profile"] == "vision"
     assert captured["vision_workload"].image_count == 2
     assert captured["vision_workload"].image_size == 896
@@ -585,7 +587,7 @@ def test_main_json_smoke_profile_vision(monkeypatch):
     captured.clear()
     result = CliRunner().invoke(app, ["--json", "--details"])
     assert result.exit_code == 0
-    assert captured["json_full"] is True
+    assert captured["json_include_diagnostics"] is True
 
 
 def test_hardware_command_smoke(monkeypatch):
@@ -1099,8 +1101,7 @@ def test_snippet_no_model_found(monkeypatch):
     assert "No model found" in result.stdout
 
 
-def test_json_output_defaults_to_compact_and_supports_full():
-    """display_json should omit diagnostic fields unless full=True."""
+def _json_output_case() -> tuple[CompatibilityResult, HardwareInfo]:
     model = ModelInfo(
         id="test-org/Test-7B",
         family_id="test-7b",
@@ -1141,17 +1142,28 @@ def test_json_output_defaults_to_compact_and_supports_full():
         os="linux",
         budget_notes=["RAM budget: 32.0 GB"],
     )
+    return result, hw
 
+
+def test_json_output_defaults_to_compact():
+    """display_json should omit nested diagnostic fields by default."""
+    result, hw = _json_output_case()
     compact = _display_json_data(result, hw)
     compact_entry = compact["models"][0]
+
     assert compact_entry["model_id"] == "test-org/Test-7B"
     assert compact_entry["benchmark_source"] == "line_interp"
     assert "artifacts" not in compact_entry
     assert "lineage" not in compact_entry
     assert "budget_notes" not in compact["hardware"]
 
-    full = _display_json_data(result, hw, full=True)
-    full_entry = full["models"][0]
-    assert full["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
-    assert full_entry["artifacts"][0]["format"] == "mlx"
-    assert full_entry["lineage"]["base_model_ids"] == ["base/Test-7B"]
+
+def test_json_output_includes_diagnostics_when_requested():
+    """display_json should preserve the previous diagnostic payload."""
+    result, hw = _json_output_case()
+    data = _display_json_data(result, hw, include_diagnostics=True)
+    entry = data["models"][0]
+
+    assert data["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
+    assert entry["artifacts"][0]["format"] == "mlx"
+    assert entry["lineage"]["base_model_ids"] == ["base/Test-7B"]

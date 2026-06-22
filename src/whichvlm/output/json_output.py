@@ -58,46 +58,45 @@ def _lineage_dict(lineage: ModelLineage) -> dict:
     }
 
 
-def _attr_dict(obj, fields: tuple[str, ...]) -> dict:
-    return {field: getattr(obj, field) for field in fields}
-
-
 def _compact_hardware_dict(hardware: HardwareInfo) -> dict:
     return {
         "gpus": [
-            _attr_dict(g, ("name", "vram_bytes", "usable_vram_bytes"))
+            {
+                "name": g.name,
+                "vram_bytes": g.vram_bytes,
+                "usable_vram_bytes": g.usable_vram_bytes,
+            }
             for g in hardware.gpus
         ],
         "cpu": hardware.cpu_name,
-        **_attr_dict(hardware, ("cpu_cores", "ram_bytes", "ram_budget_bytes", "os")),
+        "cpu_cores": hardware.cpu_cores,
+        "ram_bytes": hardware.ram_bytes,
+        "ram_budget_bytes": hardware.ram_budget_bytes,
+        "os": hardware.os,
     }
 
 
-def _compact_result_dict(rank: int, result: CompatibilityResult) -> dict:
+def _compact_model_dict(rank: int, result: CompatibilityResult) -> dict:
     model = result.model
     return {
         "rank": rank,
         "model_id": model.id,
-        **_attr_dict(model, ("parameter_count", "license")),
+        "parameter_count": model.parameter_count,
+        "license": model.license,
         "quant_type": effective_quant_type(model, result.gguf_variant),
         "file_size_bytes": (
             result.gguf_variant.file_size_bytes
             if result.gguf_variant
             else estimate_weight_bytes(model, None)
         ),
-        **_attr_dict(
-            result,
-            (
-                "vram_required_bytes",
-                "vram_available_bytes",
-                "estimated_tok_per_sec",
-                "benchmark_status",
-                "benchmark_source",
-                "fit_type",
-                "can_run",
-                "warnings",
-            ),
-        ),
+        "vram_required_bytes": result.vram_required_bytes,
+        "vram_available_bytes": result.vram_available_bytes,
+        "estimated_tok_per_sec": result.estimated_tok_per_sec,
+        "benchmark_status": result.benchmark_status,
+        "benchmark_source": result.benchmark_source,
+        "fit_type": result.fit_type,
+        "can_run": result.can_run,
+        "warnings": result.warnings,
         "quality_score": round(result.quality_score, 2),
         "benchmark_confidence": round(result.benchmark_confidence, 2),
     }
@@ -106,13 +105,13 @@ def _compact_result_dict(rank: int, result: CompatibilityResult) -> dict:
 def display_json(
     results: list[CompatibilityResult],
     hardware: HardwareInfo,
-    full: bool = False,
+    include_diagnostics: bool = False,
 ) -> None:
-    if not full:
+    if not include_diagnostics:
         output = {
             "hardware": _compact_hardware_dict(hardware),
             "models": [
-                _compact_result_dict(i, r) for i, r in enumerate(results, 1)
+                _compact_model_dict(i, r) for i, r in enumerate(results, 1)
             ],
         }
         _console.console.print_json(json.dumps(output, ensure_ascii=False))
