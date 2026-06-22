@@ -1,5 +1,3 @@
-"""Machine-readable JSON output for ranking, plan, and upgrade surfaces."""
-
 from __future__ import annotations
 
 import json
@@ -13,11 +11,11 @@ from whichvlm.models.types import (
     ModelInfo,
     ModelLineage,
 )
-from whichvlm.output import _console
+from whichvlm.output import console
 from whichvlm.output.upgrade import summarize_upgrade_row
 
 
-def _backend_capability_dict(capability: BackendCapability) -> dict:
+def backend_capability_dict(capability: BackendCapability) -> dict:
     return {
         "name": capability.name,
         "available": capability.available,
@@ -26,7 +24,7 @@ def _backend_capability_dict(capability: BackendCapability) -> dict:
     }
 
 
-def _artifact_dict(artifact: ModelArtifact) -> dict:
+def artifact_dict(artifact: ModelArtifact) -> dict:
     return {
         "repo_id": artifact.repo_id,
         "format": artifact.format,
@@ -39,7 +37,7 @@ def _artifact_dict(artifact: ModelArtifact) -> dict:
     }
 
 
-def _component_dict(component: ModelComponent) -> dict:
+def component_dict(component: ModelComponent) -> dict:
     return {
         "role": component.role,
         "repo_id": component.repo_id,
@@ -48,7 +46,7 @@ def _component_dict(component: ModelComponent) -> dict:
     }
 
 
-def _lineage_dict(lineage: ModelLineage) -> dict:
+def lineage_dict(lineage: ModelLineage) -> dict:
     return {
         "base_model_ids": lineage.base_model_ids,
         "merged_parent_ids": lineage.merged_parent_ids,
@@ -58,56 +56,47 @@ def _lineage_dict(lineage: ModelLineage) -> dict:
     }
 
 
-def _hardware_summary_dict(hardware: HardwareInfo) -> dict:
-    return {
-        "gpus": [
-            {
-                "name": g.name,
-                "vram_bytes": g.vram_bytes,
-                "usable_vram_bytes": g.usable_vram_bytes,
-            }
-            for g in hardware.gpus
-        ],
+def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
+    gpus = []
+    for gpu in hardware.gpus:
+        gpu_data = {
+            "name": gpu.name,
+            "vram_bytes": gpu.vram_bytes,
+            "usable_vram_bytes": gpu.usable_vram_bytes,
+        }
+        if details:
+            gpu_data.update(
+                {
+                    "vendor": gpu.vendor,
+                    "memory_bandwidth_gbps": gpu.memory_bandwidth_gbps,
+                    "shared_memory": gpu.shared_memory,
+                    "backend_capabilities": [
+                        backend_capability_dict(c) for c in gpu.backend_capabilities
+                    ],
+                    "neural_engine_available": gpu.neural_engine_available,
+                }
+            )
+        gpus.append(gpu_data)
+
+    data = {
+        "gpus": gpus,
         "cpu": hardware.cpu_name,
         "cpu_cores": hardware.cpu_cores,
         "ram_bytes": hardware.ram_bytes,
         "ram_budget_bytes": hardware.ram_budget_bytes,
         "os": hardware.os,
     }
+    if details:
+        data["budget_notes"] = hardware.budget_notes
+        data["backend_capabilities"] = [
+            backend_capability_dict(c) for c in hardware.backend_capabilities
+        ]
+    return data
 
 
-def _hardware_diagnostics_dict(hardware: HardwareInfo) -> dict:
-    return {
-        "gpus": [
-            {
-                "name": g.name,
-                "vendor": g.vendor,
-                "vram_bytes": g.vram_bytes,
-                "usable_vram_bytes": g.usable_vram_bytes,
-                "memory_bandwidth_gbps": g.memory_bandwidth_gbps,
-                "shared_memory": g.shared_memory,
-                "backend_capabilities": [
-                    _backend_capability_dict(c) for c in g.backend_capabilities
-                ],
-                "neural_engine_available": g.neural_engine_available,
-            }
-            for g in hardware.gpus
-        ],
-        "cpu": hardware.cpu_name,
-        "cpu_cores": hardware.cpu_cores,
-        "ram_bytes": hardware.ram_bytes,
-        "ram_budget_bytes": hardware.ram_budget_bytes,
-        "budget_notes": hardware.budget_notes,
-        "os": hardware.os,
-        "backend_capabilities": [
-            _backend_capability_dict(c) for c in hardware.backend_capabilities
-        ],
-    }
-
-
-def _model_summary_dict(rank: int, result: CompatibilityResult) -> dict:
+def model_dict(rank: int, result: CompatibilityResult, details: bool = False) -> dict:
     model = result.model
-    return {
+    data = {
         "rank": rank,
         "model_id": model.id,
         "parameter_count": model.parameter_count,
@@ -129,61 +118,55 @@ def _model_summary_dict(rank: int, result: CompatibilityResult) -> dict:
         "quality_score": round(result.quality_score, 2),
         "benchmark_confidence": round(result.benchmark_confidence, 2),
     }
-
-
-def _model_diagnostics_dict(rank: int, result: CompatibilityResult) -> dict:
-    model = result.model
-    return {
-        **_model_summary_dict(rank, result),
-        "family_id": model.family_id,
-        "architecture": model.architecture,
-        "hf_pipeline_tag": model.hf_pipeline_tag,
-        "tags": model.tags,
-        "access": model.access,
-        "is_official": model.is_official,
-        "model_format": model.model_format,
-        "variant_kind": model.variant_kind,
-        "quantization_type": model.quantization_type,
-        "base_model": model.base_model,
-        "base_models": model.base_models,
-        "variant_of": model.variant_of,
-        "artifacts": [_artifact_dict(a) for a in model.artifacts],
-        "components": [_component_dict(c) for c in model.components],
-        "lineage": _lineage_dict(model.lineage),
-        "published_at": model.published_at,
-        "downloads": model.downloads,
-        "uses_multi_gpu": result.uses_multi_gpu,
-        "multi_gpu_effective_vram_bytes": result.multi_gpu_effective_vram_bytes,
-        "speed_confidence": result.speed_confidence,
-        "speed_range_tok_per_sec": (
-            list(result.speed_range_tok_per_sec)
-            if result.speed_range_tok_per_sec
-            else None
-        ),
-        "speed_notes": result.speed_notes,
-    }
+    if details:
+        data.update(
+            {
+                "family_id": model.family_id,
+                "architecture": model.architecture,
+                "hf_pipeline_tag": model.hf_pipeline_tag,
+                "tags": model.tags,
+                "access": model.access,
+                "is_official": model.is_official,
+                "model_format": model.model_format,
+                "variant_kind": model.variant_kind,
+                "quantization_type": model.quantization_type,
+                "base_model": model.base_model,
+                "base_models": model.base_models,
+                "variant_of": model.variant_of,
+                "artifacts": [artifact_dict(a) for a in model.artifacts],
+                "components": [component_dict(c) for c in model.components],
+                "lineage": lineage_dict(model.lineage),
+                "published_at": model.published_at,
+                "downloads": model.downloads,
+                "uses_multi_gpu": result.uses_multi_gpu,
+                "multi_gpu_effective_vram_bytes": (
+                    result.multi_gpu_effective_vram_bytes
+                ),
+                "speed_confidence": result.speed_confidence,
+                "speed_range_tok_per_sec": (
+                    list(result.speed_range_tok_per_sec)
+                    if result.speed_range_tok_per_sec
+                    else None
+                ),
+                "speed_notes": result.speed_notes,
+            }
+        )
+    return data
 
 
 def display_json(
     results: list[CompatibilityResult],
     hardware: HardwareInfo,
-    include_diagnostics: bool = False,
+    details: bool = False,
 ) -> None:
-    hardware_dict = (
-        _hardware_diagnostics_dict(hardware)
-        if include_diagnostics
-        else _hardware_summary_dict(hardware)
-    )
-    model_dict = (
-        _model_diagnostics_dict
-        if include_diagnostics
-        else _model_summary_dict
-    )
     output = {
-        "hardware": hardware_dict,
-        "models": [model_dict(i, r) for i, r in enumerate(results, 1)],
+        "hardware": hardware_dict(hardware, details),
+        "models": [
+            model_dict(i, result, details)
+            for i, result in enumerate(results, 1)
+        ],
     }
-    _console.console.print_json(json.dumps(output, ensure_ascii=False))
+    console.console.print_json(json.dumps(output, ensure_ascii=False))
 
 
 def display_plan_json(
@@ -217,7 +200,7 @@ def display_plan_json(
             model, target_quant, target_vram
         ),
     }
-    _console.console.print_json(json.dumps(output, ensure_ascii=False))
+    console.console.print_json(json.dumps(output, ensure_ascii=False))
 
 
 def display_upgrade_json(
@@ -225,7 +208,7 @@ def display_upgrade_json(
     current_results: list,
     target_results: list[tuple[str, HardwareInfo, list]],
 ) -> None:
-    """Emit the upgrade comparison as JSON for scripting."""
+
     current_row = summarize_upgrade_row("Current", current_hw, current_results)
     rows = []
     for name, hw, res in target_results:
@@ -233,7 +216,7 @@ def display_upgrade_json(
         row["delta_quality"] = row["top_quality"] - current_row["top_quality"]
         row["delta_tok_s"] = row["top_tok_s"] - current_row["top_tok_s"]
         rows.append(row)
-    _console.console.print_json(
+    console.console.print_json(
         json.dumps(
             {"current": current_row, "targets": rows},
             ensure_ascii=False,
