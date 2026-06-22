@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any
 
 from whichvlm.utils import cache_dir
 
@@ -33,7 +32,7 @@ def load_cache(*, allow_stale: bool = False) -> list[dict] | None:
         return None
 
 
-def cache_snapshot() -> dict[str, Any] | None:
+def cache_snapshot() -> dict | None:
     if not CACHE_FILE.exists():
         return None
     try:
@@ -57,7 +56,7 @@ def cache_snapshot() -> dict[str, Any] | None:
         return None
 
 
-def save_cache(models: list[dict], *, source: dict[str, Any] | None = None) -> None:
+def save_cache(models: list[dict], *, source: dict | None = None) -> None:
     ensure_cache_dir()
     data = {
         "schema_version": CACHE_SCHEMA_VERSION,

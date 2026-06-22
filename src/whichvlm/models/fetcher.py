@@ -730,107 +730,22 @@ def model_list_params(
     return params
 
 
-def model_inventory_queries(
-    *,
-    limit: int,
-    include_vision: bool,
-) -> list[tuple[dict, str, bool]]:
-    queries: list[tuple[dict, str, bool]] = []
-    if include_vision:
-        for pipeline_tag in VLM_PIPELINE_TAGS:
-            for filter_value in VLM_VARIANT_FILTERS:
-                label = f"VLM {pipeline_tag}/{filter_value or 'all'}"
-                queries.append(
-                    (
-                        model_list_params(
-                            pipeline_tag=pipeline_tag,
-                            sort="downloads",
-                            limit=limit,
-                            filter_value=filter_value,
-                        ),
-                        label,
-                        False,
-                    )
-                )
-
-    queries.extend(
-        [
-            (
-                model_list_params(
-                    pipeline_tag="text-generation",
-                    sort="downloads",
-                    limit=limit,
-                ),
-                "text-generation downloads",
-                True,
-            ),
-            (
-                model_list_params(
-                    pipeline_tag="text-generation",
-                    sort="downloads",
-                    limit=limit,
-                    filter_value="gguf",
-                ),
-                "text-generation GGUF downloads",
-                True,
-            ),
-            (
-                model_list_params(
-                    pipeline_tag="text-generation",
-                    sort="lastModified",
-                    limit=limit,
-                    filter_value="gguf",
-                ),
-                "text-generation recent GGUF",
-                True,
-            ),
-            (
-                model_list_params(
-                    pipeline_tag="text-generation",
-                    sort="trending",
-                    limit=limit,
-                ),
-                "text-generation trending",
-                False,
-            ),
-            (
-                model_list_params(
-                    pipeline_tag="text-generation",
-                    sort="trending",
-                    limit=limit,
-                    filter_value="gguf",
-                ),
-                "text-generation trending GGUF",
-                False,
-            ),
-        ]
-    )
-    return queries
-
-
 def inventory_source_provenance(
     *,
     limit: int = 300,
     include_vision: bool = True,
 ) -> dict:
-    queries = []
-    for params, label, required in model_inventory_queries(
-        limit=limit, include_vision=include_vision
-    ):
-        queries.append(
-            {
-                "label": label,
-                "pipeline_tag": params.get("pipeline_tag"),
-                "sort": params.get("sort"),
-                "filter": params.get("filter"),
-                "limit": int(params.get("limit", 0)),
-                "required": required,
-            }
-        )
     return {
         "name": "huggingface",
         "api_base": HF_API_BASE,
-        "queries": queries,
+        "limit": limit,
+        "pipeline_tags": (
+            [*VLM_PIPELINE_TAGS, "text-generation"]
+            if include_vision
+            else ["text-generation"]
+        ),
+        "sorts": ["downloads", "lastModified", "trending"],
+        "filters": [v for v in VLM_VARIANT_FILTERS if v],
         "seed_inventory": "whichvlm.data.vlm_inventory" if include_vision else None,
     }
 
@@ -904,8 +819,75 @@ async def fetch_models(
     seen_ids: set[str] = set()
 
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        list_queries = model_inventory_queries(
-            limit=limit, include_vision=include_vision
+        list_queries: list[tuple[dict, str, bool]] = []
+        if include_vision:
+            for pipeline_tag in VLM_PIPELINE_TAGS:
+                for filter_value in VLM_VARIANT_FILTERS:
+                    label = f"VLM {pipeline_tag}/{filter_value or 'all'}"
+                    list_queries.append(
+                        (
+                            model_list_params(
+                                pipeline_tag=pipeline_tag,
+                                sort="downloads",
+                                limit=limit,
+                                filter_value=filter_value,
+                            ),
+                            label,
+                            False,
+                        )
+                    )
+
+        list_queries.extend(
+            [
+                (
+                    model_list_params(
+                        pipeline_tag="text-generation",
+                        sort="downloads",
+                        limit=limit,
+                    ),
+                    "text-generation downloads",
+                    True,
+                ),
+                (
+                    model_list_params(
+                        pipeline_tag="text-generation",
+                        sort="downloads",
+                        limit=limit,
+                        filter_value="gguf",
+                    ),
+                    "text-generation GGUF downloads",
+                    True,
+                ),
+                (
+                    model_list_params(
+                        pipeline_tag="text-generation",
+                        sort="lastModified",
+                        limit=limit,
+                        filter_value="gguf",
+                    ),
+                    "text-generation recent GGUF",
+                    True,
+                ),
+                (
+                    model_list_params(
+                        pipeline_tag="text-generation",
+                        sort="trending",
+                        limit=limit,
+                    ),
+                    "text-generation trending",
+                    False,
+                ),
+                (
+                    model_list_params(
+                        pipeline_tag="text-generation",
+                        sort="trending",
+                        limit=limit,
+                        filter_value="gguf",
+                    ),
+                    "text-generation trending GGUF",
+                    False,
+                ),
+            ]
         )
 
         list_semaphore = asyncio.Semaphore(MODEL_LIST_CONCURRENCY)
