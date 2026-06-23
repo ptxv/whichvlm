@@ -1,60 +1,68 @@
 # Contributing
 
-whichvlm is a Python 3.11+ CLI. It detects local hardware, fetches VLM
-metadata, ranks compatible model artifacts, and prints CLI, JSON, or markdown
-output.
+`whichvlm` is a Python 3.11+ CLI for ranking local VLM options against real
+or simulated hardware. Contributions should be small, tested, and easy to
+review.
 
-## Issues
+## Setup
 
-Search existing issues before filing a duplicate.
-
-For hardware detection bugs, include:
-
-- driver/runtime version when known
-- the exact `whichvlm` command
-- the relevant command output or traceback
-
-For ranking bugs, include:
-
-- the command and flags used
-- actual top result
-- whether the result used real or simulated hardware
-
-## Testing
-
-whichvlm uses `pytest` to test the codebase.
+From a fresh clone:
 
 ```bash
-# Install the development dependencies used by the test suite.
+git clone https://github.com/ptxv/whichvlm.git
+cd whichvlm
 uv sync --group dev
-
-# Run all tests.
-uv run pytest tests/
-
-# Run one test file with detailed output.
-uv run pytest -s -v tests/test_ranker.py
+uv run pytest -q
 ```
 
-Before opening a pull request, include the tests you ran. For most changes, run
-the full suite and compile check:
+For focused work, run the tests that cover the touched code:
 
 ```bash
-uv run pytest -q
+uv run pytest -q tests/test_ranker.py
 uv run python -m compileall -q src tests
 ```
 
-## Code Changes
+## Issues
 
-- Add or update tests for changed behavior.
-- Update output tests when changing table columns, markdown text, JSON fields,
-  diagnostics, or error messages.
-- Add dependencies only when the standard library and current dependencies are
-  not enough.
+Include the exact command, output or traceback, OS, GPU or CPU, and whether the
+run used real or simulated hardware. Ranking issues should also include the
+expected top result and the actual top result.
+
+## Code
+
+- Match the existing module style before adding new structure.
+- Keep the patch to the behavior under review; do not mix in cleanup.
+- Use concrete names. Avoid generic helpers such as `process_data`,
+  `handle_response`, or `validate_input`.
+- Avoid leading-underscore names for new helpers or locals.
+- Do not add one-use dataclasses, config objects, logging wrappers, retry
+  wrappers, or CLI boilerplate.
+- Let bad inputs fail loudly unless the caller already has a concrete recovery
+  path.
+- Write comments only for intent that is not obvious from the code.
+- Add tests for changed behavior, boundary cases, and failure modes.
+
+## Agent Use
+
+Agent-assisted PRs are welcome when the author owns the diff. Before opening a
+PR, read every changed line and remove invented APIs, broad abstractions,
+dead code, filler comments, and tests that only mirror the implementation.
+
+Do not claim hardware, performance, or runtime support without evidence from
+the device, command output, benchmark, log, or failing test that backs it up.
 
 ## Pull Requests
 
-- Use a direct title, such as `Fix AMD shared-memory detection`.
-- Link the issue when one exists.
-- List the tests run.
-- Include sample CLI output for user-visible changes.
-- Note any hardware used for manual validation.
+Use a short title that names the change, such as `Fix AMD shared-memory
+detection`.
+
+PR descriptions should be brief and specific:
+
+- What changed and why
+- The main files or modules touched
+- Exact tests run and observed result
+- Known gaps, especially hardware or runtime paths not tested
+
+For docs-only changes, say that no code tests were needed. For code changes,
+prefer focused tests first; run the full suite when touching shared ranking,
+fetching, runtime, output, or hardware-detection behavior.
