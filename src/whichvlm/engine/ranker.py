@@ -616,7 +616,6 @@ def compute_quality_score(
     source_bonus = source_bonus_raw * source_weight
 
 
-    freshness_weight = max(0.0, min(1.0, freshness_weight))
     gen_bonus = generation_bonus(model.id) * freshness_weight
 
 
@@ -662,6 +661,7 @@ def rank_models(
 
     results: list[CompatibilityResult] = []
     gguf_only_backend = is_gguf_only_backend(hardware)
+    applied_freshness_weight = max(0.0, min(1.0, freshness_weight))
     if vision_workload is None and task_profile.lower() == "vision":
         vision_workload = VisionWorkload(context_length=context_length)
 
@@ -823,9 +823,9 @@ def rank_models(
                 family_likes=family_max_likes.get(fid, 0),
                 benchmark_avg=bench_avg,
                 benchmark_source=bench_evidence.source,
-                freshness_weight=freshness_weight,
+                freshness_weight=applied_freshness_weight,
             )
-            compat.ranking_freshness_weight = max(0.0, min(1.0, freshness_weight))
+            compat.ranking_freshness_weight = applied_freshness_weight
             compat.quality_score = min(
                 100.0,
                 compat.quality_score

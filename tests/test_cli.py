@@ -17,6 +17,7 @@ from whichvlm.cli import (
     fill_missing_published_at,
     format_fetch_error,
     include_vision_candidates,
+    load_benchmark_index,
     merge_model_eval_benchmarks,
     parse_memory_amount,
     resolve_model_match,
@@ -208,6 +209,31 @@ def test_format_fetch_error_includes_status_and_url_for_empty_http_error():
     assert format_fetch_error(error) == (
         "HTTPStatusError: HTTP 429 for https://huggingface.co/api/models"
     )
+
+
+def test_load_benchmark_index_uses_stale_cache_after_fetch_failure(monkeypatch):
+    cache_calls = []
+
+    def fake_load_cache(*, allow_stale: bool = False):
+        cache_calls.append(allow_stale)
+        if allow_stale:
+            return {"test/stale": 1.0}
+        return None
+
+    async def fail_fetch():
+        raise httpx.ConnectError("offline")
+
+    def fail_save(scores):
+        raise AssertionError("failed benchmark fetch should not save cache")
+
+    monkeypatch.setattr(
+        "whichvlm.models.benchmark.load_benchmark_cache", fake_load_cache
+    )
+    monkeypatch.setattr("whichvlm.models.benchmark.fetch_benchmark_scores", fail_fetch)
+    monkeypatch.setattr("whichvlm.models.benchmark.save_benchmark_cache", fail_save)
+
+    assert load_benchmark_index(refresh=False) == {"test/stale": 1.0}
+    assert cache_calls == [False, True]
 
 
 def test_merge_model_eval_benchmarks_is_now_a_noop():

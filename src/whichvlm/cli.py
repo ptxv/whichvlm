@@ -62,6 +62,30 @@ def format_fetch_error(error: Exception) -> str:
     return f"{type(error).__name__} with no detail from the network layer"
 
 
+def load_benchmark_index(refresh: bool) -> dict[str, float]:
+    from whichvlm.models.benchmark import (
+        fetch_benchmark_scores,
+        load_benchmark_cache,
+        save_benchmark_cache,
+    )
+
+    cached = None if refresh else load_benchmark_cache()
+    if cached is not None:
+        return cached
+
+    try:
+        scores = asyncio.run(fetch_benchmark_scores())
+    except FETCH_ERRORS as error:
+        console.print(
+            "[yellow]Warning:[/] Benchmark data unavailable: "
+            f"{format_fetch_error(error)}"
+        )
+        return load_benchmark_cache(allow_stale=True) or {}
+
+    save_benchmark_cache(scores)
+    return scores
+
+
 def print_version(value: bool) -> None:
     if value:
         console.print(current_version())
@@ -504,11 +528,6 @@ def main(
 
     from whichvlm.engine.ranker import rank_models
     from whichvlm.hardware.detector import detect_hardware
-    from whichvlm.models.benchmark import (
-        fetch_benchmark_scores,
-        load_benchmark_cache,
-        save_benchmark_cache,
-    )
     from whichvlm.models.cache import save_cache
     from whichvlm.models.fetcher import (
         fetch_model_published_at,
@@ -538,15 +557,7 @@ def main(
         )
 
         progress.update(task, description="loading benchmark index...")
-        bench_scores = None if refresh else load_benchmark_cache()
-        if bench_scores is None:
-            try:
-                progress.update(task, description="fetching benchmark index...")
-                bench_scores = asyncio.run(fetch_benchmark_scores())
-                save_benchmark_cache(bench_scores)
-            except FETCH_ERRORS as e:
-                console.print(f"[yellow]Warning:[/] Benchmark data unavailable: {e}")
-                bench_scores = load_benchmark_cache(allow_stale=True) or {}
+        bench_scores = load_benchmark_index(refresh)
 
         progress.update(task, description="scoring multimodal fit...")
         families = group_models(models)
@@ -727,11 +738,6 @@ def upgrade(
     from whichvlm.hardware.detector import detect_hardware
     from whichvlm.hardware.gpu_simulator import create_synthetic_gpu
     from whichvlm.hardware.types import HardwareInfo
-    from whichvlm.models.benchmark import (
-        fetch_benchmark_scores,
-        load_benchmark_cache,
-        save_benchmark_cache,
-    )
     from whichvlm.models.grouper import group_models
     from whichvlm.output.display import display_upgrade, display_upgrade_json
 
@@ -749,14 +755,7 @@ def upgrade(
         )
 
         progress.update(task, description="loading benchmark index...")
-        bench_scores = None if refresh else load_benchmark_cache()
-        if bench_scores is None:
-            try:
-                bench_scores = asyncio.run(fetch_benchmark_scores())
-                save_benchmark_cache(bench_scores)
-            except FETCH_ERRORS as e:
-                console.print(f"[yellow]Warning:[/] Benchmark data unavailable: {e}")
-                bench_scores = {}
+        bench_scores = load_benchmark_index(refresh)
 
         all_models: list = []
         for family in group_models(models):

@@ -11,6 +11,11 @@ from dataclasses import dataclass
 
 import httpx
 
+from whichvlm.models.cache_format import (
+    cache_expired,
+    cache_snapshot_metadata,
+    read_cache_payload,
+)
 from whichvlm.utils import cache_dir, current_version
 
 # Benchmark merge layer. Blends current and fallback score sources.
@@ -67,59 +72,49 @@ def benchmark_confidence(model_id: str, source: str, default: float) -> float:
 
 def load_benchmark_cache(*, allow_stale: bool = False) -> dict[str, float] | None:
     # Cache read. Reuses merged benchmark scores until ttl expires.
-    if not BENCHMARK_CACHE.exists():
+    payload = read_cache_payload(BENCHMARK_CACHE)
+    if payload is None:
         return None
     try:
-        data = json.loads(BENCHMARK_CACHE.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return None
-        cached_at = data["cached_at"]
-        if not allow_stale and time.time() - cached_at > DEFAULT_TTL_SECONDS:
+        if cache_expired(
+            payload["cached_at"], DEFAULT_TTL_SECONDS, allow_stale=allow_stale
+        ):
             logger.debug("Benchmark cache expired")
             return None
-        scores = data["scores"]
+        scores = payload["scores"]
         if not isinstance(scores, dict):
             return None
         return scores
-    except (json.JSONDecodeError, KeyError, TypeError) as e:
+    except (KeyError, TypeError) as e:
         logger.debug(f"Benchmark cache corrupted: {e}")
         return None
 
 
 def benchmark_cache_snapshot() -> dict | None:
-    if not BENCHMARK_CACHE.exists():
+    payload = read_cache_payload(BENCHMARK_CACHE)
+    if payload is None:
         return None
-    try:
-        data = json.loads(BENCHMARK_CACHE.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return None
-        cached_at = float(data["cached_at"])
-        ttl = int(data.get("ttl_seconds", DEFAULT_TTL_SECONDS))
-        age = max(0.0, time.time() - cached_at)
-        return {
-            "schema_version": int(data.get("schema_version", 1)),
-            "cached_at": cached_at,
-            "ttl_seconds": ttl,
-            "expires_at": cached_at + ttl,
-            "age_seconds": round(age, 1),
-            "stale": age > ttl,
-            "score_count": len(data.get("scores", {})),
-            "source": data.get("source", BENCHMARK_SOURCE_PROVENANCE),
-        }
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        return None
+    return cache_snapshot_metadata(
+        payload,
+        default_ttl_seconds=DEFAULT_TTL_SECONDS,
+        item_key="scores",
+        item_count_key="score_count",
+        default_source=BENCHMARK_SOURCE_PROVENANCE,
+    )
 
 
 def save_benchmark_cache(scores: dict[str, float]) -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    data = {
+    payload = {
         "schema_version": BENCHMARK_CACHE_SCHEMA_VERSION,
         "cached_at": time.time(),
         "ttl_seconds": DEFAULT_TTL_SECONDS,
         "source": BENCHMARK_SOURCE_PROVENANCE,
         "scores": scores,
     }
-    BENCHMARK_CACHE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    BENCHMARK_CACHE.write_text(
+        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+    )
     logger.debug(f"Saved {len(scores)} benchmark scores to cache")
 
 
