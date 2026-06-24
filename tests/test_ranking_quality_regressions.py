@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from whichvlm.engine.ranker import (
-    EVIDENCE_QUALITY_MULTIPLIERS,
+    EVIDENCE_CORE_FACTORS,
     SOURCE_WEIGHTS,
     derivative_name_penalty,
     generation_bonus,
@@ -344,14 +344,14 @@ def test_source_weights_ordering():
     assert SOURCE_WEIGHTS["none"] == 0.0
 
 
-def test_evidence_quality_multipliers_ordering():
-    assert EVIDENCE_QUALITY_MULTIPLIERS["direct"] == 1.0
+def test_evidence_core_factors_ordering():
+    assert EVIDENCE_CORE_FACTORS["direct"] == 1.0
     assert (
-        EVIDENCE_QUALITY_MULTIPLIERS["base_model"]
-        > EVIDENCE_QUALITY_MULTIPLIERS["variant"]
-        > EVIDENCE_QUALITY_MULTIPLIERS["line_interp"]
-        > EVIDENCE_QUALITY_MULTIPLIERS["none"]
-        > EVIDENCE_QUALITY_MULTIPLIERS["self_reported"]
+        EVIDENCE_CORE_FACTORS["base_model"]
+        > EVIDENCE_CORE_FACTORS["variant"]
+        > EVIDENCE_CORE_FACTORS["line_interp"]
+        > EVIDENCE_CORE_FACTORS["none"]
+        > EVIDENCE_CORE_FACTORS["self_reported"]
     )
 
 

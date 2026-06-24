@@ -29,7 +29,7 @@ from whichvlm.models.benchmark import (
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # Ranking core. Expands variants, scores fit, and orders final picks.
-RANKING_ALGORITHM_VERSION = "2026.06.24.2"
+RANKING_ALGORITHM_VERSION = "ranker-v2"
 
 LINEAGE_REGEX: dict[str, list[tuple[re.Pattern[str], int]]] = {
     family: [(re.compile(pat), idx) for pat, idx in entries]
@@ -95,6 +95,9 @@ def partial_offload_quality_factor(model: ModelInfo, offload_ratio: float) -> fl
     return factor
 
 
+# Calibration policy. Benchmarks drive the quality core, but inherited and
+# self-reported evidence are discounted before hardware, speed, and source
+# signals are added.
 SOURCE_WEIGHTS: dict[str, float] = {
     "direct": 0.64,
     "base_model": 0.50,
@@ -104,7 +107,7 @@ SOURCE_WEIGHTS: dict[str, float] = {
     "none": 0.0,
 }
 
-EVIDENCE_QUALITY_MULTIPLIERS: dict[str, float] = {
+EVIDENCE_CORE_FACTORS: dict[str, float] = {
     "direct": 1.00,
     "base_model": 0.74,
     "variant": 0.72,
@@ -113,40 +116,14 @@ EVIDENCE_QUALITY_MULTIPLIERS: dict[str, float] = {
     "none": 0.52,
 }
 
-TASK_EVIDENCE_ADJUSTMENTS: dict[str, dict[str, float]] = {
-    "coding": {
-        "direct": 3.0,
-        "variant": -2.0,
-        "base_model": -2.0,
-        "line_interp": -4.0,
-        "self_reported": -6.0,
-        "none": -5.0,
-    },
-    "math": {
-        "direct": 3.0,
-        "variant": -2.0,
-        "base_model": -2.0,
-        "line_interp": -4.0,
-        "self_reported": -6.0,
-        "none": -5.0,
-    },
-    "vision": {
-        "direct": 3.0,
-        "variant": -2.0,
-        "base_model": -2.0,
-        "line_interp": -4.0,
-        "self_reported": -6.0,
-        "none": -5.0,
-    },
-    "ocr": {
-        "direct": 4.0,
-        "variant": -3.0,
-        "base_model": -3.0,
-        "line_interp": -5.0,
-        "self_reported": -7.0,
-        "none": -6.0,
-    },
-}
+TASK_EVIDENCE_PROFILES = frozenset({"coding", "math", "vision", "ocr"})
+TASK_DIRECT_BENCHMARK_BONUS = 3.0
+OCR_DIRECT_BENCHMARK_BONUS = 4.0
+INHERITED_EVIDENCE_PENALTY = -2.0
+INTERPOLATED_EVIDENCE_PENALTY = -4.0
+SELF_REPORTED_EVIDENCE_PENALTY = -6.0
+UNAVAILABLE_EVIDENCE_PENALTY = -5.0
+OCR_EVIDENCE_EXTRA_PENALTY = -1.0
 
 
 SYNTHETIC_QUANTS = ("Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0")
@@ -546,10 +523,26 @@ def backend_priority_bonus(
 
 
 def task_evidence_adjustment(benchmark_source: str, task_profile: str) -> float:
-    adjustments = TASK_EVIDENCE_ADJUSTMENTS.get(task_profile.lower())
-    if not adjustments:
+    profile = task_profile.lower()
+    if profile not in TASK_EVIDENCE_PROFILES:
         return 0.0
-    return adjustments.get(benchmark_source, 0.0)
+    if benchmark_source == "direct":
+        if profile == "ocr":
+            return OCR_DIRECT_BENCHMARK_BONUS
+        return TASK_DIRECT_BENCHMARK_BONUS
+    if benchmark_source in {"base_model", "variant"}:
+        penalty = INHERITED_EVIDENCE_PENALTY
+    elif benchmark_source == "line_interp":
+        penalty = INTERPOLATED_EVIDENCE_PENALTY
+    elif benchmark_source == "self_reported":
+        penalty = SELF_REPORTED_EVIDENCE_PENALTY
+    elif benchmark_source == "none":
+        penalty = UNAVAILABLE_EVIDENCE_PENALTY
+    else:
+        return 0.0
+    if profile == "ocr":
+        penalty += OCR_EVIDENCE_EXTRA_PENALTY
+    return penalty
 
 
 def artifact_access_penalty(model: ModelInfo) -> float:
@@ -603,7 +596,7 @@ def compute_quality_score(
     quality_core = (benchmark_score + size_score) * (1 - quant_penalty)
 
     evidence_key = benchmark_source if has_benchmark else "none"
-    quality_core *= EVIDENCE_QUALITY_MULTIPLIERS.get(evidence_key, 0.52)
+    quality_core *= EVIDENCE_CORE_FACTORS.get(evidence_key, 0.52)
 
 
     if fit_type == "partial_offload":
