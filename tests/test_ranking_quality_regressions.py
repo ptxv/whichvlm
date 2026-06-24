@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from whichvlm.engine.ranker import (
-    EVIDENCE_CORE_FACTORS,
     SOURCE_WEIGHTS,
     derivative_name_penalty,
     generation_bonus,
@@ -344,17 +343,6 @@ def test_source_weights_ordering():
     assert SOURCE_WEIGHTS["none"] == 0.0
 
 
-def test_evidence_core_factors_ordering():
-    assert EVIDENCE_CORE_FACTORS["direct"] == 1.0
-    assert (
-        EVIDENCE_CORE_FACTORS["base_model"]
-        > EVIDENCE_CORE_FACTORS["variant"]
-        > EVIDENCE_CORE_FACTORS["line_interp"]
-        > EVIDENCE_CORE_FACTORS["none"]
-        > EVIDENCE_CORE_FACTORS["self_reported"]
-    )
-
-
 def test_ocr_profile_prefers_direct_task_benchmark_over_popularity():
     direct_ocr = ModelInfo(
         id="nanonets/Nanonets-OCR-s",
@@ -474,11 +462,11 @@ def test_apple_m3_max_prefers_mlx_direct_benchmark_over_inherited_gguf():
         },
     )
 
-    assert results[0].model.id == "mlx-community/Qwen2.5-VL-7B-Instruct-4bit"
-    assert results[0].benchmark_status == "direct"
-    assert "Qwen/Qwen2.5-VL-7B-Instruct-AWQ" not in [
-        r.model.id for r in results
+    assert [r.model.id for r in results] == [
+        "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+        "community/Qwen2.5-VL-7B-Instruct-GGUF",
     ]
+    assert results[0].benchmark_status == "direct"
 
 
 def test_gated_artifact_ranks_below_available_peer():

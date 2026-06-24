@@ -116,14 +116,24 @@ EVIDENCE_CORE_FACTORS: dict[str, float] = {
     "none": 0.52,
 }
 
-TASK_EVIDENCE_PROFILES = frozenset({"coding", "math", "vision", "ocr"})
-TASK_DIRECT_BENCHMARK_BONUS = 3.0
-OCR_DIRECT_BENCHMARK_BONUS = 4.0
-INHERITED_EVIDENCE_PENALTY = -2.0
-INTERPOLATED_EVIDENCE_PENALTY = -4.0
-SELF_REPORTED_EVIDENCE_PENALTY = -6.0
-UNAVAILABLE_EVIDENCE_PENALTY = -5.0
-OCR_EVIDENCE_EXTRA_PENALTY = -1.0
+TASK_EVIDENCE_ADJUSTMENT: dict[str, float] = {
+    "direct": 3.0,
+    "base_model": -2.0,
+    "variant": -2.0,
+    "line_interp": -4.0,
+    "self_reported": -6.0,
+    "none": -5.0,
+}
+OCR_EVIDENCE_ADJUSTMENT: dict[str, float] = {
+    **TASK_EVIDENCE_ADJUSTMENT,
+    "direct": 4.0,
+    "base_model": -3.0,
+    "variant": -3.0,
+    "line_interp": -5.0,
+    "self_reported": -7.0,
+    "none": -6.0,
+}
+RESTRICTED_ACCESS = frozenset({"gated", "private", "restricted"})
 
 
 SYNTHETIC_QUANTS = ("Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0")
@@ -524,32 +534,19 @@ def backend_priority_bonus(
 
 def task_evidence_adjustment(benchmark_source: str, task_profile: str) -> float:
     profile = task_profile.lower()
-    if profile not in TASK_EVIDENCE_PROFILES:
-        return 0.0
-    if benchmark_source == "direct":
-        if profile == "ocr":
-            return OCR_DIRECT_BENCHMARK_BONUS
-        return TASK_DIRECT_BENCHMARK_BONUS
-    if benchmark_source in {"base_model", "variant"}:
-        penalty = INHERITED_EVIDENCE_PENALTY
-    elif benchmark_source == "line_interp":
-        penalty = INTERPOLATED_EVIDENCE_PENALTY
-    elif benchmark_source == "self_reported":
-        penalty = SELF_REPORTED_EVIDENCE_PENALTY
-    elif benchmark_source == "none":
-        penalty = UNAVAILABLE_EVIDENCE_PENALTY
-    else:
-        return 0.0
     if profile == "ocr":
-        penalty += OCR_EVIDENCE_EXTRA_PENALTY
-    return penalty
+        return OCR_EVIDENCE_ADJUSTMENT.get(benchmark_source, 0.0)
+    if profile in {"coding", "math", "vision"}:
+        return TASK_EVIDENCE_ADJUSTMENT.get(benchmark_source, 0.0)
+    return 0.0
 
 
 def artifact_access_penalty(model: ModelInfo) -> float:
-    restricted = {"gated", "private", "restricted"}
-    if model.access.lower() in restricted:
+    if model.access.lower() in RESTRICTED_ACCESS:
         return -4.0
-    if any(artifact.access.lower() in restricted for artifact in model.artifacts):
+    if any(
+        artifact.access.lower() in RESTRICTED_ACCESS for artifact in model.artifacts
+    ):
         return -4.0
     return 0.0
 
@@ -716,7 +713,7 @@ def rank_models(
     results: list[CompatibilityResult] = []
     gguf_only_backend = is_gguf_only_backend(hardware)
     applied_freshness_weight = max(0.0, min(1.0, freshness_weight))
-    if vision_workload is None and task_profile.lower() == "vision":
+    if vision_workload is None and task_profile.lower() in {"vision", "ocr"}:
         vision_workload = VisionWorkload(context_length=context_length)
 
 
