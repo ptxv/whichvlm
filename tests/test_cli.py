@@ -132,6 +132,7 @@ def test_json_simulated_nvidia_gpu_includes_backend_capabilities():
 
 def test_include_vision_candidates_by_profile():
     assert include_vision_candidates("vision") is True
+    assert include_vision_candidates("ocr") is True
     assert include_vision_candidates("any") is True
     assert include_vision_candidates("general") is False
     assert include_vision_candidates("coding") is False
@@ -143,6 +144,7 @@ def test_vision_workload_for_profile_defaults_and_overrides():
     assert wl.image_count == 1
     assert wl.image_size == 448
     assert wl.context_length == 8192
+    assert vision_workload_for_profile("ocr") is not None
 
     custom = vision_workload_for_profile(
         "any", image_count=2, image_size=896, context_length=2048

@@ -29,7 +29,7 @@ from whichvlm.models.benchmark import (
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # Ranking core. Expands variants, scores fit, and orders final picks.
-RANKING_ALGORITHM_VERSION = "2026.06.22.1"
+RANKING_ALGORITHM_VERSION = "2026.06.24.1"
 
 LINEAGE_REGEX: dict[str, list[tuple[re.Pattern[str], int]]] = {
     family: [(re.compile(pat), idx) for pat, idx in entries]
@@ -348,6 +348,11 @@ def detect_specializations(model: ModelInfo) -> set[str]:
     tags: set[str] = set()
     if re.search(r"(coder|codegen|starcoder|program|coding)", lower):
         tags.add("coding")
+    if re.search(
+        r"(^|[-_/])(ocr|docvqa|document)([-_/]|$)|text[-_ ]?recognition",
+        lower,
+    ):
+        tags.update({"ocr", "vision"})
     if re.search(
         r"(^|[-_/])(vl|vision|multimodal|llava|image)([-_/]|$)|"
         r"image-text-to-text|visual-question-answering|image-to-text|internvl|pixtral",
