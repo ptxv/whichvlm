@@ -534,6 +534,71 @@ def extract_architecture(config: dict) -> str:
     return ""
 
 
+def nested_config(config: dict, *keys: str) -> dict:
+    for key in keys:
+        value = config.get(key)
+        if isinstance(value, dict):
+            return value
+    return config
+
+
+def config_int(config: dict, *keys: str) -> int | None:
+    for key in keys:
+        value = config.get(key)
+        if isinstance(value, int) and value > 0:
+            return value
+    return None
+
+
+def config_str(config: dict, *keys: str) -> str | None:
+    for key in keys:
+        value = config.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def extract_architecture_metadata(config: dict) -> dict:
+    text = nested_config(config, "text_config", "language_config", "llm_config")
+    vision = config.get("vision_config")
+    if not isinstance(vision, dict):
+        vision = {}
+
+    hidden_size = config_int(text, "hidden_size", "n_embd", "d_model")
+    num_heads = config_int(text, "num_attention_heads", "n_head", "num_heads")
+    head_dim = config_int(text, "head_dim", "attention_head_dim")
+    if head_dim is None and hidden_size and num_heads:
+        head_dim = hidden_size // num_heads
+
+    return {
+        "num_layers": config_int(
+            text, "num_hidden_layers", "n_layer", "n_layers", "num_layers"
+        ),
+        "hidden_size": hidden_size,
+        "num_attention_heads": num_heads,
+        "num_key_value_heads": config_int(
+            text, "num_key_value_heads", "num_kv_heads", "n_head_kv"
+        ),
+        "head_dim": head_dim,
+        "dtype": config_str(config, "torch_dtype", "dtype"),
+        "vision_num_layers": config_int(
+            vision, "num_hidden_layers", "n_layer", "n_layers", "num_layers"
+        ),
+        "vision_hidden_size": config_int(vision, "hidden_size", "n_embd", "d_model"),
+        "vision_num_attention_heads": config_int(
+            vision, "num_attention_heads", "n_head", "num_heads"
+        ),
+        "vision_patch_size": config_int(vision, "patch_size"),
+        "vision_image_size": config_int(vision, "image_size"),
+        "projector_hidden_size": config_int(
+            config, "projector_hidden_size", "mm_hidden_size"
+        ),
+        "image_token_strategy": config_str(
+            config, "image_token_strategy", "vision_feature_select_strategy"
+        ),
+    }
+
+
 def parse_model(data: dict) -> ModelInfo | None:
     # Main parser. Converts one HF payload into ModelInfo.
     model_id = data.get("id")
@@ -688,6 +753,7 @@ def parse_model(data: dict) -> ModelInfo | None:
         parameter_count=param_count,
         parameter_count_active=active_params,
         architecture=architecture,
+        **extract_architecture_metadata(config),
         is_moe=is_moe,
         context_length=context_length,
         license=card_data.get("license"),
@@ -937,6 +1003,19 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
             "parameter_count": model.parameter_count,
             "parameter_count_active": model.parameter_count_active,
             "architecture": model.architecture,
+            "num_layers": model.num_layers,
+            "hidden_size": model.hidden_size,
+            "num_attention_heads": model.num_attention_heads,
+            "num_key_value_heads": model.num_key_value_heads,
+            "head_dim": model.head_dim,
+            "dtype": model.dtype,
+            "vision_num_layers": model.vision_num_layers,
+            "vision_hidden_size": model.vision_hidden_size,
+            "vision_num_attention_heads": model.vision_num_attention_heads,
+            "vision_patch_size": model.vision_patch_size,
+            "vision_image_size": model.vision_image_size,
+            "projector_hidden_size": model.projector_hidden_size,
+            "image_token_strategy": model.image_token_strategy,
             "is_moe": model.is_moe,
             "context_length": model.context_length,
             "license": model.license,
@@ -1048,6 +1127,19 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 parameter_count=param_count,
                 parameter_count_active=active_params,
                 architecture=d.get("architecture", ""),
+                num_layers=d.get("num_layers"),
+                hidden_size=d.get("hidden_size"),
+                num_attention_heads=d.get("num_attention_heads"),
+                num_key_value_heads=d.get("num_key_value_heads"),
+                head_dim=d.get("head_dim"),
+                dtype=d.get("dtype"),
+                vision_num_layers=d.get("vision_num_layers"),
+                vision_hidden_size=d.get("vision_hidden_size"),
+                vision_num_attention_heads=d.get("vision_num_attention_heads"),
+                vision_patch_size=d.get("vision_patch_size"),
+                vision_image_size=d.get("vision_image_size"),
+                projector_hidden_size=d.get("projector_hidden_size"),
+                image_token_strategy=d.get("image_token_strategy"),
                 is_moe=d.get("is_moe", False) or active_params is not None,
                 context_length=d.get("context_length"),
                 license=d.get("license"),
