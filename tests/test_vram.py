@@ -1,6 +1,11 @@
 from whichvlm.engine.vram import estimate_kv_cache, estimate_vram
 from whichvlm.engine.workload import VisionWorkload
-from whichvlm.models.types import GGUFVariant, ModelComponent, ModelInfo
+from whichvlm.models.types import (
+    ArchitectureMetadata,
+    GGUFVariant,
+    ModelComponent,
+    ModelInfo,
+)
 
 
 def make_model(params: int, **kwargs) -> ModelInfo:
@@ -48,6 +53,54 @@ def test_estimate_kv_cache_scales_with_params():
     kv_small = estimate_kv_cache(small, 4096)
     kv_large = estimate_kv_cache(large, 4096)
     assert kv_large > kv_small
+
+
+def test_estimate_kv_cache_uses_architecture_dimensions():
+    model = make_model(
+        7_000_000_000,
+        architecture_metadata=ArchitectureMetadata(
+            layer_count=32,
+            attention_heads=32,
+            kv_heads=8,
+            head_dim=128,
+            dtype="bfloat16",
+        ),
+    )
+
+    assert estimate_kv_cache(model, 4096) == 2 * 32 * 4096 * 8 * 128 * 2
+
+
+def test_estimate_kv_cache_uses_cache_dtype():
+    model = make_model(
+        7_000_000_000,
+        architecture_metadata=ArchitectureMetadata(
+            layer_count=32,
+            attention_heads=32,
+            kv_heads=8,
+            head_dim=128,
+            dtype="torch.float8_e4m3fn",
+        ),
+    )
+
+    assert estimate_kv_cache(model, 4096) == 2 * 32 * 4096 * 8 * 128
+
+
+def test_architecture_kv_cache_ignores_moe_total_params():
+    metadata = ArchitectureMetadata(
+        layer_count=24,
+        attention_heads=16,
+        kv_heads=4,
+        head_dim=128,
+    )
+    dense = make_model(30_000_000_000, architecture_metadata=metadata)
+    moe = make_model(
+        300_000_000_000,
+        is_moe=True,
+        parameter_count_active=30_000_000_000,
+        architecture_metadata=metadata,
+    )
+
+    assert estimate_kv_cache(moe, 8192) == estimate_kv_cache(dense, 8192)
 
 
 def test_estimate_vram_small_model():
@@ -139,6 +192,42 @@ def test_vision_component_sizes_increase_vlm_overhead():
 
     assert estimate_vram(large, None, vision_workload=workload) > estimate_vram(
         small,
+        None,
+        vision_workload=workload,
+    )
+
+
+def test_vision_architecture_informs_missing_component_overhead():
+    small_patch = make_model(
+        7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        architecture_metadata=ArchitectureMetadata(
+            hidden_size=4096,
+            dtype="float16",
+            vision_layer_count=24,
+            vision_hidden_size=1024,
+            vision_patch_size=14,
+            vision_image_size=448,
+            projector_hidden_size=1024,
+        ),
+    )
+    large_patch = make_model(
+        7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        architecture_metadata=ArchitectureMetadata(
+            hidden_size=4096,
+            dtype="float16",
+            vision_layer_count=24,
+            vision_hidden_size=1024,
+            vision_patch_size=28,
+            vision_image_size=448,
+            projector_hidden_size=1024,
+        ),
+    )
+    workload = VisionWorkload(image_count=1, image_size=448)
+
+    assert estimate_vram(small_patch, None, vision_workload=workload) > estimate_vram(
+        large_patch,
         None,
         vision_workload=workload,
     )

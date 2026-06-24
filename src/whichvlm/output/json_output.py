@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import fields
 
 from whichvlm.engine.quantization import effective_quant_type, estimate_weight_bytes
 from whichvlm.engine.types import CompatibilityResult
 from whichvlm.hardware.types import BackendCapability, HardwareInfo
 from whichvlm.models.types import (
+    ArchitectureMetadata,
     ModelArtifact,
     ModelComponent,
     ModelInfo,
@@ -54,6 +56,15 @@ def lineage_dict(lineage: ModelLineage) -> dict:
         "relationship": lineage.relationship,
         "is_merged": lineage.is_merged,
     }
+
+
+def architecture_metadata_dict(metadata: ArchitectureMetadata) -> dict:
+    data = {}
+    for field in fields(metadata):
+        value = getattr(metadata, field.name)
+        if value is not None:
+            data[field.name] = value
+    return data
 
 
 def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
@@ -136,6 +147,9 @@ def model_dict(rank: int, result: CompatibilityResult, details: bool = False) ->
                 "artifacts": [artifact_dict(a) for a in model.artifacts],
                 "components": [component_dict(c) for c in model.components],
                 "lineage": lineage_dict(model.lineage),
+                "architecture_metadata": architecture_metadata_dict(
+                    model.architecture_metadata
+                ),
                 "published_at": model.published_at,
                 "downloads": model.downloads,
                 "uses_multi_gpu": result.uses_multi_gpu,
