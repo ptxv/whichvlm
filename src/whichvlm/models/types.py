@@ -47,19 +47,6 @@ class ModelInfo:
     parameter_count: int
     parameter_count_active: int | None = None
     architecture: str = ""
-    num_layers: int | None = None
-    hidden_size: int | None = None
-    num_attention_heads: int | None = None
-    num_key_value_heads: int | None = None
-    head_dim: int | None = None
-    dtype: str | None = None
-    vision_num_layers: int | None = None
-    vision_hidden_size: int | None = None
-    vision_num_attention_heads: int | None = None
-    vision_patch_size: int | None = None
-    vision_image_size: int | None = None
-    projector_hidden_size: int | None = None
-    image_token_strategy: str | None = None
     is_moe: bool = False
     context_length: int | None = None
     license: str | None = None

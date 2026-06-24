@@ -244,52 +244,6 @@ def test_parse_model_recovers_qwen36_a3b_active_params_from_name():
     assert parsed.is_moe is True
 
 
-def test_parse_model_extracts_architecture_metadata():
-    parsed = parse_model(
-        {
-            "id": "Qwen/Qwen2.5-VL-7B-Instruct",
-            "pipeline_tag": "image-text-to-text",
-            "config": {
-                "architectures": ["Qwen2VLForConditionalGeneration"],
-                "torch_dtype": "bfloat16",
-                "text_config": {
-                    "num_hidden_layers": 28,
-                    "hidden_size": 3584,
-                    "num_attention_heads": 28,
-                    "num_key_value_heads": 4,
-                },
-                "vision_config": {
-                    "num_hidden_layers": 32,
-                    "hidden_size": 1280,
-                    "num_attention_heads": 16,
-                    "patch_size": 14,
-                    "image_size": 448,
-                },
-                "projector_hidden_size": 3584,
-                "vision_feature_select_strategy": "default",
-            },
-            "safetensors": {"total": 7_000_000_000},
-            "siblings": [],
-            "cardData": {},
-        }
-    )
-
-    assert parsed is not None
-    assert parsed.num_layers == 28
-    assert parsed.hidden_size == 3584
-    assert parsed.num_attention_heads == 28
-    assert parsed.num_key_value_heads == 4
-    assert parsed.head_dim == 128
-    assert parsed.dtype == "bfloat16"
-    assert parsed.vision_num_layers == 32
-    assert parsed.vision_hidden_size == 1280
-    assert parsed.vision_num_attention_heads == 16
-    assert parsed.vision_patch_size == 14
-    assert parsed.vision_image_size == 448
-    assert parsed.projector_hidden_size == 3584
-    assert parsed.image_token_strategy == "default"
-
-
 def test_models_cache_roundtrip_keeps_published_at():
     models = [
         ModelInfo(
@@ -337,38 +291,6 @@ def test_models_cache_roundtrip_keeps_vlm_package_graph():
     assert restored[0].artifacts[0].format == "mlx"
     assert restored[0].artifacts[0].backend_support == ["mlx", "metal"]
     assert restored[0].lineage.variant_of == "Qwen/Qwen2.5-VL-7B-Instruct"
-
-
-def test_models_cache_roundtrip_keeps_architecture_metadata():
-    models = [
-        ModelInfo(
-            id="Qwen/Qwen2.5-VL-7B-Instruct",
-            family_id="qwen2.5-vl-7b",
-            name="Qwen2.5-VL-7B-Instruct",
-            parameter_count=7_000_000_000,
-            num_layers=28,
-            hidden_size=3584,
-            num_attention_heads=28,
-            num_key_value_heads=4,
-            head_dim=128,
-            dtype="bfloat16",
-            vision_num_layers=32,
-            vision_hidden_size=1280,
-            vision_num_attention_heads=16,
-            vision_patch_size=14,
-            vision_image_size=448,
-            projector_hidden_size=3584,
-            image_token_strategy="default",
-        )
-    ]
-
-    restored = dicts_to_models(models_to_dicts(models))
-
-    assert restored[0].num_layers == 28
-    assert restored[0].num_key_value_heads == 4
-    assert restored[0].vision_patch_size == 14
-    assert restored[0].projector_hidden_size == 3584
-    assert restored[0].image_token_strategy == "default"
 
 
 def test_extract_published_at_prefers_created_at():
