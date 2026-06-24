@@ -4,7 +4,6 @@ import asyncio
 import logging
 import re
 import statistics
-from dataclasses import fields
 
 import httpx
 
@@ -25,7 +24,7 @@ from whichvlm.models.package_graph import (
     lineage_to_dict,
     looks_quantized_repo_name,
 )
-from whichvlm.models.types import ArchitectureMetadata, GGUFVariant, ModelInfo
+from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # HF fetch layer. Turns Hub payloads into rankable model records.
 logger = logging.getLogger(__name__)
@@ -535,57 +534,6 @@ def extract_architecture(config: dict) -> str:
     return ""
 
 
-def architecture_metadata_to_dict(metadata: ArchitectureMetadata) -> dict:
-    data = {}
-    for field in fields(metadata):
-        value = getattr(metadata, field.name)
-        if value is not None:
-            data[field.name] = value
-    return data
-
-
-def extract_architecture_metadata(config: dict) -> ArchitectureMetadata:
-    text_config = config.get("text_config") or {}
-    vision_config = config.get("vision_config") or {}
-    projector_config = config.get("projector_config") or {}
-
-    layer_count = config.get("num_hidden_layers") or text_config.get(
-        "num_hidden_layers"
-    )
-    hidden_size = config.get("hidden_size") or text_config.get("hidden_size")
-    attention_heads = config.get("num_attention_heads") or text_config.get(
-        "num_attention_heads"
-    )
-    kv_heads = config.get("num_key_value_heads") or text_config.get(
-        "num_key_value_heads"
-    )
-    head_dim = config.get("head_dim") or text_config.get("head_dim")
-    if not head_dim and hidden_size and attention_heads:
-        head_dim = hidden_size // attention_heads
-
-    projector_hidden_size = (
-        config.get("projector_hidden_size")
-        or config.get("mm_hidden_size")
-        or projector_config.get("hidden_size")
-    )
-
-    return ArchitectureMetadata(
-        layer_count=layer_count,
-        hidden_size=hidden_size,
-        attention_heads=attention_heads,
-        kv_heads=kv_heads,
-        head_dim=head_dim,
-        dtype=config.get("torch_dtype") or text_config.get("torch_dtype"),
-        vision_layer_count=vision_config.get("num_hidden_layers"),
-        vision_hidden_size=vision_config.get("hidden_size"),
-        vision_attention_heads=vision_config.get("num_attention_heads"),
-        vision_patch_size=vision_config.get("patch_size"),
-        vision_image_size=vision_config.get("image_size"),
-        projector_hidden_size=projector_hidden_size,
-        image_token_strategy=config.get("vision_feature_select_strategy"),
-    )
-
-
 def parse_model(data: dict) -> ModelInfo | None:
     # Main parser. Converts one HF payload into ModelInfo.
     model_id = data.get("id")
@@ -761,7 +709,6 @@ def parse_model(data: dict) -> ModelInfo | None:
         artifacts=artifacts,
         components=components,
         lineage=lineage,
-        architecture_metadata=extract_architecture_metadata(config),
     )
 
 
@@ -1020,9 +967,6 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
                 component_to_dict(component) for component in model.components
             ],
             "lineage": lineage_to_dict(model.lineage),
-            "architecture_metadata": architecture_metadata_to_dict(
-                model.architecture_metadata
-            ),
         }
         for model in models
     ]
@@ -1125,9 +1069,6 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 artifacts=artifacts,
                 components=components,
                 lineage=lineage,
-                architecture_metadata=ArchitectureMetadata(
-                    **d.get("architecture_metadata", {})
-                ),
             )
         )
     return models

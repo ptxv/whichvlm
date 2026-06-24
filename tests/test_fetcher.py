@@ -10,7 +10,7 @@ from whichvlm.models.fetcher import (
     fetch_models,
     models_to_dicts,
 )
-from whichvlm.models.types import ArchitectureMetadata, ModelArtifact, ModelInfo
+from whichvlm.models.types import ModelArtifact, ModelInfo
 
 
 def test_normalize_param_count_for_quantized_repo_uses_size_hint():
@@ -263,36 +263,6 @@ def test_models_cache_roundtrip_keeps_published_at():
     assert restored[0].downloads == 123_456
 
 
-def test_models_cache_roundtrip_keeps_architecture_metadata():
-    models = [
-        ModelInfo(
-            id="Qwen/Qwen2.5-VL-7B-Instruct",
-            family_id="qwen2.5-vl-7b",
-            name="Qwen2.5-VL-7B-Instruct",
-            parameter_count=7_000_000_000,
-            architecture_metadata=ArchitectureMetadata(
-                layer_count=28,
-                hidden_size=3584,
-                attention_heads=28,
-                kv_heads=4,
-                head_dim=128,
-                dtype="bfloat16",
-                vision_layer_count=32,
-                vision_hidden_size=1280,
-                vision_patch_size=14,
-                vision_image_size=448,
-                projector_hidden_size=1280,
-            ),
-        )
-    ]
-
-    restored = dicts_to_models(models_to_dicts(models))
-
-    assert restored[0].architecture_metadata.layer_count == 28
-    assert restored[0].architecture_metadata.kv_heads == 4
-    assert restored[0].architecture_metadata.vision_patch_size == 14
-
-
 def test_models_cache_roundtrip_keeps_vlm_package_graph():
     models = [
         ModelInfo(
@@ -460,47 +430,6 @@ def test_parse_model_builds_vlm_package_metadata():
         "processor",
     }
     assert parsed.lineage.base_model_ids == []
-
-
-def test_parse_model_records_architecture_metadata():
-    parsed = parse_model(
-        {
-            "id": "Qwen/Qwen2.5-VL-7B-Instruct",
-            "pipeline_tag": "image-text-to-text",
-            "tags": ["vision-language", "safetensors"],
-            "config": {
-                "architectures": ["Qwen2VLForConditionalGeneration"],
-                "torch_dtype": "bfloat16",
-                "text_config": {
-                    "num_hidden_layers": 28,
-                    "hidden_size": 3584,
-                    "num_attention_heads": 28,
-                    "num_key_value_heads": 4,
-                },
-                "vision_config": {
-                    "num_hidden_layers": 32,
-                    "hidden_size": 1280,
-                    "num_attention_heads": 16,
-                    "patch_size": 14,
-                    "image_size": 448,
-                },
-                "vision_feature_select_strategy": "default",
-            },
-            "safetensors": {"total": 7_000_000_000},
-            "siblings": [],
-            "cardData": {},
-        }
-    )
-
-    assert parsed is not None
-    metadata = parsed.architecture_metadata
-    assert metadata.layer_count == 28
-    assert metadata.head_dim == 128
-    assert metadata.kv_heads == 4
-    assert metadata.dtype == "bfloat16"
-    assert metadata.vision_layer_count == 32
-    assert metadata.vision_patch_size == 14
-    assert metadata.image_token_strategy == "default"
 
 
 def test_parse_model_marks_community_gguf_relationship():

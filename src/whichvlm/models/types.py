@@ -40,23 +40,6 @@ class ModelLineage:
 
 
 @dataclass
-class ArchitectureMetadata:
-    layer_count: int | None = None
-    hidden_size: int | None = None
-    attention_heads: int | None = None
-    kv_heads: int | None = None
-    head_dim: int | None = None
-    dtype: str | None = None
-    vision_layer_count: int | None = None
-    vision_hidden_size: int | None = None
-    vision_attention_heads: int | None = None
-    vision_patch_size: int | None = None
-    vision_image_size: int | None = None
-    projector_hidden_size: int | None = None
-    image_token_strategy: str | None = None
-
-
-@dataclass
 class ModelInfo:
     id: str
     family_id: str
@@ -85,9 +68,6 @@ class ModelInfo:
     artifacts: list[ModelArtifact] = field(default_factory=list)
     components: list[ModelComponent] = field(default_factory=list)
     lineage: ModelLineage = field(default_factory=ModelLineage)
-    architecture_metadata: ArchitectureMetadata = field(
-        default_factory=ArchitectureMetadata
-    )
 
     def __post_init__(self) -> None:
         if self.base_model and not self.base_models:
