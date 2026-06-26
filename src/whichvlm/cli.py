@@ -676,6 +676,31 @@ def plan(
     quant: Optional[str] = typer.Option(
         None, "--quant", "-q", help="Target quantization (default: Q4_K_M)"
     ),
+    image_count: int = typer.Option(
+        1,
+        "--image-count",
+        help="Images per request for VLM memory estimation",
+    ),
+    image_size: int = typer.Option(
+        448,
+        "--image-size",
+        help="Input image edge size for VLM memory estimation",
+    ),
+    video_frames: int = typer.Option(
+        0,
+        "--video-frames",
+        help="Video frames to budget as visual inputs",
+    ),
+    ram: Optional[str] = typer.Option(
+        None,
+        "--ram",
+        help="System RAM budget for partial offload, e.g. 64GB",
+    ),
+    min_speed: Optional[float] = typer.Option(
+        None,
+        "--min-speed",
+        help="Minimum estimated generation speed in tok/s",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     refresh: bool = typer.Option(
         False, "--refresh", help="Ignore cache and re-fetch models"
@@ -691,12 +716,35 @@ def plan(
     model = resolve_model_match(models, model_name)
 
     target_quant = quant.upper() if quant else "Q4_K_M"
+    from whichvlm.hardware.catalog import PLAN_SYSTEM_RAM_BYTES
+
+    system_ram_bytes = (
+        parse_memory_amount(ram, option_name="--ram") if ram else PLAN_SYSTEM_RAM_BYTES
+    )
 
     if json_output:
-        display_plan_json(model, context_length, target_quant)
+        display_plan_json(
+            model,
+            context_length,
+            target_quant,
+            image_count,
+            image_size,
+            video_frames,
+            system_ram_bytes,
+            min_speed,
+        )
     else:
         console.print()
-        display_plan(model, context_length, target_quant)
+        display_plan(
+            model,
+            context_length,
+            target_quant,
+            image_count,
+            image_size,
+            video_frames,
+            system_ram_bytes,
+            min_speed,
+        )
         console.print()
 
 

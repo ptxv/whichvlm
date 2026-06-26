@@ -189,16 +189,54 @@ def display_plan_json(
     model: ModelInfo,
     context_length: int,
     target_quant: str,
+    image_count: int = 1,
+    image_size: int = 448,
+    video_frames: int = 0,
+    system_ram_bytes: int | None = None,
+    min_speed: float | None = None,
 ) -> None:
+    from whichvlm.hardware.catalog import PLAN_SYSTEM_RAM_BYTES
     from whichvlm.output.plan import (
+        plan_multi_gpu_compatibility,
         plan_gpu_compatibility,
+        plan_recommendations,
         plan_target_vram,
         plan_vram_by_quant,
     )
 
-    vram_by_quant = plan_vram_by_quant(model, context_length)
+    system_ram_bytes = system_ram_bytes or PLAN_SYSTEM_RAM_BYTES
+    vram_by_quant = plan_vram_by_quant(
+        model, context_length, image_count, image_size, video_frames
+    )
     target_vram = plan_target_vram(
-        model, context_length, target_quant, vram_by_quant
+        model,
+        context_length,
+        target_quant,
+        vram_by_quant,
+        image_count,
+        image_size,
+        video_frames,
+    )
+    single_gpu_rows = plan_gpu_compatibility(
+        model,
+        target_quant,
+        target_vram,
+        context_length,
+        image_count,
+        image_size,
+        video_frames,
+        system_ram_bytes,
+        min_speed,
+    )
+    multi_gpu_rows = plan_multi_gpu_compatibility(
+        model,
+        target_quant,
+        context_length,
+        image_count,
+        image_size,
+        video_frames,
+        system_ram_bytes,
+        min_speed,
     )
 
     output = {
@@ -211,10 +249,16 @@ def display_plan_json(
         },
         "target_quant": target_quant,
         "context_length": context_length,
+        "workload": {
+            "image_count": image_count,
+            "image_size": image_size,
+            "video_frames": video_frames,
+            "system_ram_bytes": system_ram_bytes,
+            "min_speed": min_speed,
+        },
         "vram_by_quant": vram_by_quant,
-        "gpu_compatibility": plan_gpu_compatibility(
-            model, target_quant, target_vram
-        ),
+        "gpu_compatibility": single_gpu_rows,
+        "reverse_lookup": plan_recommendations(single_gpu_rows, multi_gpu_rows),
     }
     console.console.print_json(json.dumps(output, ensure_ascii=False))
 

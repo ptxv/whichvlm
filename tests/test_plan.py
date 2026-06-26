@@ -1,0 +1,98 @@
+import json
+from io import StringIO
+
+from rich.console import Console
+
+import whichvlm.output.console as console_mod
+from whichvlm.constants import BYTES_PER_GIB
+from whichvlm.hardware.catalog import PLAN_SYSTEM_RAM_BYTES
+from whichvlm.models.types import ModelInfo
+from whichvlm.output.display import display_plan_json
+from whichvlm.output.plan import (
+    plan_gpu_compatibility,
+    plan_multi_gpu_compatibility,
+    plan_recommendations,
+    plan_target_vram,
+    plan_vram_by_quant,
+)
+
+
+def planning_model(params: int = 70_000_000_000) -> ModelInfo:
+    return ModelInfo(
+        id="org/Test-VL-GGUF",
+        family_id="test-vl",
+        name="Test VL",
+        parameter_count=params,
+        architecture="qwen2_vl",
+        context_length=32768,
+        hf_pipeline_tag="image-text-to-text",
+    )
+
+
+def test_plan_partial_offload_uses_ram_not_vram_ratio():
+    model = planning_model()
+    vram_by_quant = plan_vram_by_quant(model, 4096)
+    target_vram = plan_target_vram(model, 4096, "Q4_K_M", vram_by_quant)
+
+    rows = plan_gpu_compatibility(model, "Q4_K_M", target_vram)
+    rtx4060 = next(row for row in rows if row["name"] == "RTX 4060")
+
+    assert rtx4060["fit_type"] == "partial_offload"
+    assert rtx4060["usable_vram_bytes"] < target_vram * 0.4
+    assert rtx4060["system_ram_bytes"] == PLAN_SYSTEM_RAM_BYTES
+    assert rtx4060["binding_constraint"] == "VRAM"
+
+
+def test_plan_reverse_lookup_returns_full_partial_and_multi_gpu():
+    model = planning_model(params=120_000_000_000)
+    vram_by_quant = plan_vram_by_quant(model, 4096)
+    target_vram = plan_target_vram(model, 4096, "Q4_K_M", vram_by_quant)
+    single_gpu_rows = plan_gpu_compatibility(
+        model,
+        "Q4_K_M",
+        target_vram,
+        system_ram_bytes=64 * BYTES_PER_GIB,
+    )
+    multi_gpu_rows = plan_multi_gpu_compatibility(
+        model,
+        "Q4_K_M",
+        4096,
+        1,
+        448,
+        0,
+        64 * BYTES_PER_GIB,
+        None,
+    )
+
+    recommendations = plan_recommendations(single_gpu_rows, multi_gpu_rows)
+
+    assert recommendations["smallest_full_gpu"]["name"] == "H200"
+    assert recommendations["smallest_partial_offload"]["name"] == "L40S"
+    assert recommendations["multi_gpu_alternatives"][0]["name"] == "2x A100 80GB"
+    assert recommendations["multi_gpu_alternatives"][0]["uses_multi_gpu"] is True
+
+
+def test_plan_json_includes_workload_and_reverse_lookup():
+    model = planning_model(params=7_000_000_000)
+    buf = StringIO()
+    original_console = console_mod.console
+    console_mod.console = Console(file=buf, force_terminal=False)
+    try:
+        display_plan_json(
+            model,
+            context_length=8192,
+            target_quant="Q4_K_M",
+            image_count=2,
+            image_size=896,
+            video_frames=4,
+            system_ram_bytes=32 * BYTES_PER_GIB,
+            min_speed=1.0,
+        )
+    finally:
+        console_mod.console = original_console
+
+    data = json.loads(buf.getvalue())
+    assert data["workload"]["image_count"] == 2
+    assert data["workload"]["video_frames"] == 4
+    assert "reverse_lookup" in data
+    assert data["gpu_compatibility"][0]["supported_backends"]
