@@ -24,6 +24,8 @@ from whichvlm.output import console
 from whichvlm.output.formatting import format_bytes, format_params
 
 PLAN_QUANTS = ("Q2_K", "Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "F16")
+PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO = 0.65
+PRACTICAL_PARTIAL_MIN_USABLE_VRAM_BYTES = 6 * BYTES_PER_GIB
 
 
 def plan_variant_for_quant(model: ModelInfo, quant: str) -> GGUFVariant:
@@ -106,13 +108,39 @@ def plan_binding_constraint(row: dict, min_speed: float | None) -> str:
         return "speed"
     if not row["can_run"]:
         return "memory"
+    if not row["supported_backends"]:
+        return "backend support"
+    if row["estimated_tok_per_sec"] is None:
+        return "bandwidth"
     if row["fit_type"] == "partial_offload":
         return "VRAM"
+    if row["uses_multi_gpu"]:
+        return "multi-GPU split"
     return "none"
 
 
 def gpu_backends(gpu: GPUInfo) -> list[str]:
     return [capability.name for capability in gpu.backend_capabilities if capability.available]
+
+
+def plan_metadata_warnings(gpu: GPUInfo) -> list[str]:
+    warnings = []
+    if gpu.memory_bandwidth_gbps is None:
+        warnings.append("Memory bandwidth is unknown; speed estimate is unavailable")
+    if gpu.vendor == "nvidia" and gpu.compute_capability is None:
+        warnings.append("NVIDIA compute capability is unknown")
+    if not gpu.backend_capabilities:
+        warnings.append("Backend support metadata is unavailable")
+    return warnings
+
+
+def is_practical_partial_offload(row: dict) -> bool:
+    return (
+        row["fit_type"] == "partial_offload"
+        and row["usable_vram_bytes"] >= PRACTICAL_PARTIAL_MIN_USABLE_VRAM_BYTES
+        and row["offload_ratio"] <= PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO
+        and row["meets_speed"]
+    )
 
 
 def plan_row_for_hardware(
@@ -123,6 +151,7 @@ def plan_row_for_hardware(
     context_length: int,
     vision_workload: VisionWorkload | None,
     min_speed: float | None,
+    os_constraints: tuple[str, ...],
 ) -> dict:
     variant = plan_variant_for_quant(model, target_quant)
     result = check_compatibility(model, variant, hardware, context_length, vision_workload)
@@ -146,14 +175,20 @@ def plan_row_for_hardware(
         "fit_type": fit_type,
         "can_run": result.can_run,
         "context_fits": result.context_fits,
+        "offload_ratio": result.offload_ratio,
         "uses_multi_gpu": result.uses_multi_gpu,
         "multi_gpu_effective_vram_bytes": result.multi_gpu_effective_vram_bytes,
+        "multi_gpu_support": (
+            "practical layer split" if result.uses_multi_gpu else "single GPU"
+        ),
         "estimated_tok_per_sec": speed,
         "meets_speed": min_speed is None or (speed is not None and speed >= min_speed),
         "supported_backends": gpu_backends(gpu),
-        "warnings": result.warnings,
+        "os_constraints": list(os_constraints),
+        "warnings": result.warnings + plan_metadata_warnings(gpu),
     }
     row["binding_constraint"] = plan_binding_constraint(row, min_speed)
+    row["practical_partial_offload"] = is_practical_partial_offload(row)
     return row
 
 
@@ -183,6 +218,7 @@ def plan_gpu_compatibility(
                 context_length,
                 vision_workload,
                 min_speed,
+                entry.os_names,
             )
         )
     return rows
@@ -223,6 +259,7 @@ def plan_multi_gpu_compatibility(
                 context_length,
                 vision_workload,
                 min_speed,
+                entry.os_names,
             )
         )
     return rows
@@ -239,15 +276,22 @@ def plan_recommendations(
     single_gpu_rows: list[dict],
     multi_gpu_rows: list[dict],
 ) -> dict:
+    full_gpu = first_runnable(single_gpu_rows, "full_gpu")
+    show_multi_gpu = full_gpu is None or full_gpu["vram_gb"] >= 80
     return {
-        "smallest_full_gpu": first_runnable(single_gpu_rows, "full_gpu"),
-        "smallest_partial_offload": first_runnable(
-            single_gpu_rows, "partial_offload"
+        "smallest_full_gpu": full_gpu,
+        "smallest_partial_offload": next(
+            (row for row in single_gpu_rows if row["practical_partial_offload"]),
+            None,
         ),
         "multi_gpu_alternatives": [
             row
             for row in multi_gpu_rows
-            if row["fit_type"] == "full_gpu" and row["can_run"] and row["meets_speed"]
+            if show_multi_gpu
+            and row["fit_type"] == "full_gpu"
+            and row["can_run"]
+            and row["meets_speed"]
+            and row["multi_gpu_support"] == "practical layer split"
         ][:3],
     }
 
@@ -352,7 +396,11 @@ def display_plan(
         if fit_type == "full_gpu":
             fit = "[green]✓ Full GPU[/]"
         elif fit_type == "partial_offload":
-            fit = "[yellow]~ Partial[/]"
+            fit = (
+                "[yellow]~ Partial[/]"
+                if row["practical_partial_offload"]
+                else "[yellow]~ Partial (rough)[/]"
+            )
         else:
             fit = "[red]✗ Too small[/]"
         speed = row["estimated_tok_per_sec"]
@@ -382,7 +430,8 @@ def recommendation_line(title: str, row: dict | None) -> str:
         f"required {format_bytes(row['required_memory_bytes'])}, "
         f"usable VRAM {format_bytes(row['usable_vram_bytes'])}, "
         f"reserved {format_bytes(row['reserved_headroom_bytes'])}, "
-        f"backend {backends}, limit {row['binding_constraint']}"
+        f"backend {backends}, OS {','.join(row['os_constraints'])}, "
+        f"limit {row['binding_constraint']}"
     )
 
 
