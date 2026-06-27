@@ -23,8 +23,11 @@ class HardwareCatalogEntry:
     price_usd: int | None = None
 
     def to_hardware(
-        self, system_ram_bytes: int = PLAN_SYSTEM_RAM_BYTES
+        self,
+        system_ram_bytes: int = PLAN_SYSTEM_RAM_BYTES,
+        os_name: str | None = None,
     ) -> HardwareInfo:
+        os_name = os_name or self.os_names[0]
         vram_bytes = self.vram_gb * BYTES_PER_GIB
         gpu = GPUInfo(
             name=self.name,
@@ -35,14 +38,17 @@ class HardwareCatalogEntry:
             memory_bandwidth_gbps=self.memory_bandwidth_gbps,
             shared_memory=self.shared_memory,
             backend_capabilities=[
-                BackendCapability(backend, True) for backend in self.supported_backends
+                BackendCapability(
+                    backend, backend_supported_on_os(self, backend, os_name)
+                )
+                for backend in self.supported_backends
             ],
         )
         return HardwareInfo(
             gpus=[gpu],
             ram_bytes=system_ram_bytes,
             disk_free_bytes=1_000 * BYTES_PER_GIB,
-            os=self.os_names[0],
+            os=os_name,
         )
 
 
@@ -81,6 +87,14 @@ def nvidia_compute_capability(name: str) -> tuple[int, int] | None:
         ),
         None,
     )
+
+
+def backend_supported_on_os(
+    entry: HardwareCatalogEntry, backend: str, os_name: str
+) -> bool:
+    if os_name not in entry.os_names:
+        return False
+    return backend != "rocm" or os_name == "linux"
 
 
 def catalog_key(name: str) -> str:

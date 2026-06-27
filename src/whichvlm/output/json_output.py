@@ -194,13 +194,13 @@ def display_plan_json(
     video_frames: int = 0,
     system_ram_bytes: int | None = None,
     min_speed: float | None = None,
+    os_name: str = "linux",
 ) -> None:
     from whichvlm.hardware.catalog import PLAN_SYSTEM_RAM_BYTES
     from whichvlm.output.plan import (
         plan_multi_gpu_compatibility,
         plan_gpu_compatibility,
         plan_recommendations,
-        plan_target_vram,
         plan_vram_by_quant,
     )
 
@@ -208,25 +208,16 @@ def display_plan_json(
     vram_by_quant = plan_vram_by_quant(
         model, context_length, image_count, image_size, video_frames
     )
-    target_vram = plan_target_vram(
-        model,
-        context_length,
-        target_quant,
-        vram_by_quant,
-        image_count,
-        image_size,
-        video_frames,
-    )
     single_gpu_rows = plan_gpu_compatibility(
         model,
         target_quant,
-        target_vram,
         context_length,
         image_count,
         image_size,
         video_frames,
         system_ram_bytes,
         min_speed,
+        os_name,
     )
     multi_gpu_rows = plan_multi_gpu_compatibility(
         model,
@@ -237,6 +228,7 @@ def display_plan_json(
         video_frames,
         system_ram_bytes,
         min_speed,
+        os_name,
     )
 
     output = {
@@ -255,6 +247,7 @@ def display_plan_json(
             "video_frames": video_frames,
             "system_ram_bytes": system_ram_bytes,
             "min_speed": min_speed,
+            "os": os_name,
         },
         "vram_by_quant": vram_by_quant,
         "gpu_compatibility": single_gpu_rows,

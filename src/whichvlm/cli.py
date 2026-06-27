@@ -701,6 +701,11 @@ def plan(
         "--min-speed",
         help="Minimum estimated generation speed in tok/s",
     ),
+    os_name: str = typer.Option(
+        "linux",
+        "--os",
+        help="Target OS for backend compatibility",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     refresh: bool = typer.Option(
         False, "--refresh", help="Ignore cache and re-fetch models"
@@ -732,6 +737,7 @@ def plan(
             video_frames,
             system_ram_bytes,
             min_speed,
+            os_name,
         )
     else:
         console.print()
@@ -744,6 +750,7 @@ def plan(
             video_frames,
             system_ram_bytes,
             min_speed,
+            os_name,
         )
         console.print()
 

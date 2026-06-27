@@ -42,7 +42,7 @@ def test_plan_partial_offload_uses_ram_not_vram_ratio():
     vram_by_quant = plan_vram_by_quant(model, 4096)
     target_vram = plan_target_vram(model, 4096, "Q4_K_M", vram_by_quant)
 
-    rows = plan_gpu_compatibility(model, "Q4_K_M", target_vram)
+    rows = plan_gpu_compatibility(model, "Q4_K_M")
     rtx4060 = next(row for row in rows if row["name"] == "RTX 4060")
 
     assert rtx4060["fit_type"] == "partial_offload"
@@ -54,12 +54,9 @@ def test_plan_partial_offload_uses_ram_not_vram_ratio():
 
 def test_plan_reverse_lookup_returns_full_partial_and_multi_gpu():
     model = planning_model(params=120_000_000_000)
-    vram_by_quant = plan_vram_by_quant(model, 4096)
-    target_vram = plan_target_vram(model, 4096, "Q4_K_M", vram_by_quant)
     single_gpu_rows = plan_gpu_compatibility(
         model,
         "Q4_K_M",
-        target_vram,
         system_ram_bytes=64 * BYTES_PER_GIB,
     )
     multi_gpu_rows = plan_multi_gpu_compatibility(
@@ -105,6 +102,7 @@ def test_plan_json_includes_workload_and_reverse_lookup():
     assert data["workload"]["video_frames"] == 4
     assert "reverse_lookup" in data
     assert data["gpu_compatibility"][0]["supported_backends"]
+    assert data["workload"]["os"] == "linux"
 
 
 def test_hardware_catalog_carries_normalized_metadata():
@@ -116,6 +114,17 @@ def test_hardware_catalog_carries_normalized_metadata():
     assert rtx4070.compute_capability is not None
     assert "cuda" in rtx4070.supported_backends
     assert "windows" in rtx4070.os_names
+
+
+def test_plan_respects_target_os_for_backends():
+    model = planning_model(params=7_000_000_000)
+    rows = plan_gpu_compatibility(model, "Q4_K_M", os_name="darwin")
+    rtx4070 = next(row for row in rows if row["name"] == "RTX 4070")
+
+    assert rtx4070["os_supported"] is False
+    assert rtx4070["supported_backends"] == []
+    assert rtx4070["binding_constraint"] == "OS support"
+    assert plan_recommendations(rows, [])["smallest_full_gpu"] is None
 
 
 def test_synthetic_gpu_uses_catalog_backends_for_hardware_to_model_path():

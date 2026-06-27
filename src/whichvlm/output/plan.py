@@ -104,12 +104,14 @@ def plan_target_vram(
 def plan_binding_constraint(row: dict, min_speed: float | None) -> str:
     if not row["context_fits"]:
         return "context length"
-    if min_speed is not None and not row["meets_speed"]:
-        return "speed"
     if not row["can_run"]:
         return "memory"
+    if not row["os_supported"]:
+        return "OS support"
     if not row["supported_backends"]:
         return "backend support"
+    if min_speed is not None and not row["meets_speed"]:
+        return "speed"
     if row["estimated_tok_per_sec"] is None:
         return "bandwidth"
     if row["fit_type"] == "partial_offload":
@@ -139,6 +141,8 @@ def is_practical_partial_offload(row: dict) -> bool:
         row["fit_type"] == "partial_offload"
         and row["usable_vram_bytes"] >= PRACTICAL_PARTIAL_MIN_USABLE_VRAM_BYTES
         and row["offload_ratio"] <= PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO
+        and row["os_supported"]
+        and bool(row["supported_backends"])
         and row["meets_speed"]
     )
 
@@ -185,6 +189,7 @@ def plan_row_for_hardware(
         "meets_speed": min_speed is None or (speed is not None and speed >= min_speed),
         "supported_backends": gpu_backends(gpu),
         "os_constraints": list(os_constraints),
+        "os_supported": hardware.os in os_constraints,
         "warnings": result.warnings + plan_metadata_warnings(gpu),
     }
     row["binding_constraint"] = plan_binding_constraint(row, min_speed)
@@ -195,20 +200,20 @@ def plan_row_for_hardware(
 def plan_gpu_compatibility(
     model: ModelInfo,
     target_quant: str,
-    target_vram: int,
     context_length: int = 4096,
     image_count: int = 1,
     image_size: int = 448,
     video_frames: int = 0,
     system_ram_bytes: int = PLAN_SYSTEM_RAM_BYTES,
     min_speed: float | None = None,
+    os_name: str = "linux",
 ) -> list[dict]:
     vision_workload = plan_vision_workload(
         context_length, image_count, image_size, video_frames
     )
     rows = []
     for entry in HARDWARE_CATALOG:
-        hardware = entry.to_hardware(system_ram_bytes)
+        hardware = entry.to_hardware(system_ram_bytes, os_name)
         rows.append(
             plan_row_for_hardware(
                 model,
@@ -228,9 +233,11 @@ def multi_gpu_hardware(
     entry: HardwareCatalogEntry,
     count: int,
     system_ram_bytes: int,
+    os_name: str,
 ) -> HardwareInfo:
-    hardware = entry.to_hardware(system_ram_bytes)
-    hardware.gpus = [entry.to_hardware(system_ram_bytes).gpus[0] for _ in range(count)]
+    hardware = entry.to_hardware(system_ram_bytes, os_name)
+    gpu = entry.to_hardware(system_ram_bytes, os_name).gpus[0]
+    hardware.gpus = [gpu for _ in range(count)]
     return hardware
 
 
@@ -243,31 +250,39 @@ def plan_multi_gpu_compatibility(
     video_frames: int,
     system_ram_bytes: int,
     min_speed: float | None,
+    os_name: str = "linux",
 ) -> list[dict]:
     vision_workload = plan_vision_workload(
         context_length, image_count, image_size, video_frames
     )
     rows = []
-    for entry in HARDWARE_CATALOG:
-        hardware = multi_gpu_hardware(entry, 2, system_ram_bytes)
-        rows.append(
-            plan_row_for_hardware(
-                model,
-                target_quant,
-                hardware,
-                f"2x {entry.name}",
-                context_length,
-                vision_workload,
-                min_speed,
-                entry.os_names,
+    for count in (2, 4):
+        for entry in HARDWARE_CATALOG:
+            hardware = multi_gpu_hardware(entry, count, system_ram_bytes, os_name)
+            rows.append(
+                plan_row_for_hardware(
+                    model,
+                    target_quant,
+                    hardware,
+                    f"{count}x {entry.name}",
+                    context_length,
+                    vision_workload,
+                    min_speed,
+                    entry.os_names,
+                )
             )
-        )
     return rows
 
 
 def first_runnable(rows: list[dict], fit_type: str) -> dict | None:
     for row in rows:
-        if row["fit_type"] == fit_type and row["can_run"] and row["meets_speed"]:
+        if (
+            row["fit_type"] == fit_type
+            and row["can_run"]
+            and row["meets_speed"]
+            and row["os_supported"]
+            and row["supported_backends"]
+        ):
             return row
     return None
 
@@ -291,6 +306,8 @@ def plan_recommendations(
             and row["fit_type"] == "full_gpu"
             and row["can_run"]
             and row["meets_speed"]
+            and row["os_supported"]
+            and row["supported_backends"]
             and row["multi_gpu_support"] == "practical layer split"
         ][:3],
     }
@@ -305,6 +322,7 @@ def display_plan(
     video_frames: int = 0,
     system_ram_bytes: int = PLAN_SYSTEM_RAM_BYTES,
     min_speed: float | None = None,
+    os_name: str = "linux",
 ) -> None:
     params = format_params(model.parameter_count)
     active = ""
@@ -355,13 +373,13 @@ def display_plan(
     gpu_rows = plan_gpu_compatibility(
         model,
         target_quant,
-        target_vram,
         context_length,
         image_count,
         image_size,
         video_frames,
         system_ram_bytes,
         min_speed,
+        os_name,
     )
     multi_gpu_rows = plan_multi_gpu_compatibility(
         model,
@@ -372,6 +390,7 @@ def display_plan(
         video_frames,
         system_ram_bytes,
         min_speed,
+        os_name,
     )
     recommendations = plan_recommendations(gpu_rows, multi_gpu_rows)
 
