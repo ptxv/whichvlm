@@ -1178,7 +1178,7 @@ def json_output_case() -> tuple[CompatibilityResult, HardwareInfo]:
             "vision": 0,
             "runtime_overhead": 800_000_000,
         },
-        vram_notes=["runtime overhead uses default calibration"],
+        vram_notes=["KV cache uses parameter-count fallback"],
         quality_score=55.0,
         benchmark_status="estimated",
         benchmark_source="line_interp",
@@ -1226,7 +1226,7 @@ def test_json_output_includes_diagnostics_when_requested():
     assert entry["benchmark_source"] == "line_interp"
     assert entry["benchmark_confidence"] == 0.34
     assert entry["vram_breakdown_bytes"]["weights"] == 6_000_000_000
-    assert entry["vram_notes"] == ["runtime overhead uses default calibration"]
+    assert entry["vram_notes"] == ["KV cache uses parameter-count fallback"]
     assert entry["base_models"] == ["base/Test-7B"]
     assert artifact["format"] == "mlx"
     assert artifact["access"] == "gated"

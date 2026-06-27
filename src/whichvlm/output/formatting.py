@@ -62,15 +62,6 @@ def format_speed(result: CompatibilityResult) -> str:
     return f"[{style}]{base}{marker}[/{style}]"
 
 
-def format_vram(result: CompatibilityResult) -> str:
-    marker = ""
-    if result.vram_confidence == "low":
-        marker = " ?"
-    elif result.vram_confidence == "medium":
-        marker = " ~"
-    return f"{format_bytes(result.vram_required_bytes)}{marker}"
-
-
 def parse_published_at(value: str | None) -> datetime | None:
     if not value:
         return None

@@ -128,10 +128,6 @@ def check_compatibility(
         vision_workload,
     )
     vram_required = vram_estimate.required_bytes
-    if vram_estimate.confidence == "low":
-        warnings.append(
-            "Low-confidence VRAM estimate: " + "; ".join(vram_estimate.notes)
-        )
 
     usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
 
@@ -221,14 +217,6 @@ def check_compatibility(
         can_run = False
         offload_ratio = 0.0
         warnings.append("Insufficient memory (GPU VRAM + RAM) to run this model")
-
-    if (
-        can_run
-        and fit_type != "cpu_only"
-        and fit_vram_available < vram_estimate.upper_bytes
-    ):
-        warnings.append("VRAM range upper bound exceeds available GPU memory")
-
 
     context_fits = not (
         model.context_length is not None and model.context_length < context_length

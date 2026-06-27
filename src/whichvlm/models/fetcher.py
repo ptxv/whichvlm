@@ -726,6 +726,13 @@ def parse_model(data: dict) -> ModelInfo | None:
         or int_config(gguf_meta, "block_count"),
         hidden_size=int_config(config, "hidden_size", "n_embd", "d_model")
         or int_config(gguf_meta, "embedding_length"),
+        intermediate_size=int_config(
+            config,
+            "intermediate_size",
+            "n_inner",
+            "ffn_dim",
+        )
+        or int_config(gguf_meta, "feed_forward_length"),
         attention_heads=int_config(config, "num_attention_heads", "n_head")
         or int_config(gguf_meta, "head_count"),
         kv_heads=int_config(
@@ -750,12 +757,26 @@ def parse_model(data: dict) -> ModelInfo | None:
             "num_layers",
         ),
         vision_hidden_size=int_config(vision_config, "hidden_size"),
+        vision_intermediate_size=int_config(
+            vision_config,
+            "intermediate_size",
+            "mlp_dim",
+        ),
+        vision_attention_heads=int_config(
+            vision_config,
+            "num_attention_heads",
+            "num_heads",
+        ),
         projector_hidden_size=int_config(
             config,
             "projector_hidden_size",
             "mm_hidden_size",
         ),
         patch_size=int_config(vision_config, "patch_size"),
+        spatial_merge_size=int_config(
+            vision_config,
+            "spatial_merge_size",
+        ),
         image_token_strategy=str_config(
             config,
             "vision_feature_select_strategy",
@@ -1012,6 +1033,7 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
             "context_length": model.context_length,
             "layer_count": model.layer_count,
             "hidden_size": model.hidden_size,
+            "intermediate_size": model.intermediate_size,
             "attention_heads": model.attention_heads,
             "kv_heads": model.kv_heads,
             "head_dim": model.head_dim,
@@ -1019,8 +1041,11 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
             "kv_cache_dtype": model.kv_cache_dtype,
             "vision_layer_count": model.vision_layer_count,
             "vision_hidden_size": model.vision_hidden_size,
+            "vision_intermediate_size": model.vision_intermediate_size,
+            "vision_attention_heads": model.vision_attention_heads,
             "projector_hidden_size": model.projector_hidden_size,
             "patch_size": model.patch_size,
+            "spatial_merge_size": model.spatial_merge_size,
             "image_token_strategy": model.image_token_strategy,
             "license": model.license,
             "published_at": model.published_at,
@@ -1135,6 +1160,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 context_length=d.get("context_length"),
                 layer_count=d.get("layer_count"),
                 hidden_size=d.get("hidden_size"),
+                intermediate_size=d.get("intermediate_size"),
                 attention_heads=d.get("attention_heads"),
                 kv_heads=d.get("kv_heads"),
                 head_dim=d.get("head_dim"),
@@ -1142,8 +1168,11 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 kv_cache_dtype=d.get("kv_cache_dtype"),
                 vision_layer_count=d.get("vision_layer_count"),
                 vision_hidden_size=d.get("vision_hidden_size"),
+                vision_intermediate_size=d.get("vision_intermediate_size"),
+                vision_attention_heads=d.get("vision_attention_heads"),
                 projector_hidden_size=d.get("projector_hidden_size"),
                 patch_size=d.get("patch_size"),
+                spatial_merge_size=d.get("spatial_merge_size"),
                 image_token_strategy=d.get("image_token_strategy"),
                 license=d.get("license"),
                 published_at=d.get("published_at"),

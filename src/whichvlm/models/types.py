@@ -51,6 +51,7 @@ class ModelInfo:
     context_length: int | None = None
     layer_count: int | None = None
     hidden_size: int | None = None
+    intermediate_size: int | None = None
     attention_heads: int | None = None
     kv_heads: int | None = None
     head_dim: int | None = None
@@ -58,8 +59,11 @@ class ModelInfo:
     kv_cache_dtype: str | None = None
     vision_layer_count: int | None = None
     vision_hidden_size: int | None = None
+    vision_intermediate_size: int | None = None
+    vision_attention_heads: int | None = None
     projector_hidden_size: int | None = None
     patch_size: int | None = None
+    spatial_merge_size: int | None = None
     image_token_strategy: str | None = None
     license: str | None = None
     published_at: str | None = None
