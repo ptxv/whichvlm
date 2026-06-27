@@ -5,7 +5,7 @@ from whichvlm.constants import MIN_COMPUTE_CAPABILITY_OLLAMA
 from whichvlm.constants import VULKAN_ONLY_GPUS
 from whichvlm.engine.quantization import estimate_weight_bytes
 from whichvlm.engine.types import CompatibilityResult
-from whichvlm.engine.vram import estimate_vram
+from whichvlm.engine.vram import estimate_vram_details
 from whichvlm.engine.workload import VisionWorkload
 from whichvlm.hardware.memory import effective_usable_ram
 from whichvlm.hardware.types import GPUInfo, HardwareInfo
@@ -121,7 +121,17 @@ def check_compatibility(
     # Main fit pass. Produces run type, budgets, and hardware warnings.
     warnings: list[str] = []
 
-    vram_required = estimate_vram(model, variant, context_length, vision_workload)
+    vram_estimate = estimate_vram_details(
+        model,
+        variant,
+        context_length,
+        vision_workload,
+    )
+    vram_required = vram_estimate.required_bytes
+    if vram_estimate.confidence == "low":
+        warnings.append(
+            "Low-confidence VRAM estimate: " + "; ".join(vram_estimate.notes)
+        )
 
     usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
 
@@ -212,6 +222,13 @@ def check_compatibility(
         offload_ratio = 0.0
         warnings.append("Insufficient memory (GPU VRAM + RAM) to run this model")
 
+    if (
+        can_run
+        and fit_type != "cpu_only"
+        and fit_vram_available < vram_estimate.upper_bytes
+    ):
+        warnings.append("VRAM range upper bound exceeds available GPU memory")
+
 
     context_fits = not (
         model.context_length is not None and model.context_length < context_length
@@ -242,6 +259,19 @@ def check_compatibility(
         can_run=can_run,
         vram_required_bytes=vram_required,
         vram_available_bytes=vram_available,
+        vram_required_range_bytes=(
+            vram_estimate.lower_bytes,
+            vram_estimate.upper_bytes,
+        ),
+        vram_confidence=vram_estimate.confidence,
+        vram_breakdown_bytes={
+            "weights": vram_estimate.components.weights,
+            "kv_cache": vram_estimate.components.kv_cache,
+            "activations": vram_estimate.components.activations,
+            "vision": vram_estimate.components.vision,
+            "runtime_overhead": vram_estimate.components.runtime_overhead,
+        },
+        vram_notes=vram_estimate.notes,
         offload_ratio=offload_ratio,
         uses_multi_gpu=uses_multi_gpu,
         multi_gpu_effective_vram_bytes=multi_gpu_effective_vram_bytes,

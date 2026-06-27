@@ -19,6 +19,7 @@ from whichvlm.output.formatting import (
     format_params,
     format_published_at,
     format_speed,
+    format_vram,
     parse_published_at,
     published_style,
 )
@@ -216,7 +217,7 @@ def display_ranking(
 
     for i, r in enumerate(results, 1):
         quant = effective_quant_type(r.model, r.gguf_variant)
-        vram_str = format_bytes(r.vram_required_bytes)
+        vram_str = format_vram(r)
         speed_str = format_speed(r)
 
         score_val = f"{r.quality_score:.1f}"

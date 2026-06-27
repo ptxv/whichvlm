@@ -10,7 +10,7 @@ from whichvlm.constants import (
     BYTES_PER_GIB,
 )
 from whichvlm.engine.performance import estimate_tok_per_sec
-from whichvlm.engine.vram import estimate_vram
+from whichvlm.engine.vram import estimate_vram, estimate_vram_details
 from whichvlm.hardware.types import GPUInfo
 from whichvlm.models.types import GGUFVariant, ModelInfo
 from whichvlm.output import console
@@ -48,11 +48,13 @@ def plan_vram_by_quant(model: ModelInfo, context_length: int) -> dict[str, dict]
     for quant in PLAN_QUANTS:
         if quant not in QUANT_BYTES_PER_WEIGHT:
             continue
-        vram_bytes = estimate_vram(
+        vram = estimate_vram_details(
             model, plan_variant_for_quant(model, quant), context_length
         )
         rows[quant] = {
-            "vram_bytes": vram_bytes,
+            "vram_bytes": vram.required_bytes,
+            "vram_range_bytes": [vram.lower_bytes, vram.upper_bytes],
+            "vram_confidence": vram.confidence,
             "quality_loss": QUANT_QUALITY_PENALTY.get(quant, 0.0),
         }
     return rows
