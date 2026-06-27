@@ -28,6 +28,7 @@ from whichvlm.output.formatting import format_bytes, format_params
 PLAN_QUANTS = ("Q2_K", "Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "F16")
 PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO = 0.65
 PRACTICAL_PARTIAL_MIN_USABLE_VRAM_BYTES = 6 * BYTES_PER_GIB
+PRACTICAL_PARTIAL_MIN_TOK_PER_SEC = 2.0
 MULTI_GPU_SPEED_FACTOR = 0.70
 
 
@@ -147,6 +148,8 @@ def is_practical_partial_offload(row: dict) -> bool:
         and row["context_fits"]
         and row["usable_vram_bytes"] >= PRACTICAL_PARTIAL_MIN_USABLE_VRAM_BYTES
         and row["offload_ratio"] <= PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO
+        and row["estimated_tok_per_sec"] is not None
+        and row["estimated_tok_per_sec"] >= PRACTICAL_PARTIAL_MIN_TOK_PER_SEC
         and row["os_supported"]
         and bool(row["supported_backends"])
         and row["meets_speed"]
@@ -162,6 +165,7 @@ def plan_row_for_hardware(
     vision_workload: VisionWorkload | None,
     min_speed: float | None,
     os_constraints: tuple[str, ...],
+    catalog_entry: HardwareCatalogEntry | None = None,
 ) -> dict:
     variant = plan_variant_for_quant(model, target_quant)
     result = check_compatibility(model, variant, hardware, context_length, vision_workload)
@@ -191,19 +195,49 @@ def plan_row_for_hardware(
         "offload_ratio": result.offload_ratio,
         "uses_multi_gpu": result.uses_multi_gpu,
         "multi_gpu_effective_vram_bytes": result.multi_gpu_effective_vram_bytes,
-        "multi_gpu_support": (
-            "practical layer split" if result.uses_multi_gpu else "single GPU"
-        ),
+        "multi_gpu_support": multi_gpu_support_label(result.uses_multi_gpu, catalog_entry),
         "estimated_tok_per_sec": speed,
         "meets_speed": min_speed is None or (speed is not None and speed >= min_speed),
         "supported_backends": gpu_backends(gpu),
         "os_constraints": list(os_constraints),
         "os_supported": hardware.os in os_constraints,
+        "memory_bandwidth_gbps": gpu.memory_bandwidth_gbps,
+        "compute_capability": gpu.compute_capability,
+        "shared_memory": gpu.shared_memory,
+        "shared_memory_behavior": (
+            catalog_entry.shared_memory_behavior
+            if catalog_entry
+            else ("shared memory" if gpu.shared_memory else "dedicated VRAM")
+        ),
+        "price_usd": catalog_entry.price_usd if catalog_entry else None,
+        "availability": catalog_entry.availability if catalog_entry else None,
+        "interconnect": catalog_entry.interconnect if catalog_entry else None,
         "warnings": result.warnings + plan_metadata_warnings(gpu),
     }
+    row["metadata_complete"] = not row["warnings"]
     row["binding_constraint"] = plan_binding_constraint(row, min_speed)
     row["practical_partial_offload"] = is_practical_partial_offload(row)
     return row
+
+
+def multi_gpu_support_label(
+    uses_multi_gpu: bool,
+    entry: HardwareCatalogEntry | None,
+) -> str:
+    if not uses_multi_gpu:
+        return "single GPU"
+    if entry is None or not entry.multi_gpu_backends:
+        return "theoretical split"
+    backends = "/".join(entry.multi_gpu_backends)
+    if entry.interconnect:
+        return f"practical {backends} layer split over {entry.interconnect}"
+    return f"practical {backends} layer split"
+
+
+def hardware_size_key(row: dict) -> tuple[int, int, float]:
+    price = row["price_usd"] if row["price_usd"] is not None else 10**9
+    bandwidth = row["memory_bandwidth_gbps"] or 0.0
+    return (row["usable_vram_bytes"], price, -bandwidth)
 
 
 def plan_gpu_compatibility(
@@ -233,9 +267,10 @@ def plan_gpu_compatibility(
                 vision_workload,
                 min_speed,
                 entry.os_names,
+                entry,
             )
         )
-    return rows
+    return sorted(rows, key=hardware_size_key)
 
 
 def multi_gpu_hardware(
@@ -267,6 +302,8 @@ def plan_multi_gpu_compatibility(
     rows = []
     for count in (2, 4):
         for entry in HARDWARE_CATALOG:
+            if not entry.multi_gpu_backends:
+                continue
             hardware = multi_gpu_hardware(entry, count, system_ram_bytes, os_name)
             rows.append(
                 plan_row_for_hardware(
@@ -278,9 +315,10 @@ def plan_multi_gpu_compatibility(
                     vision_workload,
                     min_speed,
                     entry.os_names,
+                    entry,
                 )
             )
-    return rows
+    return sorted(rows, key=hardware_size_key)
 
 
 def first_runnable(rows: list[dict], fit_type: str) -> dict | None:
@@ -319,7 +357,7 @@ def plan_recommendations(
             and row["meets_speed"]
             and row["os_supported"]
             and row["supported_backends"]
-            and row["multi_gpu_support"] == "practical layer split"
+            and row["multi_gpu_support"].startswith("practical ")
         ][:3],
     }
 
@@ -455,13 +493,16 @@ def recommendation_line(title: str, row: dict | None) -> str:
     if row is None:
         return f"[bold]{title}:[/] none found"
     backends = ", ".join(row["supported_backends"]) or "unknown"
+    price = f", price ${row['price_usd']:,}" if row["price_usd"] else ""
+    availability = f", {row['availability']}" if row["availability"] else ""
+    uncertainty = "" if row["metadata_complete"] else ", uncertainty noted"
     return (
         f"[bold]{title}:[/] {row['name']} | {row['fit_type']} | "
         f"required {format_bytes(row['required_memory_bytes'])}, "
         f"usable VRAM {format_bytes(row['usable_vram_bytes'])}, "
         f"reserved {format_bytes(row['reserved_headroom_bytes'])}, "
         f"backend {backends}, OS {','.join(row['os_constraints'])}, "
-        f"limit {row['binding_constraint']}"
+        f"limit {row['binding_constraint']}{price}{availability}{uncertainty}"
     )
 
 

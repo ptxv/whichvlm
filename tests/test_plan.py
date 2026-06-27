@@ -88,9 +88,12 @@ def test_plan_reverse_lookup_returns_full_partial_and_multi_gpu():
     recommendations = plan_recommendations(single_gpu_rows, multi_gpu_rows)
 
     assert recommendations["smallest_full_gpu"]["name"] == "H200"
-    assert recommendations["smallest_partial_offload"]["name"] == "L40S"
-    assert recommendations["multi_gpu_alternatives"][0]["name"] == "2x A100 80GB"
+    assert recommendations["smallest_partial_offload"]["name"] == "RTX A6000"
+    assert recommendations["multi_gpu_alternatives"][0]["name"] == "2x MI210"
     assert recommendations["multi_gpu_alternatives"][0]["uses_multi_gpu"] is True
+    assert recommendations["multi_gpu_alternatives"][0][
+        "multi_gpu_support"
+    ].startswith("practical ")
 
 
 def test_plan_reverse_lookup_rejects_context_mismatch():
@@ -152,7 +155,19 @@ def test_plan_respects_target_os_for_backends():
     assert rtx4070["os_supported"] is False
     assert rtx4070["supported_backends"] == []
     assert rtx4070["binding_constraint"] == "OS support"
-    assert plan_recommendations(rows, [])["smallest_full_gpu"] is None
+    assert plan_recommendations(rows, [])["smallest_full_gpu"]["name"] == "Apple M4 Max"
+
+
+def test_catalog_exposes_availability_and_shared_memory_behavior():
+    m4_max = lookup_catalog_entry("Apple M4 Max")
+    h100 = lookup_catalog_entry("H100")
+
+    assert m4_max.shared_memory is True
+    assert m4_max.shared_memory_behavior == "unified system memory"
+    assert m4_max.availability == "new systems"
+    assert h100.multi_gpu_backends == ("cuda",)
+    assert h100.interconnect is not None
+    assert lookup_catalog_entry("A6000").name == "RTX A6000"
 
 
 def test_synthetic_gpu_uses_catalog_backends_for_hardware_to_model_path():

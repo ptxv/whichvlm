@@ -94,6 +94,20 @@ def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
     return data
 
 
+def result_binding_constraint(result: CompatibilityResult) -> str:
+    if not result.context_fits:
+        return "context length"
+    if not result.can_run:
+        return "memory"
+    if result.estimated_tok_per_sec is None:
+        return "bandwidth"
+    if result.fit_type == "partial_offload":
+        return "VRAM"
+    if result.uses_multi_gpu:
+        return "multi-GPU split"
+    return "none"
+
+
 def model_dict(rank: int, result: CompatibilityResult, details: bool = False) -> dict:
     model = result.model
     data = {
@@ -114,6 +128,9 @@ def model_dict(rank: int, result: CompatibilityResult, details: bool = False) ->
         "benchmark_source": result.benchmark_source,
         "fit_type": result.fit_type,
         "can_run": result.can_run,
+        "context_fits": result.context_fits,
+        "offload_ratio": result.offload_ratio,
+        "binding_constraint": result_binding_constraint(result),
         "warnings": result.warnings,
         "quality_score": round(result.quality_score, 2),
         "benchmark_confidence": round(result.benchmark_confidence, 2),
