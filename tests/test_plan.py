@@ -25,14 +25,16 @@ from whichvlm.output.plan import (
 )
 
 
-def planning_model(params: int = 70_000_000_000) -> ModelInfo:
+def planning_model(
+    params: int = 70_000_000_000, context_length: int = 32768
+) -> ModelInfo:
     return ModelInfo(
         id="org/Test-VL-GGUF",
         family_id="test-vl",
         name="Test VL",
         parameter_count=params,
         architecture="qwen2_vl",
-        context_length=32768,
+        context_length=context_length,
         hf_pipeline_tag="image-text-to-text",
     )
 
@@ -50,6 +52,19 @@ def test_plan_partial_offload_uses_ram_not_vram_ratio():
     assert rtx4060["practical_partial_offload"] is False
     assert rtx4060["system_ram_bytes"] == PLAN_SYSTEM_RAM_BYTES
     assert rtx4060["binding_constraint"] == "VRAM"
+
+
+def test_plan_target_vram_respects_workload_without_cached_rows():
+    model = planning_model(params=7_000_000_000)
+
+    no_images = plan_target_vram(
+        model, 4096, "Q4_K_M", image_count=0, video_frames=0
+    )
+    with_images = plan_target_vram(
+        model, 4096, "Q4_K_M", image_count=2, video_frames=4
+    )
+
+    assert with_images > no_images
 
 
 def test_plan_reverse_lookup_returns_full_partial_and_multi_gpu():
@@ -76,6 +91,19 @@ def test_plan_reverse_lookup_returns_full_partial_and_multi_gpu():
     assert recommendations["smallest_partial_offload"]["name"] == "L40S"
     assert recommendations["multi_gpu_alternatives"][0]["name"] == "2x A100 80GB"
     assert recommendations["multi_gpu_alternatives"][0]["uses_multi_gpu"] is True
+
+
+def test_plan_reverse_lookup_rejects_context_mismatch():
+    model = planning_model(params=7_000_000_000, context_length=4096)
+    rows = plan_gpu_compatibility(model, "Q4_K_M", context_length=32768)
+
+    recommendations = plan_recommendations(rows, [])
+
+    assert recommendations["smallest_full_gpu"] is None
+    assert recommendations["smallest_partial_offload"] is None
+    assert next(row for row in rows if row["fit_type"] == "full_gpu")[
+        "binding_constraint"
+    ] == "context length"
 
 
 def test_plan_json_includes_workload_and_reverse_lookup():

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import copy
+
 from rich.panel import Panel
 from rich.table import Table
 
@@ -26,6 +28,7 @@ from whichvlm.output.formatting import format_bytes, format_params
 PLAN_QUANTS = ("Q2_K", "Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "F16")
 PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO = 0.65
 PRACTICAL_PARTIAL_MIN_USABLE_VRAM_BYTES = 6 * BYTES_PER_GIB
+MULTI_GPU_SPEED_FACTOR = 0.70
 
 
 def plan_variant_for_quant(model: ModelInfo, quant: str) -> GGUFVariant:
@@ -86,7 +89,9 @@ def plan_target_vram(
     image_size: int = 448,
     video_frames: int = 0,
 ) -> int:
-    vram_by_quant = vram_by_quant or plan_vram_by_quant(model, context_length)
+    vram_by_quant = vram_by_quant or plan_vram_by_quant(
+        model, context_length, image_count, image_size, video_frames
+    )
     existing = vram_by_quant.get(target_quant.upper())
     if existing:
         return int(existing["vram_bytes"])
@@ -139,6 +144,7 @@ def plan_metadata_warnings(gpu: GPUInfo) -> list[str]:
 def is_practical_partial_offload(row: dict) -> bool:
     return (
         row["fit_type"] == "partial_offload"
+        and row["context_fits"]
         and row["usable_vram_bytes"] >= PRACTICAL_PARTIAL_MIN_USABLE_VRAM_BYTES
         and row["offload_ratio"] <= PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO
         and row["os_supported"]
@@ -163,7 +169,10 @@ def plan_row_for_hardware(
     gpu = hardware.gpus[0]
     speed = None
     if result.can_run and gpu.memory_bandwidth_gbps:
-        speed = round(estimate_tok_per_sec(model, variant, gpu, result.fit_type), 1)
+        speed = estimate_tok_per_sec(model, variant, gpu, result.fit_type)
+        if result.uses_multi_gpu:
+            speed *= MULTI_GPU_SPEED_FACTOR
+        speed = round(speed, 1)
     row = {
         "name": label,
         "vram_gb": round(sum(gpu.vram_bytes for gpu in hardware.gpus) / BYTES_PER_GIB),
@@ -236,8 +245,8 @@ def multi_gpu_hardware(
     os_name: str,
 ) -> HardwareInfo:
     hardware = entry.to_hardware(system_ram_bytes, os_name)
-    gpu = entry.to_hardware(system_ram_bytes, os_name).gpus[0]
-    hardware.gpus = [gpu for _ in range(count)]
+    gpu = hardware.gpus[0]
+    hardware.gpus = [copy(gpu) for _ in range(count)]
     return hardware
 
 
@@ -279,6 +288,7 @@ def first_runnable(rows: list[dict], fit_type: str) -> dict | None:
         if (
             row["fit_type"] == fit_type
             and row["can_run"]
+            and row["context_fits"]
             and row["meets_speed"]
             and row["os_supported"]
             and row["supported_backends"]
@@ -305,6 +315,7 @@ def plan_recommendations(
             if show_multi_gpu
             and row["fit_type"] == "full_gpu"
             and row["can_run"]
+            and row["context_fits"]
             and row["meets_speed"]
             and row["os_supported"]
             and row["supported_backends"]
