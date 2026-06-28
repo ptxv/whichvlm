@@ -10,7 +10,7 @@ from whichvlm.models.fetcher import (
     fetch_models,
     models_to_dicts,
 )
-from whichvlm.models.types import ModelArtifact, ModelCapabilities, ModelInfo
+from whichvlm.models.types import ModelArtifact, ModelInfo
 
 
 def test_normalize_param_count_for_quantized_repo_uses_size_hint():
@@ -244,44 +244,6 @@ def test_parse_model_recovers_qwen36_a3b_active_params_from_name():
     assert parsed.is_moe is True
 
 
-def test_parse_model_extracts_task_capabilities_and_scores():
-    parsed = parse_model(
-        {
-            "id": "org/DocOCR-VL-7B",
-            "pipeline_tag": "image-text-to-text",
-            "tags": ["vision-language", "language:en", "ocr", "docvqa"],
-            "config": {"architectures": ["Qwen2VLForConditionalGeneration"]},
-            "safetensors": {"total": 7_000_000_000},
-            "siblings": [],
-            "cardData": {"language": ["en", "zh"]},
-            "evalResults": [
-                {
-                    "filename": "docvqa.json",
-                    "data": {
-                        "dataset": {"id": "DocVQA", "task_id": "document"},
-                        "value": 0.82,
-                    },
-                },
-                {
-                    "filename": "chartqa.json",
-                    "data": {
-                        "dataset": {"id": "ChartQA", "task_id": "chart"},
-                        "value": 71.0,
-                    },
-                },
-            ],
-        }
-    )
-
-    assert parsed is not None
-    assert parsed.capabilities.image is True
-    assert parsed.capabilities.ocr is True
-    assert parsed.capabilities.document is True
-    assert parsed.capabilities.supported_languages == ["en", "zh"]
-    assert parsed.benchmark_scores["hf_document"] == 82.0
-    assert parsed.benchmark_scores["hf_chart"] == 71.0
-
-
 def test_models_cache_roundtrip_keeps_published_at():
     models = [
         ModelInfo(
@@ -301,27 +263,39 @@ def test_models_cache_roundtrip_keeps_published_at():
     assert restored[0].downloads == 123_456
 
 
-def test_models_cache_roundtrip_keeps_capabilities():
-    models = [
-        ModelInfo(
-            id="org/Video-VL",
-            family_id="video-vl",
-            name="Video-VL",
-            parameter_count=7_000_000_000,
-            capabilities=ModelCapabilities(
-                image=True,
-                video=True,
-                multi_image=True,
-                supported_languages=["en"],
-            ),
-        )
-    ]
+def test_models_cache_roundtrip_keeps_architecture_metadata():
+    model = ModelInfo(
+        id="Qwen/Qwen2.5-VL-7B-Instruct",
+        family_id="qwen2.5-vl-7b",
+        name="Qwen2.5-VL-7B-Instruct",
+        parameter_count=7_000_000_000,
+        layer_count=28,
+        hidden_size=3584,
+        intermediate_size=18944,
+        attention_heads=28,
+        kv_heads=4,
+        head_dim=128,
+        dtype="bfloat16",
+        vision_layer_count=32,
+        vision_hidden_size=1280,
+        vision_intermediate_size=3420,
+        vision_attention_heads=16,
+        projector_hidden_size=3584,
+        patch_size=14,
+        spatial_merge_size=2,
+        image_token_strategy="full",
+    )
 
-    restored = dicts_to_models(models_to_dicts(models))
+    restored = dicts_to_models(models_to_dicts([model]))
 
-    assert restored[0].capabilities.video is True
-    assert restored[0].capabilities.multi_image is True
-    assert restored[0].capabilities.supported_languages == ["en"]
+    assert restored[0].layer_count == 28
+    assert restored[0].intermediate_size == 18944
+    assert restored[0].kv_heads == 4
+    assert restored[0].vision_hidden_size == 1280
+    assert restored[0].vision_intermediate_size == 3420
+    assert restored[0].vision_attention_heads == 16
+    assert restored[0].patch_size == 14
+    assert restored[0].spatial_merge_size == 2
 
 
 def test_models_cache_roundtrip_keeps_vlm_package_graph():
@@ -493,6 +467,54 @@ def test_parse_model_builds_vlm_package_metadata():
     assert parsed.lineage.base_model_ids == []
 
 
+def test_parse_model_extracts_architecture_metadata():
+    parsed = parse_model(
+        {
+            "id": "Qwen/Qwen2.5-VL-7B-Instruct",
+            "pipeline_tag": "image-text-to-text",
+            "tags": ["vision-language", "safetensors"],
+            "config": {
+                "architectures": ["Qwen2VLForConditionalGeneration"],
+                "num_hidden_layers": 28,
+                "hidden_size": 3584,
+                "intermediate_size": 18944,
+                "num_attention_heads": 28,
+                "num_key_value_heads": 4,
+                "head_dim": 128,
+                "torch_dtype": "bfloat16",
+                "vision_feature_select_strategy": "full",
+                "vision_config": {
+                    "num_hidden_layers": 32,
+                    "hidden_size": 1280,
+                    "intermediate_size": 3420,
+                    "num_attention_heads": 16,
+                    "patch_size": 14,
+                    "spatial_merge_size": 2,
+                },
+            },
+            "safetensors": {"total": 7_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.layer_count == 28
+    assert parsed.hidden_size == 3584
+    assert parsed.intermediate_size == 18944
+    assert parsed.attention_heads == 28
+    assert parsed.kv_heads == 4
+    assert parsed.head_dim == 128
+    assert parsed.dtype == "bfloat16"
+    assert parsed.vision_layer_count == 32
+    assert parsed.vision_hidden_size == 1280
+    assert parsed.vision_intermediate_size == 3420
+    assert parsed.vision_attention_heads == 16
+    assert parsed.patch_size == 14
+    assert parsed.spatial_merge_size == 2
+    assert parsed.image_token_strategy == "full"
+
+
 def test_parse_model_marks_community_gguf_relationship():
     parsed = parse_model(
         {
@@ -586,7 +608,6 @@ def test_parse_model_preserves_multi_parent_merged_lineage():
 
 
 def test_deepseek_v4_flash_uses_model_card_counts_over_hf_tensor_metadata():
-
 
     parsed = parse_model(
         {

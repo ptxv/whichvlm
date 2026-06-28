@@ -133,6 +133,7 @@ def test_json_simulated_nvidia_gpu_includes_backend_capabilities():
 
 def test_include_vision_candidates_by_profile():
     assert include_vision_candidates("vision") is True
+    assert include_vision_candidates("ocr") is True
     assert include_vision_candidates("any") is True
     assert include_vision_candidates("general") is False
     assert include_vision_candidates("coding") is False
@@ -144,6 +145,7 @@ def test_workload_for_profile_defaults_and_overrides():
     assert wl.image_count == 1
     assert wl.image_size == 448
     assert wl.context_length == 8192
+    assert workload_for_profile("ocr") is not None
 
     custom = workload_for_profile(
         "any", image_count=2, image_size=896, context_length=2048
@@ -756,6 +758,50 @@ def test_plan_display_plan_json_outputs_valid_json():
     assert data["target_quant"] == "Q4_K_M"
 
 
+def test_hardware_plan_scores_target_gpu(monkeypatch):
+    captured: dict[str, object] = {}
+    model = ModelInfo(
+        id="test-org/Test-Vision-7B",
+        family_id="test-vision-7b",
+        name="Test-Vision-7B",
+        parameter_count=7_000_000_000,
+        architecture="qwen2_vl",
+        context_length=8192,
+        hf_pipeline_tag="image-text-to-text",
+        downloads=10,
+    )
+
+    def fake_display_json(results, hardware, details=False):
+        captured["results"] = results
+        captured["hardware"] = hardware
+        captured["details"] = details
+
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda *args, **kwargs: [model])
+    monkeypatch.setattr(cli_mod, "load_benchmark_index", lambda refresh: {})
+    monkeypatch.setattr("whichvlm.output.display.display_json", fake_display_json)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "hardware-plan",
+            "RTX 4070",
+            "--json",
+            "--top",
+            "1",
+            "--context-length",
+            "4096",
+        ],
+    )
+
+    assert result.exit_code == 0
+    hardware = captured["hardware"]
+    results = captured["results"]
+    assert hardware.gpus[0].name == "RTX 4070"
+    assert results[0].model.id == "test-org/Test-Vision-7B"
+    assert results[0].can_run is True
+    assert captured["details"] is True
+
+
 def make_model(model_id="org/Test-7B-GGUF", downloads=100, gguf_variants=None):
     return ModelInfo(
         id=model_id,
@@ -1181,6 +1227,16 @@ def json_output_case() -> tuple[CompatibilityResult, HardwareInfo]:
         can_run=True,
         vram_required_bytes=8_000_000_000,
         vram_available_bytes=24_000_000_000,
+        vram_required_range_bytes=(7_000_000_000, 10_000_000_000),
+        vram_confidence="medium",
+        vram_breakdown_bytes={
+            "weights": 6_000_000_000,
+            "kv_cache": 500_000_000,
+            "activations": 700_000_000,
+            "vision": 0,
+            "runtime_overhead": 800_000_000,
+        },
+        vram_notes=["KV cache uses parameter-count fallback"],
         quality_score=55.0,
         benchmark_status="estimated",
         benchmark_source="line_interp",
@@ -1206,6 +1262,11 @@ def test_json_output_defaults_to_compact():
 
     assert compact_entry["model_id"] == "test-org/Test-7B"
     assert compact_entry["benchmark_source"] == "line_interp"
+    assert compact_entry["vram_required_range_bytes"] == [
+        7_000_000_000,
+        10_000_000_000,
+    ]
+    assert compact_entry["vram_confidence"] == "medium"
     assert "artifacts" not in compact_entry
     assert "lineage" not in compact_entry
     assert "budget_notes" not in compact["hardware"]
@@ -1222,6 +1283,8 @@ def test_json_output_includes_diagnostics_when_requested():
     assert entry["benchmark_status"] == "estimated"
     assert entry["benchmark_source"] == "line_interp"
     assert entry["benchmark_confidence"] == 0.34
+    assert entry["vram_breakdown_bytes"]["weights"] == 6_000_000_000
+    assert entry["vram_notes"] == ["KV cache uses parameter-count fallback"]
     assert entry["base_models"] == ["base/Test-7B"]
     assert artifact["format"] == "mlx"
     assert artifact["access"] == "gated"

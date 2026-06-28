@@ -36,6 +36,11 @@ def detect_specializations(model_id: str) -> list[str]:
     tags: list[str] = []
     if re.search(r"(coder|codegen|starcoder|program|coding)", lower):
         tags.append("coding")
+    if re.search(
+        r"(^|[-_/])(ocr|docvqa|document)([-_/]|$)|text[-_ ]?recognition",
+        lower,
+    ):
+        tags.append("ocr")
     if re.search(r"(^|[-_/])(vl|vision|multimodal|llava|image)([-_/]|$)", lower):
         tags.append("vision")
     if re.search(r"(^|[-_/])math([-_/]|$)", lower):
@@ -80,7 +85,6 @@ def top_pick_confidence(results: list[CompatibilityResult]) -> tuple[str, str]:
     else:
         confidence = "Low"
         reason = f"direct benchmark but very close (+{gap:.1f}){risk_note}"
-
 
     if top.fit_type != "full_gpu" or top.speed_confidence == "low":
         if confidence == "High":
@@ -322,14 +326,12 @@ def display_ranking(
         "vision scores lead VLMs, text scores are fallback evidence.[/dim]"
     )
 
-
     if len(results) >= 2:
         gap = results[0].quality_score - results[1].quality_score
         if gap < 1.5:
             console.console.print(
                 f"  [yellow]Note:[/] Top candidates are very close (#{1} vs #{2}: {gap:.1f} pts)."
             )
-
 
     weak_top = [
         idx + 1 for idx, r in enumerate(results[:3]) if r.benchmark_status != "direct"

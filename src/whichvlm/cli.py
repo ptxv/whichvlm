@@ -20,6 +20,7 @@ from whichvlm.runtime import (
 )
 from whichvlm.utils import current_version, CONTEXT_LENGTH
 
+# CLI hub. Turns flags into load, rank, run, and render work.
 app = typer.Typer(
     name="whichvlm",
     help="Find local vision-language models that fit your hardware.",
@@ -33,6 +34,7 @@ FETCH_ERRORS = (httpx.HTTPError, OSError, ValueError)
 
 
 def vlm_progress():
+    # Progress widget. Keeps network-heavy steps readable in terminal.
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
     return Progress(
@@ -44,6 +46,7 @@ def vlm_progress():
 
 
 def format_fetch_error(error: Exception) -> str:
+    # Error flattener. Gives one short message even for empty HTTP errors.
     detail = str(error).strip()
     if detail:
         return detail
@@ -191,6 +194,7 @@ MEMORY_RE = re.compile(
 def parse_memory_amount(
     value: str, *, option_name: str, total_bytes: int | None = None
 ) -> int:
+    # Memory parser. Accepts GiB, MiB, and percent budget inputs.
     raw = value.strip()
     if not raw:
         console.print(f"[red]Error:[/] {option_name} cannot be empty.")
@@ -254,6 +258,7 @@ def apply_memory_budgets(
     vram_headroom: str,
     ram_budget: str | None,
 ) -> HardwareInfo:
+    # Budget pass. Writes usable memory limits onto detected hardware.
     headroom_mode = vram_headroom.strip().lower()
     if not hardware.gpus and headroom_mode not in {"auto", "none", "off", "0"}:
         parse_memory_amount(
@@ -734,6 +739,36 @@ def plan(
     quant: Optional[str] = typer.Option(
         None, "--quant", "-q", help="Target quantization (default: Q4_K_M)"
     ),
+    image_count: int = typer.Option(
+        1,
+        "--image-count",
+        help="Images per request for VLM memory estimation",
+    ),
+    image_size: int = typer.Option(
+        448,
+        "--image-size",
+        help="Input image edge size for VLM memory estimation",
+    ),
+    video_frames: int = typer.Option(
+        0,
+        "--video-frames",
+        help="Video frames to budget as visual inputs",
+    ),
+    ram: Optional[str] = typer.Option(
+        None,
+        "--ram",
+        help="System RAM budget for partial offload, e.g. 64GB",
+    ),
+    min_speed: Optional[float] = typer.Option(
+        None,
+        "--min-speed",
+        help="Minimum estimated generation speed in tok/s",
+    ),
+    os_name: str = typer.Option(
+        "linux",
+        "--os",
+        help="Target OS for backend compatibility",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     refresh: bool = typer.Option(
         False, "--refresh", help="Ignore cache and re-fetch models"
@@ -749,12 +784,186 @@ def plan(
     model = resolve_model_match(models, model_name)
 
     target_quant = quant.upper() if quant else "Q4_K_M"
+    from whichvlm.hardware.catalog import PLAN_SYSTEM_RAM_BYTES
+
+    system_ram_bytes = (
+        parse_memory_amount(ram, option_name="--ram") if ram else PLAN_SYSTEM_RAM_BYTES
+    )
 
     if json_output:
-        display_plan_json(model, context_length, target_quant)
+        display_plan_json(
+            model,
+            context_length,
+            target_quant,
+            image_count,
+            image_size,
+            video_frames,
+            system_ram_bytes,
+            min_speed,
+            os_name,
+        )
     else:
         console.print()
-        display_plan(model, context_length, target_quant)
+        display_plan(
+            model,
+            context_length,
+            target_quant,
+            image_count,
+            image_size,
+            video_frames,
+            system_ram_bytes,
+            min_speed,
+            os_name,
+        )
+        console.print()
+
+
+@app.command("hardware-plan")
+def hardware_plan(
+    gpu_name: str = typer.Argument(..., help="Target GPU, e.g. 'RTX 4070'"),
+    context_length: int = typer.Option(
+        4096,
+        "--context-length",
+        "-c",
+        click_type=CONTEXT_LENGTH,
+        help="Context length for KV cache estimation (e.g. 4096, 64k, 128k)",
+    ),
+    quant: Optional[str] = typer.Option(
+        None, "--quant", "-q", help="Target quantization"
+    ),
+    top: int = typer.Option(10, "--top", "-n", help="Number of models to show"),
+    profile: str = typer.Option(
+        "vision",
+        "--profile",
+        help="Ranking profile or workload task",
+    ),
+    image_count: int = typer.Option(
+        1,
+        "--image-count",
+        help="Images per request for VLM memory estimation",
+    ),
+    image_size: int = typer.Option(
+        448,
+        "--image-size",
+        help="Input image edge size for VLM memory estimation",
+    ),
+    video_frames: int = typer.Option(
+        0,
+        "--video-frames",
+        help="Video frames to budget as visual inputs",
+    ),
+    audio_seconds: float = typer.Option(
+        0.0,
+        "--audio-seconds",
+        help="Audio seconds per request for workload estimation",
+    ),
+    batch_size: int = typer.Option(
+        1,
+        "--batch-size",
+        help="Requests per batch for memory and speed estimation",
+    ),
+    ram: Optional[str] = typer.Option(
+        None,
+        "--ram",
+        help="System RAM budget for partial offload, e.g. 64GB",
+    ),
+    vram: Optional[float] = typer.Option(
+        None,
+        "--vram",
+        help="Override target GPU VRAM in GB",
+    ),
+    min_speed: Optional[float] = typer.Option(
+        None,
+        "--min-speed",
+        help="Minimum estimated generation speed in tok/s",
+    ),
+    os_name: str = typer.Option(
+        "linux",
+        "--os",
+        help="Target OS for backend compatibility",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    refresh: bool = typer.Option(
+        False, "--refresh", help="Ignore cache and re-fetch models"
+    ),
+):
+
+    from whichvlm.engine.ranker import rank_models
+    from whichvlm.hardware.catalog import (
+        PLAN_SYSTEM_RAM_BYTES,
+        PLAN_VRAM_HEADROOM_RATIO,
+        lookup_catalog_entry,
+    )
+    from whichvlm.hardware.gpu_simulator import create_synthetic_gpu
+    from whichvlm.hardware.types import HardwareInfo
+    from whichvlm.models.grouper import group_models
+    from whichvlm.output.display import display_hardware, display_json, display_ranking
+
+    profile = validate_profile(profile)
+    system_ram_bytes = (
+        parse_memory_amount(ram, option_name="--ram") if ram else PLAN_SYSTEM_RAM_BYTES
+    )
+
+    catalog_entry = lookup_catalog_entry(gpu_name)
+    if catalog_entry is not None and vram is None:
+        hardware = catalog_entry.to_hardware(system_ram_bytes, os_name)
+    else:
+        try:
+            gpu = create_synthetic_gpu(gpu_name, vram)
+        except ValueError as e:
+            console.print(f"[red]Error:[/] {e}")
+            raise typer.Exit(code=1)
+        gpu.usable_vram_bytes = int(gpu.vram_bytes * (1.0 - PLAN_VRAM_HEADROOM_RATIO))
+        ensure_backend_capabilities(gpu, os_name)
+        hardware = HardwareInfo(
+            gpus=[gpu],
+            ram_bytes=system_ram_bytes,
+            disk_free_bytes=1_000 * BYTES_PER_GIB,
+            os=os_name,
+        )
+
+    with vlm_progress() as progress:
+        task = progress.add_task("loading VLM packages...", total=None)
+        models = load_model_catalog(
+            refresh, include_vision=include_vision_candidates(profile)
+        )
+        progress.update(task, description="loading benchmark index...")
+        bench_scores = load_benchmark_index(refresh)
+        progress.update(task, description=f"scoring {gpu_name}...")
+
+        all_models = []
+        for family in group_models(models):
+            all_models.append(family.base_model)
+            all_models.extend(family.variants)
+
+        results = rank_models(
+            all_models,
+            hardware,
+            context_length=context_length,
+            top_n=top,
+            quant_filter=quant,
+            min_speed=min_speed,
+            benchmark_scores=bench_scores,
+            task_profile=profile,
+            require_direct_top=True,
+            vision_workload=workload_for_profile(
+                profile,
+                image_count=image_count,
+                image_size=image_size,
+                video_frames=video_frames,
+                audio_seconds=audio_seconds,
+                batch_size=batch_size,
+                context_length=context_length,
+            ),
+        )
+
+    if json_output:
+        display_json(results, hardware, details=True)
+    else:
+        console.print()
+        display_hardware(hardware)
+        console.print()
+        display_ranking(results, has_gpu=True, show_status=True)
         console.print()
 
 
@@ -775,7 +984,7 @@ def upgrade(
     profile: str = typer.Option(
         "vision",
         "--profile",
-        help="Ranking profile: general | coding | vision | math | any",
+        help="Ranking profile or workload task",
     ),
     image_count: int = typer.Option(
         1,
@@ -908,6 +1117,7 @@ def upgrade(
 
 
 def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[ModelInfo]:
+    # Model loader. Reuses cache first, then falls back to live HF fetch.
     from whichvlm.models.cache import load_cache, save_cache
     from whichvlm.models.fetcher import (
         dicts_to_models,
@@ -940,6 +1150,7 @@ def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[Model
 
 
 def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
+    # Model resolver. Turns fuzzy CLI text into one concrete repo id.
     query_lower = model_name.lower()
     terms = query_lower.split()
 
@@ -974,6 +1185,7 @@ def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
 def select_gguf_variant(
     model: ModelInfo, quant_filter: str | None = None
 ) -> GGUFVariant | None:
+    # Variant chooser. Picks the best local GGUF file for the request.
     from whichvlm.constants import QUANT_PREFERENCE_ORDER
 
     if not model.gguf_variants:
@@ -1030,6 +1242,7 @@ def resolve_ranked_gguf_for_run(
     models: list[ModelInfo],
     quant_filter: str | None = None,
 ) -> tuple[ModelInfo, GGUFVariant] | None:
+    # Runner resolver. Maps synthetic ranked variants to real GGUF repos.
     desired_quant = quant_filter or selected_variant.quant_type
 
     if selected_model.gguf_variants:

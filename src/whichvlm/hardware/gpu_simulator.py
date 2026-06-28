@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from dbgpu import GPUSpecification
 
-from whichvlm.constants import AMD_SHARED_MEMORY_APU_MARKERS, GPU_BANDWIDTH, BYTES_PER_GIB
+from whichvlm.constants import (
+    AMD_SHARED_MEMORY_APU_MARKERS,
+    GPU_BANDWIDTH,
+    BYTES_PER_GIB,
+)
+from whichvlm.hardware.catalog import lookup_catalog_entry
 from whichvlm.hardware.types import BackendCapability, GPUInfo
 
 # GPU simulator. Turns CLI gpu text into synthetic hardware records.
@@ -63,7 +68,6 @@ def lookup_apple_silicon(
     if compact.startswith("apple"):
         compact = compact.removeprefix("apple")
 
-
     for key in sorted(APPLE_SILICON_CHIPS, key=len, reverse=True):
         key_compact = re.sub(r"\s+", "", key).lower()
         if compact == key_compact:
@@ -104,7 +108,6 @@ def substring_search(db, name: str):
             continue
         after = db_name[idx + len(name) :]
 
-
         if not after or re.match(r"^(\s+(\d|GA\d|PCIe|SXM|NVL|CNX))", after):
             candidates.append(db_name)
     if candidates:
@@ -119,7 +122,6 @@ def lookup_dbgpu(name: str) -> GPUSpecification | None:
 
     db = GPUDatabase.default()
 
-
     normalized = normalize_gpu_name(name)
     compact = re.sub(r"\s+", "", normalized.lower())
     names_to_try = [name] if normalized == name else [name, normalized]
@@ -128,12 +130,10 @@ def lookup_dbgpu(name: str) -> GPUSpecification | None:
         names_to_try.extend(alias_hits)
 
     for n in names_to_try:
-
         try:
             return db[n]
         except KeyError:
             pass
-
 
         for prefix in MANUFACTURER_PREFIXES:
             try:
@@ -141,11 +141,9 @@ def lookup_dbgpu(name: str) -> GPUSpecification | None:
             except KeyError:
                 pass
 
-
         result = substring_search(db, n)
         if result is not None:
             return result
-
 
     try:
         from thefuzz import fuzz, process
@@ -157,7 +155,9 @@ def lookup_dbgpu(name: str) -> GPUSpecification | None:
             return db[results[0][0]]
 
         if results:
-            last_suggestions[:] = [(name, score) for name, score in results if score >= 70]
+            last_suggestions[:] = [
+                (name, score) for name, score in results if score >= 70
+            ]
     except ImportError:
         pass
     return None
@@ -214,7 +214,6 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
 
     amd_shared_memory_apu = is_amd_shared_memory_apu(name)
 
-
     apple_hit = lookup_apple_silicon(name)
     if apple_hit is not None:
         canonical, vendor, default_vram_gb, bandwidth = apple_hit
@@ -233,8 +232,25 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
             neural_engine_available=True,
         )
 
-    spec = lookup_dbgpu(name)
+    catalog_hit = lookup_catalog_entry(name)
+    if catalog_hit is not None:
+        vram_gb = (
+            vram_override_gb if vram_override_gb is not None else catalog_hit.vram_gb
+        )
+        return GPUInfo(
+            name=f"{catalog_hit.name} (simulated)",
+            vendor=catalog_hit.vendor,
+            vram_bytes=int(vram_gb * BYTES_PER_GIB),
+            compute_capability=catalog_hit.compute_capability,
+            memory_bandwidth_gbps=catalog_hit.memory_bandwidth_gbps,
+            shared_memory=catalog_hit.shared_memory,
+            backend_capabilities=[
+                BackendCapability(backend, True)
+                for backend in catalog_hit.supported_backends
+            ],
+        )
 
+    spec = lookup_dbgpu(name)
 
     if vram_override_gb is not None:
         vram_bytes = int(vram_override_gb * BYTES_PER_GIB)
@@ -248,18 +264,15 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
         msg += " Use --vram to specify VRAM in GB."
         raise ValueError(msg)
 
-
     bandwidth: float | None = None
     if spec is not None and spec.memory_bandwidth_gb_s:
         bandwidth = spec.memory_bandwidth_gb_s
     if bandwidth is None:
         bandwidth = lookup_static_bandwidth(name)
 
-
     compute_cap: tuple[int, int] | None = None
     if spec is not None and spec.cuda_major_version is not None:
         compute_cap = (spec.cuda_major_version, spec.cuda_minor_version or 0)
-
 
     vendor = "nvidia"
     if spec is not None:
