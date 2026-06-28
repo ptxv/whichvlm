@@ -10,7 +10,7 @@ from whichvlm.models.fetcher import (
     fetch_models,
     models_to_dicts,
 )
-from whichvlm.models.types import ModelArtifact, ModelInfo
+from whichvlm.models.types import ModelArtifact, ModelCapabilities, ModelInfo
 
 
 def test_normalize_param_count_for_quantized_repo_uses_size_hint():
@@ -244,6 +244,44 @@ def test_parse_model_recovers_qwen36_a3b_active_params_from_name():
     assert parsed.is_moe is True
 
 
+def test_parse_model_extracts_task_capabilities_and_scores():
+    parsed = parse_model(
+        {
+            "id": "org/DocOCR-VL-7B",
+            "pipeline_tag": "image-text-to-text",
+            "tags": ["vision-language", "language:en", "ocr", "docvqa"],
+            "config": {"architectures": ["Qwen2VLForConditionalGeneration"]},
+            "safetensors": {"total": 7_000_000_000},
+            "siblings": [],
+            "cardData": {"language": ["en", "zh"]},
+            "evalResults": [
+                {
+                    "filename": "docvqa.json",
+                    "data": {
+                        "dataset": {"id": "DocVQA", "task_id": "document"},
+                        "value": 0.82,
+                    },
+                },
+                {
+                    "filename": "chartqa.json",
+                    "data": {
+                        "dataset": {"id": "ChartQA", "task_id": "chart"},
+                        "value": 71.0,
+                    },
+                },
+            ],
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.capabilities.image is True
+    assert parsed.capabilities.ocr is True
+    assert parsed.capabilities.document is True
+    assert parsed.capabilities.supported_languages == ["en", "zh"]
+    assert parsed.benchmark_scores["hf_document"] == 82.0
+    assert parsed.benchmark_scores["hf_chart"] == 71.0
+
+
 def test_models_cache_roundtrip_keeps_published_at():
     models = [
         ModelInfo(
@@ -261,6 +299,29 @@ def test_models_cache_roundtrip_keeps_published_at():
     assert len(restored) == 1
     assert restored[0].published_at == "2025-09-17T12:34:56.000Z"
     assert restored[0].downloads == 123_456
+
+
+def test_models_cache_roundtrip_keeps_capabilities():
+    models = [
+        ModelInfo(
+            id="org/Video-VL",
+            family_id="video-vl",
+            name="Video-VL",
+            parameter_count=7_000_000_000,
+            capabilities=ModelCapabilities(
+                image=True,
+                video=True,
+                multi_image=True,
+                supported_languages=["en"],
+            ),
+        )
+    ]
+
+    restored = dicts_to_models(models_to_dicts(models))
+
+    assert restored[0].capabilities.video is True
+    assert restored[0].capabilities.multi_image is True
+    assert restored[0].capabilities.supported_languages == ["en"]
 
 
 def test_models_cache_roundtrip_keeps_vlm_package_graph():

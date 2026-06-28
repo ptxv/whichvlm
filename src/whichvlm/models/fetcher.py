@@ -16,6 +16,8 @@ from whichvlm.models.package_graph import (
     build_artifacts,
     build_components,
     build_lineage,
+    capabilities_from_dict,
+    capabilities_to_dict,
     component_from_dict,
     component_to_dict,
     infer_variant_kind,
@@ -24,7 +26,7 @@ from whichvlm.models.package_graph import (
     lineage_to_dict,
     looks_quantized_repo_name,
 )
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from whichvlm.models.types import GGUFVariant, ModelCapabilities, ModelInfo
 
 # HF fetch layer. Turns Hub payloads into rankable model records.
 logger = logging.getLogger(__name__)
@@ -43,10 +45,19 @@ GENERAL_EVAL_KEYWORDS = (
     "ceval",
     "cmmlu",
 )
+TASK_EVAL_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "hf_ocr": ("ocr", "textvqa", "scene text", "text recognition"),
+    "hf_document": ("docvqa", "document", "infographic", "receipt", "invoice", "pdf"),
+    "hf_chart": ("chartqa", "chart", "plotqa", "figureqa", "table"),
+    "hf_video": ("video", "videomme", "mvbench", "activitynet", "nextqa"),
+    "hf_audio": ("audio", "speech", "asr", "voice", "spoken"),
+}
 VLM_PIPELINE_TAGS = (
     "image-text-to-text",
     "visual-question-answering",
     "image-to-text",
+    "video-text-to-text",
+    "audio-text-to-text",
 )
 VLM_VARIANT_FILTERS = (None, "gguf", "mlx", "awq", "gptq", "bnb", "fp8")
 HF_MODEL_EXPAND = (
@@ -114,16 +125,15 @@ def normalize_eval_value(raw: object) -> float | None:
     return value
 
 
-def is_general_eval_entry(entry: dict) -> bool:
-    # Eval filter. Keeps only rows that help general quality ranking.
+def eval_entry_text(entry: dict) -> str:
     data = entry.get("data")
     if not isinstance(data, dict):
-        return False
+        return ""
 
     notes = str(data.get("notes", "")).lower()
 
     if "with tools" in notes:
-        return False
+        return ""
 
     dataset = data.get("dataset")
     dataset_id = ""
@@ -132,10 +142,17 @@ def is_general_eval_entry(entry: dict) -> bool:
         dataset_id = str(dataset.get("id", "")).lower()
         task_id = str(dataset.get("task_id", "")).lower()
     filename = str(entry.get("filename", "")).lower()
+    return " ".join([notes, dataset_id, task_id, filename])
 
-    return any(
-        k in dataset_id or k in task_id or k in filename for k in GENERAL_EVAL_KEYWORDS
-    )
+
+def is_eval_entry_for_keywords(entry: dict, keywords: tuple[str, ...]) -> bool:
+    text = eval_entry_text(entry)
+    return bool(text) and any(k in text for k in keywords)
+
+
+def is_general_eval_entry(entry: dict) -> bool:
+    # Eval filter. Keeps only rows that help general quality ranking.
+    return is_eval_entry_for_keywords(entry, GENERAL_EVAL_KEYWORDS)
 
 
 def extract_hf_eval_score(data: dict) -> float | None:
@@ -160,6 +177,32 @@ def extract_hf_eval_score(data: dict) -> float | None:
     if not values:
         return None
     return round(statistics.median(values), 1)
+
+
+def extract_hf_task_scores(data: dict) -> dict[str, float]:
+    eval_results = data.get("evalResults")
+    if not isinstance(eval_results, list) or not eval_results:
+        return {}
+
+    grouped_values: dict[str, list[float]] = {key: [] for key in TASK_EVAL_KEYWORDS}
+    for entry in eval_results:
+        if not isinstance(entry, dict):
+            continue
+        data_obj = entry.get("data")
+        if not isinstance(data_obj, dict):
+            continue
+        normalized = normalize_eval_value(data_obj.get("value"))
+        if normalized is None:
+            continue
+        for score_key, keywords in TASK_EVAL_KEYWORDS.items():
+            if is_eval_entry_for_keywords(entry, keywords):
+                grouped_values[score_key].append(normalized)
+
+    return {
+        score_key: round(statistics.median(values), 1)
+        for score_key, values in grouped_values.items()
+        if values
+    }
 
 
 def extract_size_hint_from_id(model_id: str | None) -> int | None:
@@ -210,6 +253,84 @@ def extract_base_models(card_data: dict) -> list[str]:
     if isinstance(raw, list):
         return [v for v in raw if isinstance(v, str) and v]
     return []
+
+
+def metadata_words(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(v) for v in value if isinstance(v, (str, int, float))]
+    if isinstance(value, dict):
+        return [str(v) for v in value.values() if isinstance(v, (str, int, float))]
+    return []
+
+
+def extract_languages(card_data: dict, tags: list[str]) -> list[str]:
+    raw_languages = metadata_words(card_data.get("language"))
+    tag_languages = [
+        tag.split(":", 1)[1] for tag in tags if tag.lower().startswith("language:")
+    ]
+    languages = []
+    for language in [*raw_languages, *tag_languages]:
+        normalized = language.strip().lower()
+        if normalized and normalized not in languages:
+            languages.append(normalized)
+    return languages
+
+
+def infer_model_capabilities(
+    model_id: str,
+    *,
+    config: dict,
+    card_data: dict,
+    pipeline_tag: object,
+    tags: list[str],
+) -> ModelCapabilities:
+    metadata_text = " ".join(
+        [
+            str(pipeline_tag or ""),
+            *tags,
+            *metadata_words(card_data.get("tasks")),
+            *metadata_words(card_data.get("tags")),
+            *metadata_words(config.get("architectures")),
+            str(config.get("model_type") or ""),
+            str(config.get("processor_class") or ""),
+        ]
+    ).lower()
+    name_text = model_id.lower()
+    text = f"{metadata_text} {name_text}"
+
+    image = bool(
+        re.search(
+            r"image-text-to-text|visual-question-answering|image-to-text|"
+            r"vision-language|multimodal|vision|vlm|llava|internvl|pixtral",
+            text,
+        )
+    )
+    video = bool(re.search(r"video|onevision|video-text-to-text", text))
+    audio = bool(re.search(r"audio|speech|whisper|audio-text-to-text", text))
+    ocr = bool(re.search(r"\bocr\b|text recognition|scene text", text))
+    document = bool(re.search(r"document|docvqa|pdf|invoice|receipt|layout", text))
+    chart = bool(re.search(r"chart|plotqa|figureqa|table", text))
+    multi_image = bool(re.search(r"multi[-_ ]?image|interleaved|onevision", text))
+    tool_use = bool(re.search(r"tool[-_ ]?use|function[-_ ]?calling|agent", text))
+
+    if ocr or document or chart:
+        image = True
+    if video:
+        image = True
+
+    return ModelCapabilities(
+        image=image,
+        video=video,
+        audio=audio,
+        ocr=ocr,
+        document=document,
+        chart=chart,
+        multi_image=multi_image,
+        tool_use=tool_use,
+        supported_languages=extract_languages(card_data, tags),
+    )
 
 
 def extract_access(data: dict) -> str:
@@ -680,6 +801,15 @@ def parse_model(data: dict) -> ModelInfo | None:
     eval_score = extract_hf_eval_score(data)
     if eval_score is not None:
         benchmark_scores["hf_eval"] = eval_score
+    benchmark_scores.update(extract_hf_task_scores(data))
+
+    capabilities = infer_model_capabilities(
+        model_id,
+        config=config,
+        card_data=card_data,
+        pipeline_tag=data.get("pipeline_tag"),
+        tags=tags,
+    )
 
     return ModelInfo(
         id=model_id,
@@ -709,6 +839,7 @@ def parse_model(data: dict) -> ModelInfo | None:
         artifacts=artifacts,
         components=components,
         lineage=lineage,
+        capabilities=capabilities,
     )
 
 
@@ -967,6 +1098,7 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
                 component_to_dict(component) for component in model.components
             ],
             "lineage": lineage_to_dict(model.lineage),
+            "capabilities": capabilities_to_dict(model.capabilities),
         }
         for model in models
     ]
@@ -1040,6 +1172,15 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 tags=tags,
                 lineage=lineage,
             )
+        capabilities = capabilities_from_dict(d.get("capabilities"))
+        if d.get("capabilities") is None:
+            capabilities = infer_model_capabilities(
+                d["id"],
+                config=d,
+                card_data={},
+                pipeline_tag=d.get("hf_pipeline_tag"),
+                tags=tags,
+            )
         models.append(
             ModelInfo(
                 id=d["id"],
@@ -1069,6 +1210,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 artifacts=artifacts,
                 components=components,
                 lineage=lineage,
+                capabilities=capabilities,
             )
         )
     return models

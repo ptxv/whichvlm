@@ -18,7 +18,7 @@ from whichvlm.engine.quantization import (
     quant_quality_penalty,
 )
 from whichvlm.engine.types import CompatibilityResult
-from whichvlm.engine.workload import VisionWorkload
+from whichvlm.engine.workload import Workload, WorkloadTask
 from whichvlm.hardware.types import HardwareInfo, has_backend, infer_backend_capabilities
 from whichvlm.models.benchmark import (
     BenchmarkEvidence,
@@ -26,7 +26,7 @@ from whichvlm.models.benchmark import (
     build_score_index,
     lookup_benchmark_evidence,
 )
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from whichvlm.models.types import GGUFVariant, ModelCapabilities, ModelInfo
 
 # Ranking core. Expands variants, scores fit, and orders final picks.
 RANKING_ALGORITHM_VERSION = "2026.06.22.1"
@@ -102,6 +102,70 @@ SOURCE_WEIGHTS: dict[str, float] = {
     "line_interp": 0.40,
     "self_reported": 0.30,
     "none": 0.0,
+}
+
+TASK_SOURCE_WEIGHTS: dict[WorkloadTask, dict[str, float]] = {
+    "image_qa": SOURCE_WEIGHTS,
+    "general_multimodal": SOURCE_WEIGHTS,
+    "ocr": {
+        **SOURCE_WEIGHTS,
+        "self_reported": 0.62,
+        "variant": 0.25,
+        "base_model": 0.20,
+        "line_interp": 0.0,
+    },
+    "document": {
+        **SOURCE_WEIGHTS,
+        "self_reported": 0.62,
+        "variant": 0.25,
+        "base_model": 0.20,
+        "line_interp": 0.0,
+    },
+    "chart": {
+        **SOURCE_WEIGHTS,
+        "self_reported": 0.58,
+        "variant": 0.25,
+        "base_model": 0.20,
+        "line_interp": 0.0,
+    },
+    "video": {
+        **SOURCE_WEIGHTS,
+        "direct": 0.25,
+        "variant": 0.0,
+        "base_model": 0.0,
+        "line_interp": 0.0,
+        "self_reported": 0.60,
+    },
+    "audio": {
+        **SOURCE_WEIGHTS,
+        "direct": 0.25,
+        "variant": 0.0,
+        "base_model": 0.0,
+        "line_interp": 0.0,
+        "self_reported": 0.60,
+    },
+}
+
+TASK_SCORE_KEYS: dict[WorkloadTask, tuple[str, ...]] = {
+    "image_qa": ("hf_eval",),
+    "general_multimodal": ("hf_eval",),
+    "ocr": ("hf_ocr", "hf_document"),
+    "document": ("hf_document", "hf_ocr"),
+    "chart": ("hf_chart", "hf_document"),
+    "video": ("hf_video",),
+    "audio": ("hf_audio",),
+}
+
+PROFILE_TO_WORKLOAD_TASK: dict[str, WorkloadTask] = {
+    "any": "general_multimodal",
+    "vision": "image_qa",
+    "image_qa": "image_qa",
+    "ocr": "ocr",
+    "document": "document",
+    "chart": "chart",
+    "video": "video",
+    "audio": "audio",
+    "general_multimodal": "general_multimodal",
 }
 
 
@@ -354,12 +418,85 @@ def detect_specializations(model: ModelInfo) -> set[str]:
         lower,
     ):
         tags.add("vision")
+    caps = model.capabilities
+    if caps.image or caps.video or caps.audio:
+        tags.add("vision")
     if re.search(r"(^|[-_/])math([-_/]|$)", lower):
         tags.add("math")
     return tags
 
 
-def matches_profile(model: ModelInfo, task_profile: str) -> bool:
+def workload_from_profile(
+    task_profile: str,
+    context_length: int,
+    vision_workload: Workload | None,
+) -> Workload | None:
+    if vision_workload is not None:
+        return vision_workload.normalized()
+    task = PROFILE_TO_WORKLOAD_TASK.get(task_profile.lower())
+    if task is None:
+        return None
+    image_count = 0 if task in {"audio", "video"} else 1
+    video_frames = 8 if task == "video" else 0
+    audio_seconds = 30.0 if task == "audio" else 0.0
+    return Workload(
+        task=task,
+        context_length=context_length,
+        image_count=image_count,
+        video_frames=video_frames,
+        audio_seconds=audio_seconds,
+    ).normalized()
+
+
+def supports_workload(capabilities: ModelCapabilities, workload: Workload) -> bool:
+    task = workload.task
+    if task == "image_qa":
+        return capabilities.image
+    if task == "ocr":
+        return capabilities.ocr or capabilities.document
+    if task == "document":
+        return capabilities.document or capabilities.ocr
+    if task == "chart":
+        return capabilities.chart or capabilities.document
+    if task == "video":
+        return capabilities.video
+    if task == "audio":
+        return capabilities.audio
+    return capabilities.image or capabilities.video or capabilities.audio
+
+
+def name_matches_workload(model: ModelInfo, workload: Workload) -> bool:
+    text = " ".join(
+        [model.id, model.hf_pipeline_tag or "", *model.tags, model.architecture]
+    ).lower()
+    task = workload.task
+    if task == "image_qa":
+        return "vision" in detect_specializations(model)
+    if task == "ocr":
+        return bool(re.search(r"\bocr\b|docvqa|document", text))
+    if task == "document":
+        return bool(re.search(r"document|docvqa|pdf|receipt|invoice", text))
+    if task == "chart":
+        return bool(re.search(r"chart|plotqa|figureqa|table", text))
+    if task == "video":
+        return "video" in text or "onevision" in text
+    if task == "audio":
+        return "audio" in text or "speech" in text
+    return "vision" in detect_specializations(model) or "audio" in text
+
+
+def matches_profile(
+    model: ModelInfo,
+    task_profile: str,
+    workload: Workload | None = None,
+) -> bool:
+    if task_profile.lower() == "any":
+        return True
+    if workload is not None:
+        return supports_workload(model.capabilities, workload) or name_matches_workload(
+            model,
+            workload,
+        )
     profile = task_profile.lower()
     tags = detect_specializations(model)
     if profile == "any":
@@ -367,6 +504,35 @@ def matches_profile(model: ModelInfo, task_profile: str) -> bool:
     if profile == "general":
         return len(tags) == 0
     return profile in tags
+
+
+def task_self_reported_score(
+    model: ModelInfo,
+    workload: Workload | None,
+) -> float | None:
+    if not isinstance(model.benchmark_scores, dict):
+        return None
+    keys = TASK_SCORE_KEYS[workload.task] if workload else ("hf_eval",)
+    values = [
+        float(model.benchmark_scores[key])
+        for key in keys
+        if isinstance(model.benchmark_scores.get(key), (int, float))
+        and model.benchmark_scores[key] > 0
+    ]
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def benchmark_scores_for_workload(
+    benchmark_scores: dict[str, float] | None,
+    workload: Workload | None,
+) -> dict[str, float]:
+    if not benchmark_scores:
+        return {}
+    if workload is not None and workload.task in {"video", "audio"}:
+        return {}
+    return benchmark_scores
 
 
 def effective_params_b(model: ModelInfo) -> float:
@@ -507,6 +673,7 @@ def compute_quality_score(
     benchmark_avg: float | None = None,
     benchmark_source: str = "none",
     freshness_weight: float = 1.0,
+    workload: Workload | None = None,
 ) -> float:
 
     params_b = model.parameter_count / 1e9
@@ -528,7 +695,12 @@ def compute_quality_score(
     is_self_reported = benchmark_source == "self_reported"
     is_inherited = benchmark_source in {"variant", "base_model", "line_interp"}
 
-    bench_weight = SOURCE_WEIGHTS.get(benchmark_source, 0.0)
+    source_weights = (
+        TASK_SOURCE_WEIGHTS.get(workload.task, SOURCE_WEIGHTS)
+        if workload
+        else SOURCE_WEIGHTS
+    )
+    bench_weight = source_weights.get(benchmark_source, 0.0)
     benchmark_score = 0.0
     if has_benchmark:
         raw = min(100.0, benchmark_avg)
@@ -654,7 +826,8 @@ def rank_models(
     min_params_b: float | None = None,
     evidence_filter: str = "any",
     fit_filter: str = "any",
-    vision_workload: VisionWorkload | None = None,
+    vision_workload: Workload | None = None,
+    workload: Workload | None = None,
     freshness_weight: float = 1.0,
 ) -> list[CompatibilityResult]:
     # Main rank pass. Scores every candidate against hardware and evidence.
@@ -662,8 +835,11 @@ def rank_models(
     results: list[CompatibilityResult] = []
     gguf_only_backend = is_gguf_only_backend(hardware)
     applied_freshness_weight = max(0.0, min(1.0, freshness_weight))
-    if vision_workload is None and task_profile.lower() == "vision":
-        vision_workload = VisionWorkload(context_length=context_length)
+    workload = workload_from_profile(
+        task_profile,
+        context_length,
+        workload or vision_workload,
+    )
 
 
     family_max_downloads: dict[str, int] = {}
@@ -684,9 +860,10 @@ def rank_models(
 
     sorted_models = sorted(models, key=lambda m: m.downloads, reverse=True)
 
-    if benchmark_scores:
-        bench_ci_index, bench_line_index = build_score_index(benchmark_scores)
-        bench_line_buckets = build_line_bucket_index(benchmark_scores)
+    workload_benchmarks = benchmark_scores_for_workload(benchmark_scores, workload)
+    if workload_benchmarks:
+        bench_ci_index, bench_line_index = build_score_index(workload_benchmarks)
+        bench_line_buckets = build_line_bucket_index(workload_benchmarks)
     else:
         bench_ci_index, bench_line_index = {}, {}
         bench_line_buckets = {}
@@ -700,7 +877,7 @@ def rank_models(
     for model in sorted_models:
         if is_excluded_model(model.id):
             continue
-        if not matches_profile(model, task_profile):
+        if not matches_profile(model, task_profile, workload):
             continue
         if min_params_b is not None and knowledge_capacity_b(model) < min_params_b:
             continue
@@ -712,21 +889,17 @@ def rank_models(
         fid = model.family_id
         model_backends = model_artifact_backends(model)
 
-        self_reported = None
-        if isinstance(model.benchmark_scores, dict):
-            v = model.benchmark_scores.get("hf_eval")
-            if isinstance(v, (int, float)) and v > 0:
-                self_reported = float(v)
+        self_reported = task_self_reported_score(model, workload)
 
         bench_evidence = BenchmarkEvidence(score=None, confidence=0.0, source="none")
-        if benchmark_scores or self_reported is not None:
+        if workload_benchmarks or self_reported is not None:
             actual_params_b = (
                 (model.parameter_count or 0) / 1e9 if model.parameter_count else None
             )
             bench_evidence = lookup_benchmark_evidence(
                 model.id,
                 model.base_model,
-                benchmark_scores or {},
+                workload_benchmarks,
                 ci_index=bench_ci_index,
                 line_index=bench_line_index,
                 line_bucket_index=bench_line_buckets,
@@ -764,7 +937,7 @@ def rank_models(
                 variant,
                 hardware,
                 context_length,
-                vision_workload=vision_workload,
+                vision_workload=workload,
             )
             if not compat.can_run:
                 continue
@@ -772,7 +945,7 @@ def rank_models(
                 continue
 
             tok_per_sec = estimate_tok_per_sec(
-                model, variant, best_gpu, compat.fit_type
+                model, variant, best_gpu, compat.fit_type, workload=workload
             )
             if compat.uses_multi_gpu:
                 tok_per_sec *= MULTI_GPU_SPEED_FACTOR
@@ -824,6 +997,7 @@ def rank_models(
                 benchmark_avg=bench_avg,
                 benchmark_source=bench_evidence.source,
                 freshness_weight=applied_freshness_weight,
+                workload=workload,
             )
             compat.ranking_freshness_weight = applied_freshness_weight
             compat.quality_score = min(

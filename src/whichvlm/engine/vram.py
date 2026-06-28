@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from whichvlm.constants import FRAMEWORK_OVERHEAD_BYTES
 from whichvlm.engine.quantization import estimate_weight_bytes
-from whichvlm.engine.workload import VisionWorkload
+from whichvlm.engine.workload import Workload
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # Memory model. Adds weights, cache, activations, and vision overhead.
@@ -69,12 +69,13 @@ def is_vlm(model: ModelInfo) -> bool:
     )
 
 
-def estimate_vision_overhead(model: ModelInfo, workload: VisionWorkload | None) -> int:
-    # Vision add-on. Prices encoder, projector, and image prefill cost.
+def estimate_vision_overhead(model: ModelInfo, workload: Workload | None) -> int:
+    # Multimodal add-on. Prices encoder, projector, and media prefill cost.
     if workload is None:
         return 0
     wl = workload.normalized()
-    if wl.image_count == 0:
+    visual_inputs = wl.image_count + wl.video_frames
+    if visual_inputs == 0 and wl.audio_seconds == 0:
         return 0
     if not is_vlm(model):
         return 0
@@ -86,25 +87,35 @@ def estimate_vision_overhead(model: ModelInfo, workload: VisionWorkload | None) 
             min(max(model.parameter_count * 0.18, 300_000_000), 4_000_000_000)
         )
 
+    batch_size = wl.batch_size
     image_scale = (wl.image_size / 448) ** 2
     vision_weights = int(vision_params * 2)
     projector_scratch = int(128 * 1024**2 + vision_params * 0.15)
-    image_tokens = max(1, (wl.image_size // 14) ** 2) * wl.image_count
+    image_tokens = max(1, (wl.image_size // 14) ** 2) * visual_inputs
     image_token_scratch = int(image_tokens * max(effective_p / 1e9, 1.0) * 96 * 1024)
-    prefill = int((192 * 1024**2 + effective_p * 0.008) * image_scale * wl.image_count)
-    return vision_weights + projector_scratch + image_token_scratch + prefill
+    prefill = int((192 * 1024**2 + effective_p * 0.008) * image_scale * visual_inputs)
+    audio = int((64 * 1024**2 + wl.audio_seconds * 2 * 1024**2) * batch_size)
+    return (
+        vision_weights
+        + projector_scratch
+        + (image_token_scratch + prefill) * batch_size
+        + audio
+    )
 
 
 def estimate_vram(
     model: ModelInfo,
     variant: GGUFVariant | None,
     context_length: int = 4096,
-    vision_workload: VisionWorkload | None = None,
+    vision_workload: Workload | None = None,
 ) -> int:
     # Main memory pass. Returns total runtime bytes for one candidate.
+    workload = vision_workload.normalized() if vision_workload else None
+    effective_context = workload.context_length if workload else context_length
+    batch_size = workload.batch_size if workload else 1
     weights = estimate_weight_bytes(model, variant)
-    kv_cache = estimate_kv_cache(model, context_length)
-    activation = activation_bytes(model, context_length)
-    vision = estimate_vision_overhead(model, vision_workload)
+    kv_cache = estimate_kv_cache(model, effective_context) * batch_size
+    activation = activation_bytes(model, effective_context) * batch_size
+    vision = estimate_vision_overhead(model, workload)
     framework = FRAMEWORK_OVERHEAD_BYTES
     return weights + kv_cache + activation + vision + framework

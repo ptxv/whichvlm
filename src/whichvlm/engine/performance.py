@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from whichvlm.engine.quantization import estimate_weight_bytes
 from whichvlm.engine.quantization import effective_quant_type
+from whichvlm.engine.workload import Workload
 from whichvlm.hardware.types import GPUInfo
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
@@ -136,7 +137,12 @@ def is_vlm_model(model: ModelInfo) -> bool:
     )
 
 
-def vlm_decode_factor(model: ModelInfo, gpu: GPUInfo | None, fit_type: str) -> float:
+def vlm_decode_factor(
+    model: ModelInfo,
+    gpu: GPUInfo | None,
+    fit_type: str,
+    workload: Workload | None = None,
+) -> float:
     if not is_vlm_model(model):
         return 1.0
     factor = 0.78
@@ -144,6 +150,17 @@ def vlm_decode_factor(model: ModelInfo, gpu: GPUInfo | None, fit_type: str) -> f
         factor *= 0.90
     if gpu is not None and gpu.vendor == "apple":
         factor *= 0.95
+    if workload is not None:
+        wl = workload.normalized()
+        visual_inputs = wl.image_count + wl.video_frames
+        if visual_inputs > 1:
+            factor /= 1.0 + 0.08 * (visual_inputs - 1)
+        if wl.image_size > 448:
+            factor /= (wl.image_size / 448) ** 0.35
+        if wl.audio_seconds > 0:
+            factor /= 1.0 + wl.audio_seconds / 600.0
+        if wl.batch_size > 1:
+            factor /= wl.batch_size**0.25
     return factor
 
 
@@ -230,6 +247,7 @@ def estimate_tok_per_sec(
     variant: GGUFVariant | None,
     gpu: GPUInfo | None,
     fit_type: str = "full_gpu",
+    workload: Workload | None = None,
 ) -> float:
     # Main speed pass. Estimates decode rate for one model and backend.
     if gpu is None or fit_type == "cpu_only":
@@ -242,7 +260,7 @@ def estimate_tok_per_sec(
 
         quant_factor = quant_efficiency(model, variant) / DEFAULT_QUANT_EFFICIENCY
         text_speed = max(0.3, 18.0 / max(params_b, 0.5) * quant_factor)
-        return text_speed * vlm_decode_factor(model, gpu, fit_type)
+        return text_speed * vlm_decode_factor(model, gpu, fit_type, workload)
 
     model_size = estimate_weight_bytes(model, variant)
 
@@ -268,4 +286,4 @@ def estimate_tok_per_sec(
         else:
             efficiency *= 0.45
 
-    return theoretical * efficiency * vlm_decode_factor(model, gpu, fit_type)
+    return theoretical * efficiency * vlm_decode_factor(model, gpu, fit_type, workload)

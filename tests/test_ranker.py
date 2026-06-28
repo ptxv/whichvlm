@@ -1,7 +1,13 @@
 from whichvlm.engine.quantization import effective_quant_type
 from whichvlm.engine.ranker import partial_offload_quality_factor, rank_models
+from whichvlm.engine.workload import Workload
 from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
+from whichvlm.models.types import (
+    GGUFVariant,
+    ModelArtifact,
+    ModelCapabilities,
+    ModelInfo,
+)
 
 
 def make_hardware(
@@ -403,6 +409,63 @@ def test_general_profile_excludes_specialized_models():
     )
     assert len(results) == 1
     assert "Coder" not in results[0].model.id
+
+
+def test_ocr_workload_prioritizes_ocr_evidence():
+    generic = ModelInfo(
+        id="org/Generic-VL-7B",
+        family_id="generic-vl-7b",
+        name="Generic-VL-7B",
+        parameter_count=7_000_000_000,
+        downloads=1000,
+        likes=100,
+        capabilities=ModelCapabilities(image=True, ocr=True),
+        benchmark_scores={"hf_eval": 90.0},
+    )
+    ocr_model = ModelInfo(
+        id="org/OCR-VL-7B",
+        family_id="ocr-vl-7b",
+        name="OCR-VL-7B",
+        parameter_count=7_000_000_000,
+        downloads=1000,
+        likes=100,
+        capabilities=ModelCapabilities(image=True, ocr=True, document=True),
+        benchmark_scores={"hf_ocr": 80.0},
+    )
+
+    results = rank_models(
+        [generic, ocr_model],
+        make_hardware(),
+        top_n=2,
+        task_profile="ocr",
+        workload=Workload(task="ocr", context_length=4096, image_count=1),
+    )
+
+    assert results[0].model.id == "org/OCR-VL-7B"
+    assert results[0].benchmark_source == "self_reported"
+
+
+def test_video_workload_does_not_inherit_generic_benchmark_scores():
+    video_model = ModelInfo(
+        id="org/Video-VL-7B",
+        family_id="video-vl-7b",
+        name="Video-VL-7B",
+        parameter_count=7_000_000_000,
+        downloads=1000,
+        likes=100,
+        capabilities=ModelCapabilities(image=True, video=True),
+    )
+
+    results = rank_models(
+        [video_model],
+        make_hardware(),
+        top_n=1,
+        benchmark_scores={"org/Video-VL-7B": 99.0},
+        task_profile="video",
+        workload=Workload(task="video", context_length=4096, video_frames=8),
+    )
+
+    assert results[0].benchmark_source == "none"
 
 
 def test_require_direct_top_prioritizes_direct_benchmark():

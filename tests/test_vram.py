@@ -1,5 +1,5 @@
 from whichvlm.engine.vram import estimate_kv_cache, estimate_vram
-from whichvlm.engine.workload import VisionWorkload
+from whichvlm.engine.workload import VisionWorkload, Workload
 from whichvlm.models.types import GGUFVariant, ModelComponent, ModelInfo
 
 
@@ -142,3 +142,29 @@ def test_vision_component_sizes_increase_vlm_overhead():
         None,
         vision_workload=workload,
     )
+
+
+def test_video_frames_and_batch_size_increase_vlm_vram():
+    model = make_model(7_000_000_000, hf_pipeline_tag="image-text-to-text")
+    variant = GGUFVariant(
+        filename="model-Q4_K_M.gguf", quant_type="Q4_K_M", file_size_bytes=4_000_000_000
+    )
+
+    one_image = estimate_vram(
+        model,
+        variant,
+        vision_workload=Workload(task="image_qa", image_count=1, context_length=4096),
+    )
+    video_batch = estimate_vram(
+        model,
+        variant,
+        vision_workload=Workload(
+            task="video",
+            image_count=0,
+            video_frames=16,
+            batch_size=2,
+            context_length=4096,
+        ),
+    )
+
+    assert video_batch > one_image

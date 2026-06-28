@@ -5,6 +5,7 @@ import re
 from whichvlm.models.types import (
     GGUFVariant,
     ModelArtifact,
+    ModelCapabilities,
     ModelComponent,
     ModelInfo,
     ModelLineage,
@@ -275,6 +276,38 @@ def component_from_dict(data: dict) -> ModelComponent:
         repo_id=data.get("repo_id", ""),
         parameter_count=data.get("parameter_count"),
         quantization=data.get("quantization"),
+    )
+
+
+def capabilities_to_dict(capabilities: ModelCapabilities) -> dict:
+    return {
+        "image": capabilities.image,
+        "video": capabilities.video,
+        "audio": capabilities.audio,
+        "ocr": capabilities.ocr,
+        "document": capabilities.document,
+        "chart": capabilities.chart,
+        "multi_image": capabilities.multi_image,
+        "tool_use": capabilities.tool_use,
+        "supported_languages": capabilities.supported_languages,
+    }
+
+
+def capabilities_from_dict(data: dict | None) -> ModelCapabilities:
+    if not isinstance(data, dict):
+        return ModelCapabilities()
+    return ModelCapabilities(
+        image=bool(data.get("image", False)),
+        video=bool(data.get("video", False)),
+        audio=bool(data.get("audio", False)),
+        ocr=bool(data.get("ocr", False)),
+        document=bool(data.get("document", False)),
+        chart=bool(data.get("chart", False)),
+        multi_image=bool(data.get("multi_image", False)),
+        tool_use=bool(data.get("tool_use", False)),
+        supported_languages=[
+            str(v) for v in data.get("supported_languages", []) if isinstance(v, str)
+        ],
     )
 
 
