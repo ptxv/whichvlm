@@ -1,6 +1,7 @@
 import pytest
 
 from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
+from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from whichvlm.runtime import (
     RuntimeUnsupportedError,
     generate_run_script,
@@ -11,11 +12,12 @@ from whichvlm.runtime import (
 
 def vlm_model(**kwargs) -> ModelInfo:
     return ModelInfo(
-        id="org/Test-VL-7B",
-        family_id="test-vl",
-        name="Test-VL-7B",
-        parameter_count=7_000_000_000,
-        hf_pipeline_tag="image-text-to-text",
+        id=kwargs.pop("id", "Qwen/Qwen2.5-VL-7B-Instruct"),
+        family_id=kwargs.pop("family_id", "qwen-vl"),
+        name=kwargs.pop("name", "Qwen2.5-VL-7B-Instruct"),
+        parameter_count=kwargs.pop("parameter_count", 7_000_000_000),
+        architecture=kwargs.pop("architecture", "qwen2"),
+        hf_pipeline_tag=kwargs.pop("hf_pipeline_tag", "image-text-to-text"),
         **kwargs,
     )
 
@@ -38,8 +40,20 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
     assert script_type == "transformers_vlm"
     assert "AutoProcessor" in script
     assert "AutoModelForImageTextToText" in script
-    assert 'image_path = \'/tmp/image.png\'' in script
+    assert "image_path = '/tmp/image.png'" in script
     assert '{"type": "image", "image": image}' in script
+
+
+def test_unknown_transformers_vlm_is_not_claimed_supported():
+    model = vlm_model(
+        id="org/Unknown-VL-7B",
+        family_id="unknown-vl",
+        name="Unknown-VL-7B",
+        architecture="unknownvl",
+    )
+
+    with pytest.raises(RuntimeUnsupportedError, match="No supported run backend"):
+        generate_run_script(model, None, 4096, False, image_path="/tmp/image.png")
 
 
 def test_gguf_vlm_runtime_requires_projector_artifact():
@@ -129,3 +143,69 @@ def test_mlx_vlm_script_uses_mlx_vlm_runner():
     assert "except ImportError:" in script
     assert "except Exception:" not in script
     assert "[image_path]" in script
+
+
+def linux_cuda_hardware() -> HardwareInfo:
+    return HardwareInfo(
+        os="linux",
+        gpus=[
+            GPUInfo(
+                name="NVIDIA Test GPU",
+                vendor="nvidia",
+                vram_bytes=24_000_000_000,
+                backend_capabilities=[BackendCapability("cuda", True)],
+            )
+        ],
+    )
+
+
+def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
+    model = vlm_model()
+
+    deps, script_type = resolve_model_deps(
+        model,
+        None,
+        backend_name="vllm",
+        hardware=linux_cuda_hardware(),
+    )
+    script = generate_run_script(
+        model,
+        None,
+        4096,
+        False,
+        image_path="/tmp/image.png",
+        backend_name="vllm",
+        hardware=linux_cuda_hardware(),
+    )
+
+    assert deps == ["vllm"]
+    assert script_type == "vllm"
+    assert "from vllm import LLM, SamplingParams" in script
+    assert "llm.chat" in script
+    assert "image_data_url" in script
+
+
+def test_sglang_vlm_backend_uses_offline_engine():
+    model = vlm_model()
+
+    deps, script_type = resolve_model_deps(
+        model,
+        None,
+        backend_name="sglang",
+        hardware=linux_cuda_hardware(),
+    )
+    script = generate_run_script(
+        model,
+        None,
+        4096,
+        False,
+        image_path="/tmp/image.png",
+        backend_name="sglang",
+        hardware=linux_cuda_hardware(),
+    )
+
+    assert deps == ["sglang"]
+    assert script_type == "sglang"
+    assert "from sglang import Engine" in script
+    assert "engine.generate" in script
+    assert "image_data=image_path" in script

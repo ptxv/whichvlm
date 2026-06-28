@@ -1068,17 +1068,17 @@ def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
             )
         ]
 
-    def fake_generate_run_script(model, variant, context_length, cpu_only):
-        captured["model_id"] = model.id
-        captured["variant"] = variant
-        return "print('ok')"
-
-    class Completed:
-        returncode = 0
-
-    def fake_run(cmd):
-        captured["cmd"] = cmd
-        return Completed()
+    def fake_run_request(request, backend_name=None):
+        captured["model_id"] = request.model.id
+        captured["variant"] = request.artifact
+        deps, _ = cli_mod.resolve_model_deps(
+            request.model,
+            request.artifact,
+            backend_name,
+            request.hardware,
+        )
+        captured["cmd"] = deps
+        return 0
 
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
     monkeypatch.setattr(
@@ -1089,8 +1089,7 @@ def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
     )
     monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
     monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
-    monkeypatch.setattr(cli_mod, "generate_run_script", fake_generate_run_script)
-    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(cli_mod, "run_request", fake_run_request)
 
     result = CliRunner().invoke(app, ["run", "--quant", "Q4_K_M"])
 

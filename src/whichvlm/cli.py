@@ -13,10 +13,13 @@ from whichvlm.engine.workload import VisionWorkload
 from whichvlm.hardware.types import HardwareInfo, ensure_backend_capabilities
 from whichvlm.models.types import GGUFVariant, ModelInfo
 from whichvlm.runtime import (
+    RuntimeRequest,
     RuntimeUnsupportedError,
     generate_run_script,
     requires_image,
     resolve_model_deps,
+    run_request,
+    select_backend,
 )
 from whichvlm.utils import current_version, CONTEXT_LENGTH
 
@@ -1007,12 +1010,15 @@ def run(
     image: Optional[str] = typer.Option(
         None, "--image", "-i", help="Image path for VLM runners"
     ),
+    backend_name: Optional[str] = typer.Option(
+        None,
+        "--backend",
+        "-b",
+        help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
+    ),
 ):
 
-    import os
     import shutil
-    import subprocess
-    import tempfile
 
     if not shutil.which("uv"):
         console.print("[red]uv is required.[/]")
@@ -1027,6 +1033,7 @@ def run(
         progress.remove_task(task)
 
     variant = None
+    hardware = None
     if model_name:
         model = resolve_model_match(models, model_name)
     else:
@@ -1103,23 +1110,22 @@ def run(
             )
             raise typer.Exit(code=1)
 
+    assert model is not None
     if variant is None:
         variant = select_gguf_variant(model, quant)
     if requires_image(model) and image is None:
         console.print("[red]Error:[/] VLM models require --image PATH.")
         raise typer.Exit(code=1)
-    deps, script_type = resolve_model_deps(model, variant)
     try:
-        if image is None:
-            script = generate_run_script(model, variant, context_length, cpu_only)
-        else:
-            script = generate_run_script(
-                model,
-                variant,
-                context_length,
-                cpu_only,
-                image_path=image,
-            )
+        if hardware is None and backend_name and backend_name != "auto":
+            from whichvlm.hardware.detector import detect_hardware
+
+            hardware = detect_hardware()
+            if cpu_only:
+                hardware.gpus = []
+        backend = select_backend(model, variant, hardware, backend_name)
+        deps = backend.dependencies(model, variant)
+        _, script_type = resolve_model_deps(model, variant, backend_name, hardware)
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(code=1)
@@ -1128,18 +1134,19 @@ def run(
     console.print(f"\n[bold green]Running {model.id}[/] [dim]({fmt})[/]")
     console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]\n")
 
-    fd, script_path = tempfile.mkstemp(suffix=".py", prefix="whichvlm_run_")
     try:
-        with os.fdopen(fd, "w") as f:
-            f.write(script)
-        cmd = ["uv", "run", "--no-project"]
-        for dep in deps:
-            cmd.extend(["--with", dep])
-        cmd.append(script_path)
-        result = subprocess.run(cmd)
-        raise typer.Exit(code=result.returncode)
-    finally:
-        os.unlink(script_path)
+        request = RuntimeRequest(
+            model=model,
+            artifact=variant,
+            context_length=context_length,
+            cpu_only=cpu_only,
+            image_path=image,
+            hardware=hardware,
+        )
+        raise typer.Exit(code=run_request(request, backend.name))
+    except RuntimeUnsupportedError as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -1153,6 +1160,12 @@ def snippet(
     refresh: bool = typer.Option(False, "--refresh", help="Refresh model metadata"),
     image: Optional[str] = typer.Option(
         None, "--image", "-i", help="Image path for VLM snippets"
+    ),
+    backend_name: Optional[str] = typer.Option(
+        None,
+        "--backend",
+        "-b",
+        help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
     ),
 ):
 
@@ -1174,15 +1187,35 @@ def snippet(
         model = gguf_models[0]
 
     variant = select_gguf_variant(model, quant)
-    deps, _ = resolve_model_deps(model, variant)
     if requires_image(model) and image is None:
         console.print("[red]Error:[/] VLM models require --image PATH.")
         raise typer.Exit(code=1)
     try:
+        hardware = None
+        if backend_name and backend_name != "auto":
+            from whichvlm.hardware.detector import detect_hardware
+
+            hardware = detect_hardware()
+        deps, _ = resolve_model_deps(model, variant, backend_name, hardware)
         if image is None:
-            code = generate_run_script(model, variant, 4096, False)
+            code = generate_run_script(
+                model,
+                variant,
+                4096,
+                False,
+                backend_name=backend_name,
+                hardware=hardware,
+            )
         else:
-            code = generate_run_script(model, variant, 4096, False, image_path=image)
+            code = generate_run_script(
+                model,
+                variant,
+                4096,
+                False,
+                image_path=image,
+                backend_name=backend_name,
+                hardware=hardware,
+            )
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(code=1)
