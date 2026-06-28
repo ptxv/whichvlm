@@ -112,11 +112,11 @@ def validate_output_flags(json_output: bool, markdown_output: bool) -> None:
 
 
 def validate_profile(profile: str) -> str:
-    valid = {"general", "coding", "vision", "math", "any"}
+    valid = {"general", "coding", "vision", "ocr", "math", "any"}
     p = profile.lower()
     if p not in valid:
         console.print(
-            "[red]Error:[/] --profile must be one of: general, coding, vision, math, any."
+            "[red]Error:[/] --profile must be one of: general, coding, vision, ocr, math, any."
         )
         raise typer.Exit(code=1)
     return p
@@ -350,7 +350,7 @@ def auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float |
 
 
 def include_vision_candidates(profile: str) -> bool:
-    return profile.lower() in {"vision", "any"}
+    return profile.lower() in {"vision", "ocr", "any"}
 
 
 def vision_workload_for_profile(
@@ -360,7 +360,7 @@ def vision_workload_for_profile(
     image_size: int = 448,
     context_length: int = 4096,
 ) -> VisionWorkload | None:
-    if profile.lower() not in {"vision", "any"}:
+    if profile.lower() not in {"vision", "ocr", "any"}:
         return None
     return VisionWorkload(
         image_count=image_count,
@@ -478,7 +478,7 @@ def main(
     profile: str = typer.Option(
         "vision",
         "--profile",
-        help="Ranking profile: general | coding | vision | math | any",
+        help="Ranking profile: general | coding | vision | ocr | math | any",
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     markdown_output: bool = typer.Option(
@@ -902,7 +902,9 @@ def upgrade(
     ),
     top: int = typer.Option(3, "--top", "-n", help="Best-N models to compare per GPU"),
     profile: str = typer.Option(
-        "vision", "--profile", help="Ranking profile: general | coding | vision | math | any"
+        "vision",
+        "--profile",
+        help="Ranking profile: general | coding | vision | ocr | math | any",
     ),
     image_count: int = typer.Option(
         1,

@@ -29,7 +29,7 @@ from whichvlm.models.benchmark import (
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # Ranking core. Expands variants, scores fit, and orders final picks.
-RANKING_ALGORITHM_VERSION = "2026.06.22.1"
+RANKING_ALGORITHM_VERSION = "ranker-v2"
 
 LINEAGE_REGEX: dict[str, list[tuple[re.Pattern[str], int]]] = {
     family: [(re.compile(pat), idx) for pat, idx in entries]
@@ -95,14 +95,45 @@ def partial_offload_quality_factor(model: ModelInfo, offload_ratio: float) -> fl
     return factor
 
 
+# Calibration policy. Benchmarks drive the quality core, but inherited and
+# self-reported evidence are discounted before hardware, speed, and source
+# signals are added.
 SOURCE_WEIGHTS: dict[str, float] = {
-    "direct": 0.62,
-    "base_model": 0.55,
-    "variant": 0.50,
-    "line_interp": 0.40,
-    "self_reported": 0.30,
+    "direct": 0.64,
+    "base_model": 0.50,
+    "variant": 0.48,
+    "line_interp": 0.34,
+    "self_reported": 0.22,
     "none": 0.0,
 }
+
+EVIDENCE_CORE_FACTORS: dict[str, float] = {
+    "direct": 1.00,
+    "base_model": 0.74,
+    "variant": 0.72,
+    "line_interp": 0.62,
+    "self_reported": 0.45,
+    "none": 0.52,
+}
+
+TASK_EVIDENCE_ADJUSTMENT: dict[str, float] = {
+    "direct": 3.0,
+    "base_model": -2.0,
+    "variant": -2.0,
+    "line_interp": -4.0,
+    "self_reported": -6.0,
+    "none": -5.0,
+}
+OCR_EVIDENCE_ADJUSTMENT: dict[str, float] = {
+    **TASK_EVIDENCE_ADJUSTMENT,
+    "direct": 4.0,
+    "base_model": -3.0,
+    "variant": -3.0,
+    "line_interp": -5.0,
+    "self_reported": -7.0,
+    "none": -6.0,
+}
+RESTRICTED_ACCESS = frozenset({"gated", "private", "restricted"})
 
 
 SYNTHETIC_QUANTS = ("Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0")
@@ -349,6 +380,11 @@ def detect_specializations(model: ModelInfo) -> set[str]:
     if re.search(r"(coder|codegen|starcoder|program|coding)", lower):
         tags.add("coding")
     if re.search(
+        r"(^|[-_/])(ocr|docvqa|document)([-_/]|$)|text[-_ ]?recognition",
+        lower,
+    ):
+        tags.update({"ocr", "vision"})
+    if re.search(
         r"(^|[-_/])(vl|vision|multimodal|llava|image)([-_/]|$)|"
         r"image-text-to-text|visual-question-answering|image-to-text|internvl|pixtral",
         lower,
@@ -496,6 +532,25 @@ def backend_priority_bonus(
     return 0.0
 
 
+def task_evidence_adjustment(benchmark_source: str, task_profile: str) -> float:
+    profile = task_profile.lower()
+    if profile == "ocr":
+        return OCR_EVIDENCE_ADJUSTMENT.get(benchmark_source, 0.0)
+    if profile in {"coding", "math", "vision"}:
+        return TASK_EVIDENCE_ADJUSTMENT.get(benchmark_source, 0.0)
+    return 0.0
+
+
+def artifact_access_penalty(model: ModelInfo) -> float:
+    if model.access.lower() in RESTRICTED_ACCESS:
+        return -4.0
+    if any(
+        artifact.access.lower() in RESTRICTED_ACCESS for artifact in model.artifacts
+    ):
+        return -4.0
+    return 0.0
+
+
 def compute_quality_score(
     model: ModelInfo,
     variant: GGUFVariant | None,
@@ -507,6 +562,7 @@ def compute_quality_score(
     benchmark_avg: float | None = None,
     benchmark_source: str = "none",
     freshness_weight: float = 1.0,
+    task_profile: str = "general",
 ) -> float:
 
     params_b = model.parameter_count / 1e9
@@ -526,8 +582,6 @@ def compute_quality_score(
     has_benchmark = benchmark_avg is not None and benchmark_avg > 0
     is_direct = benchmark_source == "direct"
     is_self_reported = benchmark_source == "self_reported"
-    is_inherited = benchmark_source in {"variant", "base_model", "line_interp"}
-
     bench_weight = SOURCE_WEIGHTS.get(benchmark_source, 0.0)
     benchmark_score = 0.0
     if has_benchmark:
@@ -538,13 +592,8 @@ def compute_quality_score(
     quant_penalty = quant_quality_penalty(model, variant)
     quality_core = (benchmark_score + size_score) * (1 - quant_penalty)
 
-
-    if not has_benchmark:
-        quality_core *= 0.55
-    elif is_self_reported:
-        quality_core *= 0.55
-    elif is_inherited:
-        quality_core *= 0.78
+    evidence_key = benchmark_source if has_benchmark else "none"
+    quality_core *= EVIDENCE_CORE_FACTORS.get(evidence_key, 0.52)
 
 
     if fit_type == "partial_offload":
@@ -636,6 +685,8 @@ def compute_quality_score(
             + pop_score
             + source_bonus
             + gen_bonus
+            + task_evidence_adjustment(evidence_key, task_profile)
+            + artifact_access_penalty(model)
             + derivative_penalty,
         ),
     )
@@ -662,7 +713,7 @@ def rank_models(
     results: list[CompatibilityResult] = []
     gguf_only_backend = is_gguf_only_backend(hardware)
     applied_freshness_weight = max(0.0, min(1.0, freshness_weight))
-    if vision_workload is None and task_profile.lower() == "vision":
+    if vision_workload is None and task_profile.lower() in {"vision", "ocr"}:
         vision_workload = VisionWorkload(context_length=context_length)
 
 
@@ -824,6 +875,7 @@ def rank_models(
                 benchmark_avg=bench_avg,
                 benchmark_source=bench_evidence.source,
                 freshness_weight=applied_freshness_weight,
+                task_profile=task_profile,
             )
             compat.ranking_freshness_weight = applied_freshness_weight
             compat.quality_score = min(
