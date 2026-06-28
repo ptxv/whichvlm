@@ -1,6 +1,11 @@
 from whichvlm.engine.vram import estimate_kv_cache, estimate_vram
 from whichvlm.engine.workload import VisionWorkload, Workload
-from whichvlm.models.types import GGUFVariant, ModelComponent, ModelInfo
+from whichvlm.models.types import (
+    GGUFVariant,
+    ModelCapabilities,
+    ModelComponent,
+    ModelInfo,
+)
 
 
 def make_model(params: int, **kwargs) -> ModelInfo:
@@ -168,3 +173,57 @@ def test_video_frames_and_batch_size_increase_vlm_vram():
     )
 
     assert video_batch > one_image
+
+
+def test_audio_workload_increases_audio_model_vram():
+    model = make_model(
+        7_000_000_000,
+        capabilities=ModelCapabilities(audio=True),
+    )
+    variant = GGUFVariant(
+        filename="model-Q4_K_M.gguf", quant_type="Q4_K_M", file_size_bytes=4_000_000_000
+    )
+
+    text_only = estimate_vram(model, variant, context_length=4096)
+    audio = estimate_vram(
+        model,
+        variant,
+        vision_workload=Workload(
+            task="audio",
+            audio_seconds=120.0,
+            context_length=4096,
+        ),
+    )
+
+    assert audio > text_only
+
+
+def test_audio_workload_does_not_add_visual_encoder_overhead():
+    model = make_model(
+        7_000_000_000,
+        capabilities=ModelCapabilities(audio=True),
+    )
+    variant = GGUFVariant(
+        filename="model-Q4_K_M.gguf", quant_type="Q4_K_M", file_size_bytes=4_000_000_000
+    )
+    audio = estimate_vram(
+        model,
+        variant,
+        vision_workload=Workload(
+            task="audio",
+            audio_seconds=120.0,
+            context_length=4096,
+        ),
+    )
+    visual = estimate_vram(
+        model,
+        variant,
+        vision_workload=Workload(
+            task="image_qa",
+            image_count=1,
+            context_length=4096,
+        ),
+    )
+
+    assert visual == estimate_vram(model, variant, context_length=4096)
+    assert audio < visual + 1024**3

@@ -67,6 +67,14 @@ SPEED_CONFIDENCE_ORDER = {
     "medium": 1,
     "high": 2,
 }
+MULTIMODAL_PIPELINE_TAGS = {
+    "image-text-to-text",
+    "visual-question-answering",
+    "image-to-text",
+    "video-text-to-text",
+    "audio-text-to-text",
+    "automatic-speech-recognition",
+}
 
 
 def backend_factor(gpu: GPUInfo) -> float:
@@ -119,15 +127,21 @@ def looks_synthetic_gguf(model: ModelInfo, variant: GGUFVariant | None) -> bool:
     return variant.filename == expected
 
 
-def is_vlm_model(model: ModelInfo) -> bool:
-    if model.hf_pipeline_tag in {
-        "image-text-to-text",
-        "visual-question-answering",
-        "image-to-text",
-    }:
+def is_multimodal_model(model: ModelInfo) -> bool:
+    caps = model.capabilities
+    if caps.image or caps.video or caps.audio:
+        return True
+    if model.hf_pipeline_tag in MULTIMODAL_PIPELINE_TAGS:
         return True
     return any(
-        component.role in {"vision_encoder", "projector", "processor"}
+        component.role
+        in {
+            "vision_encoder",
+            "video_encoder",
+            "audio_encoder",
+            "projector",
+            "processor",
+        }
         for component in model.components
     )
 
@@ -138,7 +152,7 @@ def vlm_decode_factor(
     fit_type: str,
     workload: Workload | None = None,
 ) -> float:
-    if not is_vlm_model(model):
+    if not is_multimodal_model(model):
         return 1.0
     factor = 0.78
     if fit_type == "partial_offload":
@@ -222,10 +236,10 @@ def estimate_speed_uncertainty(
             "This is a synthetic GGUF estimate for an official repo, not a measured GGUF file."
         )
 
-    if is_vlm_model(model):
+    if is_multimodal_model(model):
         confidence = lower_speed_confidence(confidence, "medium")
         notes.append(
-            "VLM speed includes a conservative discount for image prefill and projector overhead."
+            "Multimodal speed includes a conservative discount for media prefill and projector overhead."
         )
 
     low_factor, high_factor = SPEED_CONFIDENCE_RANGE_FACTORS[confidence]

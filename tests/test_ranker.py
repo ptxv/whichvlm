@@ -490,6 +490,29 @@ def test_video_workload_does_not_inherit_generic_benchmark_scores():
     assert results[0].benchmark_source == "none"
 
 
+def test_audio_workload_does_not_inherit_generic_benchmark_scores():
+    audio_model = ModelInfo(
+        id="org/Audio-VL-7B",
+        family_id="audio-vl-7b",
+        name="Audio-VL-7B",
+        parameter_count=7_000_000_000,
+        downloads=1000,
+        likes=100,
+        capabilities=ModelCapabilities(audio=True),
+    )
+
+    results = rank_models(
+        [audio_model],
+        make_hardware(),
+        top_n=1,
+        benchmark_scores={"org/Audio-VL-7B": 99.0},
+        task_profile="audio",
+        workload=Workload(task="audio", context_length=4096, audio_seconds=30.0),
+    )
+
+    assert results[0].benchmark_source == "none"
+
+
 def test_require_direct_top_prioritizes_direct_benchmark():
     direct_model = ModelInfo(
         id="Qwen/direct-7b",

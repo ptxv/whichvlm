@@ -7,8 +7,9 @@ from whichvlm.engine.ranker import (
     is_excluded_model,
     rank_models,
 )
+from whichvlm.engine.workload import Workload
 from whichvlm.hardware.types import GPUInfo, HardwareInfo
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from whichvlm.models.types import GGUFVariant, ModelCapabilities, ModelInfo
 
 
 def hw(
@@ -219,9 +220,7 @@ def test_lineage_covers_llama_deepseek_gemma_phi():
 
 
 def test_lineage_covers_t5_variants_without_gemma_collision():
-    assert generation_bonus("google/t5gemma-4b") > generation_bonus(
-        "google/flan-t5-xl"
-    )
+    assert generation_bonus("google/t5gemma-4b") > generation_bonus("google/flan-t5-xl")
     assert generation_bonus("google/t5-gemma-4b") == generation_bonus(
         "google/t5gemma-4b"
     )
@@ -329,7 +328,6 @@ def test_self_reported_outranks_only_when_there_is_nothing_else():
     assert len(results) == 1
     assert results[0].benchmark_status == "self_reported"
 
-
     assert 0 < results[0].quality_score < 60
 
 
@@ -393,7 +391,6 @@ def test_official_org_safetensors_gets_q4km_synthesis():
     chosen = results[0]
     assert chosen.fit_type == "full_gpu"
     assert chosen.gguf_variant is not None
-
 
     assert chosen.gguf_variant.quant_type in {
         "Q3_K_M",
@@ -531,7 +528,36 @@ def test_vlm_speed_estimate_is_discounted_for_image_prefill():
 
     assert vlm_speed < text_speed
     assert confidence == "medium"
-    assert any("image prefill" in note for note in notes)
+    assert any("media prefill" in note for note in notes)
+
+
+def test_audio_speed_estimate_uses_audio_workload():
+    from whichvlm.engine.performance import estimate_tok_per_sec
+
+    model = ModelInfo(
+        id="org/Audio-7B",
+        family_id="audio-7b",
+        name="Audio-7B",
+        parameter_count=7_000_000_000,
+        capabilities=ModelCapabilities(audio=True),
+    )
+    gpu = GPUInfo(
+        name="t-nv",
+        vendor="nvidia",
+        vram_bytes=24 * 1024**3,
+        memory_bandwidth_gbps=1000.0,
+    )
+
+    text_speed = estimate_tok_per_sec(model, None, gpu, "full_gpu")
+    audio_speed = estimate_tok_per_sec(
+        model,
+        None,
+        gpu,
+        "full_gpu",
+        workload=Workload(task="audio", audio_seconds=120.0),
+    )
+
+    assert audio_speed < text_speed
 
 
 def test_vram_kv_cache_scales_with_context():
