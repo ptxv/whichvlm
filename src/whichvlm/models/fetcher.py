@@ -28,7 +28,6 @@ from whichvlm.models.package_graph import (
 )
 from whichvlm.models.types import GGUFVariant, ModelCapabilities, ModelInfo
 
-# HF fetch layer. Turns Hub payloads into rankable model records.
 logger = logging.getLogger(__name__)
 
 HF_API_BASE = "https://huggingface.co/api"
@@ -101,7 +100,6 @@ OFFICIAL_MODEL_ORGS = frozenset(
 
 
 def extract_published_at(data: dict) -> str | None:
-    # Date picker. Prefers created time, then falls back to modified time.
     created = data.get("createdAt")
     if isinstance(created, str) and created:
         return created
@@ -151,7 +149,6 @@ def is_eval_entry_for_keywords(entry: dict, keywords: tuple[str, ...]) -> bool:
 
 
 def is_general_eval_entry(entry: dict) -> bool:
-    # Eval filter. Keeps only rows that help general quality ranking.
     return is_eval_entry_for_keywords(entry, GENERAL_EVAL_KEYWORDS)
 
 
@@ -298,22 +295,23 @@ def infer_model_capabilities(
         ]
     ).lower()
     name_text = model_id.lower()
-    text = f"{metadata_text} {name_text}"
 
-    image = bool(
-        re.search(
-            r"image-text-to-text|visual-question-answering|image-to-text|"
-            r"vision-language|multimodal|vision|vlm|llava|internvl|pixtral",
-            text,
+    def metadata_or_name(pattern: str) -> bool:
+        return bool(re.search(pattern, metadata_text)) or bool(
+            re.search(pattern, name_text)
         )
+
+    image = metadata_or_name(
+        r"image-text-to-text|visual-question-answering|image-to-text|"
+        r"vision-language|multimodal|vision|vlm|llava|internvl|pixtral"
     )
-    video = bool(re.search(r"video|onevision|video-text-to-text", text))
-    audio = bool(re.search(r"audio|speech|whisper|audio-text-to-text", text))
-    ocr = bool(re.search(r"\bocr\b|text recognition|scene text", text))
-    document = bool(re.search(r"document|docvqa|pdf|invoice|receipt|layout", text))
-    chart = bool(re.search(r"chart|plotqa|figureqa|table", text))
-    multi_image = bool(re.search(r"multi[-_ ]?image|interleaved|onevision", text))
-    tool_use = bool(re.search(r"tool[-_ ]?use|function[-_ ]?calling|agent", text))
+    video = metadata_or_name(r"video|onevision|video-text-to-text")
+    audio = metadata_or_name(r"audio|speech|whisper|audio-text-to-text")
+    ocr = metadata_or_name(r"\bocr\b|text recognition|scene text")
+    document = metadata_or_name(r"document|docvqa|pdf|invoice|receipt|layout")
+    chart = metadata_or_name(r"chart|plotqa|figureqa|table")
+    multi_image = metadata_or_name(r"multi[-_ ]?image|interleaved|onevision")
+    tool_use = metadata_or_name(r"tool[-_ ]?use|function[-_ ]?calling|agent")
 
     if ocr or document or chart:
         image = True
@@ -458,7 +456,6 @@ def normalize_param_count(
 
     hinted = max(hints)
     if looks_quantized_repo_name(model_id):
-
         if extracted < int(hinted * 0.70):
             return hinted
     elif extracted < int(hinted * 0.35):
@@ -527,7 +524,6 @@ KNOWN_MOE_ACTIVE_PARAMS: dict[str, int] = {
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16": 3_000_000_000,
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8": 3_000_000_000,
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16": 12_000_000_000,
-
     "openai/gpt-oss-20b": 3_600_000_000,
     "openai/gpt-oss-120b": 5_100_000_000,
 }
@@ -541,16 +537,12 @@ KNOWN_PARAM_COUNTS: dict[str, int] = {
     "microsoft/Phi-4-reasoning-plus": 14_700_000_000,
     "openai/gpt-oss-20b": 20_000_000_000,
     "openai/gpt-oss-120b": 120_000_000_000,
-
     "ibm-granite/granite-4.0-h-small": 32_000_000_000,
     "ibm-granite/granite-4.0-h-tiny": 7_000_000_000,
     "ibm-granite/granite-3.3-8b-instruct": 8_000_000_000,
     "ibm-granite/granite-3.3-2b-instruct": 2_000_000_000,
-
     "allenai/Olmo-3-7B-Instruct": 7_000_000_000,
     "allenai/Olmo-3-1025-7B": 7_000_000_000,
-
-
     "meta-llama/Llama-4-Scout-17B-16E-Instruct": 109_000_000_000,
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct": 400_000_000_000,
     "deepseek-ai/DeepSeek-R1": 671_000_000_000,
@@ -588,7 +580,6 @@ AUTHORITATIVE_PARAM_COUNTS: dict[str, int] = {
 
 
 def extract_param_count(model_data: dict) -> int:
-    # Param resolver. Uses HF metadata first, then curated size fallbacks.
     model_id = model_data.get("id")
     if not isinstance(model_id, str) or not model_id:
         return 0
@@ -619,7 +610,6 @@ def extract_param_count(model_data: dict) -> int:
     vocab = config.get("vocab_size", 0)
     if hidden and layers and vocab:
         return 12 * layers * hidden * hidden + vocab * hidden * 2
-
 
     known = lookup_curated_count(KNOWN_PARAM_COUNTS, model_id)
     if known and known > 0:
@@ -656,7 +646,6 @@ def extract_architecture(config: dict) -> str:
 
 
 def parse_model(data: dict) -> ModelInfo | None:
-    # Main parser. Converts one HF payload into ModelInfo.
     model_id = data.get("id")
     if not isinstance(model_id, str) or not model_id:
         return None
@@ -665,7 +654,6 @@ def parse_model(data: dict) -> ModelInfo | None:
     card_data = data.get("cardData", {}) or {}
     tags = extract_tags(data)
 
-
     base_models = extract_base_models(card_data)
     base_model = base_models[0] if base_models else None
 
@@ -673,7 +661,6 @@ def parse_model(data: dict) -> ModelInfo | None:
     param_count = normalize_param_count(param_count, model_id, base_model)
     if param_count == 0:
         return None
-
 
     num_experts = 0
     for k in (
@@ -698,7 +685,6 @@ def parse_model(data: dict) -> ModelInfo | None:
         v = config.get(k, 0)
         if isinstance(v, int) and v > experts_per_tok:
             experts_per_tok = v
-
 
     known_moe_active = resolve_moe_active_params(param_count, model_id, base_model)
     is_moe = num_experts > 0 or known_moe_active is not None
@@ -734,7 +720,6 @@ def parse_model(data: dict) -> ModelInfo | None:
             continue
         if file_size is None:
             file_size = 0
-
 
         quant_sizes[quant] = quant_sizes.get(quant, 0) + file_size
         if quant not in quant_first_filename or GGUF_SPLIT_RE.search(
@@ -891,7 +876,9 @@ async def fetch_model_list(
 ) -> list[dict]:
     async with semaphore:
         try:
-            resp = await get_with_retries(client, f"{HF_API_BASE}/models", params=params)
+            resp = await get_with_retries(
+                client, f"{HF_API_BASE}/models", params=params
+            )
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, list):
@@ -1039,7 +1026,9 @@ async def fetch_models(
 
         if include_vision:
             seed_ids = [
-                model_id for model_id in known_vlm_model_ids() if model_id not in seen_ids
+                model_id
+                for model_id in known_vlm_model_ids()
+                if model_id not in seen_ids
             ]
             detail_semaphore = asyncio.Semaphore(MODEL_DETAIL_CONCURRENCY)
             seed_data = await asyncio.gather(
@@ -1059,7 +1048,6 @@ async def fetch_models(
 
 
 def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
-    # Cache writer. Flattens typed model records into plain dicts.
     return [
         {
             "id": model.id,
@@ -1105,7 +1093,6 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
 
 
 def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
-    # Cache reader. Rebuilds ModelInfo from cached dict payloads.
     models = []
     for d in data:
         base_model = d.get("base_model")
@@ -1132,9 +1119,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
             for v in d.get("gguf_variants", [])
         ]
         tags = [str(t) for t in d.get("tags", []) if isinstance(t, str)]
-        base_models = [
-            str(v) for v in d.get("base_models", []) if isinstance(v, str)
-        ]
+        base_models = [str(v) for v in d.get("base_models", []) if isinstance(v, str)]
         if not base_models and base_model:
             base_models = [base_model]
         lineage = lineage_from_dict(d.get("lineage"), base_model)

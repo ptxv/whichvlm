@@ -1,3 +1,4 @@
+import inspect
 import json
 from io import StringIO
 
@@ -28,7 +29,7 @@ from whichvlm.cli import (
     select_gguf_variant,
     validate_evidence,
     validate_freshness_weight,
-    vision_workload_for_profile,
+    workload_for_profile,
     app,
 )
 from whichvlm.runtime import generate_run_script
@@ -137,21 +138,29 @@ def test_include_vision_candidates_by_profile():
     assert include_vision_candidates("coding") is False
 
 
-def test_vision_workload_for_profile_defaults_and_overrides():
-    wl = vision_workload_for_profile("vision", context_length=8192)
+def test_workload_for_profile_defaults_and_overrides():
+    wl = workload_for_profile("vision", context_length=8192)
     assert wl is not None
     assert wl.image_count == 1
     assert wl.image_size == 448
     assert wl.context_length == 8192
 
-    custom = vision_workload_for_profile(
+    custom = workload_for_profile(
         "any", image_count=2, image_size=896, context_length=2048
     )
     assert custom is not None
     assert custom.image_count == 2
     assert custom.image_size == 896
     assert custom.context_length == 2048
-    assert vision_workload_for_profile("general") is None
+    assert workload_for_profile("general") is None
+
+
+def test_upgrade_exposes_workload_options():
+    params = inspect.signature(cli_mod.upgrade).parameters
+
+    assert "video_frames" in params
+    assert "audio_seconds" in params
+    assert "batch_size" in params
 
 
 def test_fill_missing_published_at_updates_models():
@@ -264,7 +273,6 @@ def test_merge_model_eval_benchmarks_is_now_a_noop():
 
     assert injected == 0
     assert merged is original or merged == original
-
 
     assert "meta-llama/Llama-3.1-8B-Instruct" not in merged
 
@@ -633,7 +641,9 @@ def test_hardware_command_smoke(monkeypatch):
     monkeypatch.setattr(
         "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.output.display.display_hardware", fake_display_hardware)
+    monkeypatch.setattr(
+        "whichvlm.output.display.display_hardware", fake_display_hardware
+    )
 
     result = CliRunner().invoke(app, ["hardware"])
 
@@ -651,7 +661,9 @@ def test_hardware_command_simulated_apple_silicon(monkeypatch):
         "whichvlm.hardware.detector.detect_hardware",
         lambda: HardwareInfo(gpus=[], ram_bytes=16 * 1024**3, os="darwin"),
     )
-    monkeypatch.setattr("whichvlm.output.display.display_hardware", fake_display_hardware)
+    monkeypatch.setattr(
+        "whichvlm.output.display.display_hardware", fake_display_hardware
+    )
 
     result = CliRunner().invoke(app, ["hardware", "--gpu", "Apple M3 Max"])
 

@@ -6,8 +6,6 @@ from whichvlm.engine.workload import Workload
 from whichvlm.hardware.types import GPUInfo
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
-# Speed model. Uses bandwidth, quant, and fit as the main signals.
-
 QUANT_EFFICIENCY: dict[str, float] = {
     "F32": 0.30,
     "F16": 0.40,
@@ -20,8 +18,6 @@ QUANT_EFFICIENCY: dict[str, float] = {
     "Q4_K_M": 0.55,
     "Q4_K_S": 0.55,
     "Q4_0": 0.53,
-
-
     "NVFP4": 0.56,
     "MXFP4": 0.55,
     "Q3_K_M": 0.50,
@@ -87,7 +83,6 @@ def quant_efficiency(model: ModelInfo, variant: GGUFVariant | None) -> float:
 
 
 def moe_effective_read_ratio(model: ModelInfo, gpu: GPUInfo) -> float:
-    # MoE read model. Shrinks stored params down to active token reads.
     if not model.is_moe or not model.parameter_count_active:
         return 1.0
     if model.parameter_count <= 0:
@@ -171,7 +166,6 @@ def estimate_speed_uncertainty(
     fit_type: str,
     estimated_tok_per_sec: float | None,
 ) -> tuple[str, tuple[float, float] | None, list[str]]:
-    # Confidence layer. Explains how shaky the speed point estimate is.
     notes = [
         "Speed is estimated from memory bandwidth, quantization, backend, and fit type."
     ]
@@ -249,7 +243,6 @@ def estimate_tok_per_sec(
     fit_type: str = "full_gpu",
     workload: Workload | None = None,
 ) -> float:
-    # Main speed pass. Estimates decode rate for one model and backend.
     if gpu is None or fit_type == "cpu_only":
         params_b = model.parameter_count / 1e9
         if model.is_moe and model.parameter_count_active:
@@ -257,13 +250,11 @@ def estimate_tok_per_sec(
         if params_b <= 0:
             return 0.0
 
-
         quant_factor = quant_efficiency(model, variant) / DEFAULT_QUANT_EFFICIENCY
         text_speed = max(0.3, 18.0 / max(params_b, 0.5) * quant_factor)
         return text_speed * vlm_decode_factor(model, gpu, fit_type, workload)
 
     model_size = estimate_weight_bytes(model, variant)
-
 
     if model.is_moe and model.parameter_count_active:
         effective_read = model_size * moe_effective_read_ratio(model, gpu)
@@ -276,9 +267,7 @@ def estimate_tok_per_sec(
 
     theoretical = bandwidth / effective_read
 
-
     efficiency = quant_efficiency(model, variant) * backend_factor(gpu)
-
 
     if fit_type == "partial_offload":
         if gpu.vendor == "apple" or gpu.shared_memory:

@@ -5,8 +5,6 @@ from whichvlm.engine.quantization import estimate_weight_bytes
 from whichvlm.engine.workload import Workload
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
-# Memory model. Adds weights, cache, activations, and vision overhead.
-
 KV_BYTES_PER_BPARAM_PER_KCTX = 3.5 * 1024 * 1024
 
 
@@ -14,10 +12,7 @@ MOE_ATTENTION_PARAM_MULTIPLIER = 4.0
 
 
 def estimate_kv_cache(model: ModelInfo, context_length: int) -> int:
-    # KV model. Scales cache by active size and requested context.
     if model.is_moe and model.parameter_count_active:
-
-
         active_b = model.parameter_count_active / 1e9
         params_b = active_b * MOE_ATTENTION_PARAM_MULTIPLIER
     else:
@@ -29,7 +24,6 @@ def estimate_kv_cache(model: ModelInfo, context_length: int) -> int:
 
 
 def activation_bytes(model: ModelInfo, context_length: int) -> int:
-
 
     if model.is_moe and model.parameter_count_active:
         effective_p = model.parameter_count_active
@@ -70,7 +64,6 @@ def is_vlm(model: ModelInfo) -> bool:
 
 
 def estimate_vision_overhead(model: ModelInfo, workload: Workload | None) -> int:
-    # Multimodal add-on. Prices encoder, projector, and media prefill cost.
     if workload is None:
         return 0
     wl = workload.normalized()
@@ -109,7 +102,6 @@ def estimate_vram(
     context_length: int = 4096,
     vision_workload: Workload | None = None,
 ) -> int:
-    # Main memory pass. Returns total runtime bytes for one candidate.
     workload = vision_workload.normalized() if vision_workload else None
     effective_context = workload.context_length if workload else context_length
     batch_size = workload.batch_size if workload else 1

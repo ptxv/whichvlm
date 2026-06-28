@@ -20,7 +20,6 @@ from whichvlm.runtime import (
 )
 from whichvlm.utils import current_version, CONTEXT_LENGTH
 
-# CLI hub. Turns flags into load, rank, run, and render work.
 app = typer.Typer(
     name="whichvlm",
     help="Find local vision-language models that fit your hardware.",
@@ -34,7 +33,6 @@ FETCH_ERRORS = (httpx.HTTPError, OSError, ValueError)
 
 
 def vlm_progress():
-    # Progress widget. Keeps network-heavy steps readable in terminal.
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
     return Progress(
@@ -46,7 +44,6 @@ def vlm_progress():
 
 
 def format_fetch_error(error: Exception) -> str:
-    # Error flattener. Gives one short message even for empty HTTP errors.
     detail = str(error).strip()
     if detail:
         return detail
@@ -156,7 +153,6 @@ def validate_freshness_weight(value: float) -> float:
 def resolve_evidence_mode(evidence: str, direct: bool) -> str:
     mode = validate_evidence(evidence)
     if direct:
-
         return "strict"
     return mode
 
@@ -195,7 +191,6 @@ MEMORY_RE = re.compile(
 def parse_memory_amount(
     value: str, *, option_name: str, total_bytes: int | None = None
 ) -> int:
-    # Memory parser. Accepts GiB, MiB, and percent budget inputs.
     raw = value.strip()
     if not raw:
         console.print(f"[red]Error:[/] {option_name} cannot be empty.")
@@ -259,7 +254,6 @@ def apply_memory_budgets(
     vram_headroom: str,
     ram_budget: str | None,
 ) -> HardwareInfo:
-    # Budget pass. Writes usable memory limits onto detected hardware.
     headroom_mode = vram_headroom.strip().lower()
     if not hardware.gpus and headroom_mode not in {"auto", "none", "off", "0"}:
         parse_memory_amount(
@@ -415,9 +409,6 @@ def workload_for_profile(
         batch_size=batch_size,
         context_length=context_length,
     ).normalized()
-
-
-vision_workload_for_profile = workload_for_profile
 
 
 def fill_missing_published_at(
@@ -628,7 +619,6 @@ def main(
         progress.update(task, description="scoring multimodal fit...")
         families = group_models(models)
 
-
         all_models = []
         for family in families:
             all_models.append(family.base_model)
@@ -667,7 +657,6 @@ def main(
             freshness_weight=freshness_weight,
         )
 
-
         if not results and auto_min_params is not None and min_params is None:
             results = rank_models(
                 all_models,
@@ -687,7 +676,6 @@ def main(
                 freshness_weight=freshness_weight,
             )
 
-
         if results:
             try:
                 if fill_missing_published_at(
@@ -703,7 +691,6 @@ def main(
                 progress.update(
                     task, description=f"Published date backfill skipped: {e}"
                 )
-
 
     empty_message = None
     if fit_filter == "full_gpu":
@@ -756,7 +743,7 @@ def plan(
     from whichvlm.output.display import display_plan, display_plan_json
 
     with vlm_progress() as progress:
-        task = progress.add_task("loading VLM packages...", total=None)
+        progress.add_task("loading VLM packages...", total=None)
         models = load_model_catalog(refresh, include_vision=True)
 
     model = resolve_model_match(models, model_name)
@@ -786,7 +773,9 @@ def upgrade(
     ),
     top: int = typer.Option(3, "--top", "-n", help="Best-N models to compare per GPU"),
     profile: str = typer.Option(
-        "vision", "--profile", help="Ranking profile: general | coding | vision | math | any"
+        "vision",
+        "--profile",
+        help="Ranking profile: general | coding | vision | math | any",
     ),
     image_count: int = typer.Option(
         1,
@@ -797,6 +786,21 @@ def upgrade(
         448,
         "--image-size",
         help="Input image edge size for VLM memory estimation",
+    ),
+    video_frames: int = typer.Option(
+        0,
+        "--video-frames",
+        help="Video frames per request for workload estimation",
+    ),
+    audio_seconds: float = typer.Option(
+        0.0,
+        "--audio-seconds",
+        help="Audio seconds per request for workload estimation",
+    ),
+    batch_size: int = typer.Option(
+        1,
+        "--batch-size",
+        help="Requests per batch for memory and speed estimation",
     ),
     cpu_only: bool = typer.Option(
         False, "--cpu-only", help="Compare against a CPU-only baseline"
@@ -904,7 +908,6 @@ def upgrade(
 
 
 def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[ModelInfo]:
-    # Model loader. Reuses cache first, then falls back to live HF fetch.
     from whichvlm.models.cache import load_cache, save_cache
     from whichvlm.models.fetcher import (
         dicts_to_models,
@@ -937,7 +940,6 @@ def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[Model
 
 
 def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
-    # Model resolver. Turns fuzzy CLI text into one concrete repo id.
     query_lower = model_name.lower()
     terms = query_lower.split()
 
@@ -972,7 +974,6 @@ def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
 def select_gguf_variant(
     model: ModelInfo, quant_filter: str | None = None
 ) -> GGUFVariant | None:
-    # Variant chooser. Picks the best local GGUF file for the request.
     from whichvlm.constants import QUANT_PREFERENCE_ORDER
 
     if not model.gguf_variants:
@@ -1029,7 +1030,6 @@ def resolve_ranked_gguf_for_run(
     models: list[ModelInfo],
     quant_filter: str | None = None,
 ) -> tuple[ModelInfo, GGUFVariant] | None:
-    # Runner resolver. Maps synthetic ranked variants to real GGUF repos.
     desired_quant = quant_filter or selected_variant.quant_type
 
     if selected_model.gguf_variants:

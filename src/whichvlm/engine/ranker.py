@@ -19,7 +19,11 @@ from whichvlm.engine.quantization import (
 )
 from whichvlm.engine.types import CompatibilityResult
 from whichvlm.engine.workload import Workload, WorkloadTask
-from whichvlm.hardware.types import HardwareInfo, has_backend, infer_backend_capabilities
+from whichvlm.hardware.types import (
+    HardwareInfo,
+    has_backend,
+    infer_backend_capabilities,
+)
 from whichvlm.models.benchmark import (
     BenchmarkEvidence,
     build_line_bucket_index,
@@ -28,7 +32,6 @@ from whichvlm.models.benchmark import (
 )
 from whichvlm.models.types import GGUFVariant, ModelCapabilities, ModelInfo
 
-# Ranking core. Expands variants, scores fit, and orders final picks.
 RANKING_ALGORITHM_VERSION = "2026.06.22.1"
 
 LINEAGE_REGEX: dict[str, list[tuple[re.Pattern[str], int]]] = {
@@ -45,7 +48,6 @@ def family_selection_key(
     result: CompatibilityResult,
     require_direct_top: bool,
 ) -> tuple[float]:
-    # Family sort key. Keeps final ordering close to the shown score.
     if require_direct_top and result.benchmark_status == "direct":
         direct_bonus = 5.0
     else:
@@ -68,7 +70,6 @@ def partial_offload_quality_factor(model: ModelInfo, offload_ratio: float) -> fl
         factor = 0.76
     else:
         factor = 0.86
-
 
     if model.is_moe and model.parameter_count_active:
         active_ratio = (
@@ -179,7 +180,6 @@ PREQUANTIZED_REPO_RE = re.compile(
 def synthesize_variants_for_official_repo(
     model: ModelInfo, quant_filter_upper: str | None
 ) -> list[GGUFVariant]:
-    # Synthetic GGUF layer. Makes safetensors-only repos rank like real quants.
     if "vision" in detect_specializations(model):
         return []
 
@@ -226,8 +226,6 @@ def iter_candidate_variants(
         if not candidates:
             return []
     else:
-
-
         EXTREME_QUANTS = {
             "Q2_K",
             "Q2_0",
@@ -241,9 +239,7 @@ def iter_candidate_variants(
             "IQ1_M",
             "IQ1_S",
         }
-        filtered = [
-            v for v in candidates if v.quant_type.upper() not in EXTREME_QUANTS
-        ]
+        filtered = [v for v in candidates if v.quant_type.upper() not in EXTREME_QUANTS]
         if filtered:
             candidates = filtered
 
@@ -272,8 +268,6 @@ OFFICIAL_ORGS = frozenset(
         "apple",
         "CohereForAI",
         "bigcode",
-
-
         "openai",
         "zai-org",
         "moonshotai",
@@ -395,7 +389,6 @@ def generation_bonus(model_id: str) -> float:
                 if top <= 1:
                     contribution = 0.0
                 else:
-
                     norm = (idx - 1) / (top - 1)
                     span = MODEL_GENERATION_BONUS_MAX + MODEL_GENERATION_PENALTY_MAX
                     contribution = norm * span - MODEL_GENERATION_PENALTY_MAX
@@ -530,7 +523,10 @@ def benchmark_scores_for_workload(
 ) -> dict[str, float]:
     if not benchmark_scores:
         return {}
-    if workload is not None and workload.task in {"video", "audio"}:
+    if workload is not None and workload.task not in {
+        "image_qa",
+        "general_multimodal",
+    }:
         return {}
     return benchmark_scores
 
@@ -561,7 +557,6 @@ def is_gguf_only_backend(hardware: HardwareInfo) -> bool:
         return True
     if hardware.os == "darwin":
         return False
-
 
     has_linux_nvidia = hardware.os == "linux" and any(
         g.vendor == "nvidia" for g in hardware.gpus
@@ -685,7 +680,6 @@ def compute_quality_score(
     if effective_b <= 0:
         return 0.0
 
-
     size_basis_b = params_b
     size_score = 4.2 * math.log2(max(size_basis_b, 0.5)) + 9
     size_score = min(size_score, 35)
@@ -706,10 +700,8 @@ def compute_quality_score(
         raw = min(100.0, benchmark_avg)
         benchmark_score = raw * bench_weight
 
-
     quant_penalty = quant_quality_penalty(model, variant)
     quality_core = (benchmark_score + size_score) * (1 - quant_penalty)
-
 
     if not has_benchmark:
         quality_core *= 0.55
@@ -718,12 +710,10 @@ def compute_quality_score(
     elif is_inherited:
         quality_core *= 0.78
 
-
     if fit_type == "partial_offload":
         quality_core *= partial_offload_quality_factor(model, offload_ratio)
     elif fit_type == "cpu_only":
         quality_core *= 0.50
-
 
     required_speed = (
         8.0
@@ -746,7 +736,6 @@ def compute_quality_score(
         else:
             speed_score = -8.0
 
-
     downloads = max(model.downloads, family_downloads)
     likes = max(model.likes, family_likes)
     pop_score_raw = 0.0
@@ -764,7 +753,6 @@ def compute_quality_score(
     else:
         pop_weight = 0.6
     pop_score = pop_score_raw * pop_weight
-
 
     source_bonus_raw = 0.0
     org = model.id.split("/")[0] if "/" in model.id else ""
@@ -787,15 +775,12 @@ def compute_quality_score(
         source_weight = 0.6
     source_bonus = source_bonus_raw * source_weight
 
-
     gen_bonus = generation_bonus(model.id) * freshness_weight
-
 
     if not has_benchmark or is_self_reported:
         gen_bonus *= 1.5
     elif is_direct:
         gen_bonus *= 0.6
-
 
     derivative_penalty = derivative_name_penalty(model.id)
 
@@ -830,8 +815,6 @@ def rank_models(
     workload: Workload | None = None,
     freshness_weight: float = 1.0,
 ) -> list[CompatibilityResult]:
-    # Main rank pass. Scores every candidate against hardware and evidence.
-
     results: list[CompatibilityResult] = []
     gguf_only_backend = is_gguf_only_backend(hardware)
     applied_freshness_weight = max(0.0, min(1.0, freshness_weight))
@@ -841,10 +824,8 @@ def rank_models(
         workload or vision_workload,
     )
 
-
     family_max_downloads: dict[str, int] = {}
     family_max_likes: dict[str, int] = {}
-
 
     family_dominant_params: dict[str, int] = {}
     family_dominant_downloads: dict[str, int] = {}
@@ -907,7 +888,6 @@ def rank_models(
                 actual_params_b=actual_params_b,
             )
 
-
             if bench_evidence.source in ("variant", "base_model", "line_interp"):
                 dom_params = family_dominant_params.get(model.family_id)
                 if dom_params and model.parameter_count and dom_params > 0:
@@ -918,7 +898,6 @@ def rank_models(
                         )
         if not passes_evidence_filter(bench_evidence.source, evidence_filter):
             continue
-
 
         best_for_model: CompatibilityResult | None = None
         for variant in candidates:
@@ -957,8 +936,6 @@ def rank_models(
                 if bench_evidence.source in {"direct", "self_reported"}:
                     bench_avg = bench_evidence.score
                 else:
-
-
                     confidence = max(0.0, min(1.0, bench_evidence.confidence))
                     bench_avg = bench_evidence.score * (0.75 + 0.25 * confidence)
 
@@ -1056,10 +1033,8 @@ def rank_models(
             key=lambda r: family_selection_key(r, require_direct_top), reverse=True
         )
 
-
     if any(r.quality_score >= 30 for r in results):
         results = [r for r in results if r.quality_score >= 20]
-
 
     if any(r.estimated_tok_per_sec >= 5.0 for r in results):
         results = [r for r in results if r.estimated_tok_per_sec >= 1.5]

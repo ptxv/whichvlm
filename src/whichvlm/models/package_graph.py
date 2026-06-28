@@ -11,13 +11,10 @@ from whichvlm.models.types import (
     ModelLineage,
 )
 
-# Package graph. Stores artifacts, components, and lineage per model.
 
 def looks_quantized_repo_name(model_id: str) -> bool:
     lower = model_id.lower()
-    return bool(
-        re.search(r"(gptq|awq|bnb|4bit|int4|int8|fp8|gguf|mlx|quant)", lower)
-    )
+    return bool(re.search(r"(gptq|awq|bnb|4bit|int4|int8|fp8|gguf|mlx|quant)", lower))
 
 
 def artifact_format(model_format: str, quantization_type: str | None) -> str:
@@ -38,7 +35,6 @@ def backend_support_for_artifact(
     artifact_format_value: str,
     quantization_type: str | None,
 ) -> list[str]:
-    # Backend map. Tells ranking which runtimes each artifact can use.
     fmt = artifact_format_value.lower()
     quant = (quantization_type or "").upper()
     if fmt == "gguf":
@@ -96,9 +92,9 @@ def build_lineage(
     card_data: dict,
 ) -> ModelLineage:
     relationship = lineage_relationship(card_data, base_models, tags)
-    is_merged = relationship in {"merge", "merged", "fused", "fusion"} or len(
-        base_models
-    ) > 1
+    is_merged = (
+        relationship in {"merge", "merged", "fused", "fusion"} or len(base_models) > 1
+    )
     return ModelLineage(
         base_model_ids=list(base_models),
         merged_parent_ids=list(base_models) if is_merged else [],
@@ -119,7 +115,6 @@ def build_artifacts(
     parameter_count: int,
     projector_files: list[tuple[str, int | None]] | None = None,
 ) -> list[ModelArtifact]:
-    # Artifact builder. Expands one model record into runnable file entries.
     projector_artifacts = [
         ModelArtifact(
             repo_id=model_id,
@@ -177,7 +172,6 @@ def build_components(
     tags: list[str],
     lineage: ModelLineage,
 ) -> list[ModelComponent]:
-    # Component builder. Describes language, vision, and projector pieces.
     if lineage.is_merged:
         return [
             ModelComponent(
@@ -365,7 +359,9 @@ def merge_family_lineage(group: list[ModelInfo]) -> ModelLineage:
     is_merged = False
 
     for model in group:
-        for base_id in model.base_models or ([] if not model.base_model else [model.base_model]):
+        for base_id in model.base_models or (
+            [] if not model.base_model else [model.base_model]
+        ):
             if base_id not in base_ids:
                 base_ids.append(base_id)
         for parent_id in model.lineage.merged_parent_ids:
