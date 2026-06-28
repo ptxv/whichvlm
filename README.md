@@ -93,7 +93,7 @@ The fetcher prioritizes:
 - GGUF, MLX, AWQ, GPTQ, BNB, and FP8 variants
 - text-generation only as backbone or variant discovery
 
-Benchmark evidence is graded as direct, variant, base model, interpolated, self-reported, or absent. Vision scores lead the `vision` profile. Text benchmarks are fallback evidence.
+Benchmark evidence is graded as direct, variant, base model, interpolated, self-reported, or absent. Vision scores lead the `vision` and `ocr` profiles. Text benchmarks are fallback evidence.
 
 ## Development
 

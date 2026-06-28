@@ -36,6 +36,11 @@ def detect_specializations(model_id: str) -> list[str]:
     tags: list[str] = []
     if re.search(r"(coder|codegen|starcoder|program|coding)", lower):
         tags.append("coding")
+    if re.search(
+        r"(^|[-_/])(ocr|docvqa|document)([-_/]|$)|text[-_ ]?recognition",
+        lower,
+    ):
+        tags.append("ocr")
     if re.search(r"(^|[-_/])(vl|vision|multimodal|llava|image)([-_/]|$)", lower):
         tags.append("vision")
     if re.search(r"(^|[-_/])math([-_/]|$)", lower):
