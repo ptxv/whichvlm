@@ -7,8 +7,8 @@ from whichvlm.engine.ranker import (
     is_excluded_model,
     rank_models,
 )
-from whichvlm.hardware.types import GPUInfo, HardwareInfo
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
+from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
 
 
 def hw(
@@ -341,6 +341,173 @@ def test_source_weights_ordering():
     assert SOURCE_WEIGHTS["line_interp"] > SOURCE_WEIGHTS["self_reported"]
     assert SOURCE_WEIGHTS["self_reported"] > 0
     assert SOURCE_WEIGHTS["none"] == 0.0
+
+
+def test_ocr_profile_prefers_direct_task_benchmark_over_popularity():
+    direct_ocr = ModelInfo(
+        id="nanonets/Nanonets-OCR-s",
+        family_id="nanonets-ocr-s",
+        name="Nanonets-OCR-s",
+        parameter_count=3_000_000_000,
+        hf_pipeline_tag="image-to-text",
+        tags=["ocr", "document-vqa"],
+        downloads=5_000,
+        gguf_variants=[gguf("Q4_K_M", 1.8)],
+    )
+    self_reported_ocr = ModelInfo(
+        id="community/Popular-OCR-7B-GGUF",
+        family_id="popular-ocr-7b",
+        name="Popular-OCR-7B-GGUF",
+        parameter_count=7_000_000_000,
+        tags=["ocr"],
+        downloads=500_000,
+        gguf_variants=[gguf("Q4_K_M", 4.2)],
+        benchmark_scores={"hf_eval": 91.0},
+    )
+    general_vlm = ModelInfo(
+        id="Qwen/Qwen2.5-VL-7B-Instruct",
+        family_id="qwen2.5-vl-7b",
+        name="Qwen2.5-VL-7B-Instruct",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        tags=["vision-language"],
+        downloads=2_000_000,
+        gguf_variants=[gguf("Q4_K_M", 4.2)],
+    )
+
+    results = rank_models(
+        [general_vlm, self_reported_ocr, direct_ocr],
+        hw(vram_gb=12, bandwidth_gbps=450.0),
+        top_n=3,
+        task_profile="ocr",
+        benchmark_scores={"nanonets/Nanonets-OCR-s": 72.0},
+    )
+
+    assert [r.model.id for r in results] == [
+        "nanonets/Nanonets-OCR-s",
+        "community/Popular-OCR-7B-GGUF",
+    ]
+    assert results[0].benchmark_status == "direct"
+
+
+def test_apple_m3_max_prefers_mlx_direct_benchmark_over_inherited_gguf():
+    mlx_model = ModelInfo(
+        id="mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+        family_id="qwen2.5-vl-7b-mlx",
+        name="Qwen2.5-VL-7B-Instruct-4bit",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        tags=["vision-language"],
+        model_format="mlx",
+        downloads=20_000,
+        artifacts=[
+            ModelArtifact(
+                repo_id="mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+                format="mlx",
+                quantization="MLX",
+                access="ungated",
+                backend_support=["mlx", "metal"],
+                source_kind="mlx_variant",
+            )
+        ],
+    )
+    inherited_gguf = ModelInfo(
+        id="community/Qwen2.5-VL-7B-Instruct-GGUF",
+        family_id="qwen2.5-vl-7b-gguf",
+        name="Qwen2.5-VL-7B-Instruct-GGUF",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        tags=["vision-language"],
+        downloads=250_000,
+        base_model="Qwen/Qwen2.5-VL-7B-Instruct",
+        gguf_variants=[gguf("Q4_K_M", 4.2)],
+    )
+    cuda_quant = ModelInfo(
+        id="Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
+        family_id="qwen2.5-vl-7b-awq",
+        name="Qwen2.5-VL-7B-Instruct-AWQ",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        tags=["vision-language"],
+        quantization_type="AWQ",
+        downloads=300_000,
+    )
+    hardware = HardwareInfo(
+        gpus=[
+            GPUInfo(
+                name="Apple M3 Max",
+                vendor="apple",
+                vram_bytes=64 * 1024**3,
+                memory_bandwidth_gbps=400.0,
+                shared_memory=True,
+                backend_capabilities=[
+                    BackendCapability("metal", True),
+                    BackendCapability("mps", True),
+                    BackendCapability("mlx", True),
+                ],
+            )
+        ],
+        ram_bytes=64 * 1024**3,
+        os="darwin",
+    )
+
+    results = rank_models(
+        [cuda_quant, inherited_gguf, mlx_model],
+        hardware,
+        top_n=3,
+        task_profile="vision",
+        benchmark_scores={
+            "mlx-community/Qwen2.5-VL-7B-Instruct-4bit": 70.0,
+            "Qwen/Qwen2.5-VL-7B-Instruct": 75.0,
+        },
+    )
+
+    assert [r.model.id for r in results] == [
+        "mlx-community/Qwen2.5-VL-7B-Instruct-4bit",
+        "community/Qwen2.5-VL-7B-Instruct-GGUF",
+    ]
+    assert results[0].benchmark_status == "direct"
+
+
+def test_gated_artifact_ranks_below_available_peer():
+    gated = ModelInfo(
+        id="Qwen/Qwen3-VL-8B-Gated",
+        family_id="qwen3-vl-8b-gated",
+        name="Qwen3-VL-8B-Gated",
+        parameter_count=8_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        tags=["vision-language"],
+        access="gated",
+        downloads=100_000,
+        gguf_variants=[gguf("Q4_K_M", 4.6)],
+    )
+    available = ModelInfo(
+        id="Qwen/Qwen3-VL-8B-Open",
+        family_id="qwen3-vl-8b-open",
+        name="Qwen3-VL-8B-Open",
+        parameter_count=8_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        tags=["vision-language"],
+        access="ungated",
+        downloads=100_000,
+        gguf_variants=[gguf("Q4_K_M", 4.6)],
+    )
+
+    results = rank_models(
+        [gated, available],
+        hw(vram_gb=12),
+        top_n=2,
+        task_profile="vision",
+        benchmark_scores={
+            "Qwen/Qwen3-VL-8B-Gated": 70.0,
+            "Qwen/Qwen3-VL-8B-Open": 70.0,
+        },
+    )
+
+    assert [r.model.id for r in results] == [
+        "Qwen/Qwen3-VL-8B-Open",
+        "Qwen/Qwen3-VL-8B-Gated",
+    ]
 
 
 def test_strict_evidence_filter_excludes_self_reported():
