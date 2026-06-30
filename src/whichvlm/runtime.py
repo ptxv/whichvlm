@@ -349,14 +349,10 @@ def transformers_quant_deps(model: ModelInfo) -> list[str]:
     if qt == "AWQ":
         return ["autoawq"]
     if qt == "GPTQ":
-        return ["auto-gptq"]
+        return ["auto-gptq", "optimum"]
     if qt in {"BNB_4BIT", "INT8"}:
         return ["bitsandbytes"]
     return []
-
-
-def transformers_text_profile() -> TransformersProfile:
-    return "AutoModelForCausalLM", "AutoTokenizer", ()
 
 
 def transformers_vlm_profile(model: ModelInfo) -> TransformersProfile:
@@ -384,10 +380,10 @@ def transformers_vlm_profile(model: ModelInfo) -> TransformersProfile:
 
 def transformers_import_names(
     model_class: str,
-    processor_class: str,
+    preprocessor_class: str,
     extra: tuple[str, ...] = (),
 ) -> str:
-    return ", ".join(sorted({model_class, processor_class, *extra}))
+    return ", ".join(sorted({model_class, preprocessor_class, *extra}))
 
 
 def processor_kwargs_lines(processor_kwargs: tuple[str, ...]) -> str:
@@ -420,18 +416,50 @@ def quantization_import_names(model: ModelInfo) -> tuple[str, ...]:
     return ()
 
 
+def vllm_quantization(model: ModelInfo) -> str | None:
+    qt = transformers_quant_type(model)
+    if qt in {"AWQ", "GPTQ", "FP8"}:
+        return qt.lower()
+    return None
+
+
 def llama_decode_metrics_block() -> str:
+    return '''\
+process = psutil.Process()
+
+
+def print_decode_metrics(started_at, first_token_at, output_text):
+    finished_at = time.perf_counter()
+    token_count = len(llm.tokenize(output_text.encode("utf-8"), add_bos=False))
+    ttft = (first_token_at or finished_at) - started_at
+    decode_seconds = max(finished_at - (first_token_at or finished_at), 1e-6)
+    print(
+        f"[metrics] ttft={ttft:.2f}s decode={token_count / decode_seconds:.2f} tok/s "
+        f"rss={process.memory_info().rss / 1024**3:.2f}GB"
+    )
+
+    '''
+
+
+def backend_decode_metrics_block() -> str:
     return '''\
 process = psutil.Process()
 
 
 def print_decode_metrics(started_at, first_token_at, token_count):
     finished_at = time.perf_counter()
-    ttft = (first_token_at or finished_at) - started_at
-    decode_seconds = max(finished_at - (first_token_at or finished_at), 1e-6)
+    decode_started_at = first_token_at or started_at
+    ttft = "n/a" if first_token_at is None else f"{first_token_at - started_at:.2f}s"
+    decode_seconds = max(finished_at - decode_started_at, 1e-6)
+    gpu_peak = ""
+    if torch.cuda.is_available():
+        gpu_peak = (
+            f" gpu={torch.cuda.max_memory_allocated() / 1024**3:.2f}GB"
+            f" reserved={torch.cuda.max_memory_reserved() / 1024**3:.2f}GB"
+        )
     print(
-        f"[metrics] ttft={ttft:.2f}s decode={token_count / decode_seconds:.2f} tok/s "
-        f"rss={process.memory_info().rss / 1024**3:.2f}GB"
+        f"[metrics] ttft={ttft} decode={token_count / decode_seconds:.2f} tok/s "
+        f"rss={process.memory_info().rss / 1024**3:.2f}GB{gpu_peak}"
     )
 
 '''
@@ -671,6 +699,13 @@ class VLLMBackend(Backend):
         model: ModelInfo,
         artifact: GGUFVariant | None,
     ) -> list[str]:
+        return ["vllm", "psutil"]
+
+    def serve_dependencies(
+        self,
+        model: ModelInfo,
+        artifact: GGUFVariant | None,
+    ) -> list[str]:
         return ["vllm"]
 
     def generate_script(self, request: RuntimeRequest) -> str:
@@ -721,6 +756,13 @@ class SGLangBackend(Backend):
         )
 
     def dependencies(
+        self,
+        model: ModelInfo,
+        artifact: GGUFVariant | None,
+    ) -> list[str]:
+        return ["sglang", "psutil"]
+
+    def serve_dependencies(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
@@ -883,9 +925,8 @@ while True:
     messages.append({{"role": "user", "content": text}})
     started_at = time.perf_counter()
     response = llm.create_chat_completion(messages=messages, stream=True)
-    full = ""
+    output_parts = []
     first_token_at = None
-    token_count = 0
     for chunk in response:
         delta = chunk["choices"][0].get("delta", {{}})
         content = delta.get("content", "")
@@ -893,10 +934,10 @@ while True:
             if first_token_at is None:
                 first_token_at = time.perf_counter()
             print(content, end="", flush=True)
-            full += content
-            token_count += 1
+            output_parts.append(content)
+    full = "".join(output_parts)
     print()
-    print_decode_metrics(started_at, first_token_at, token_count)
+    print_decode_metrics(started_at, first_token_at, full)
     messages.append({{"role": "assistant", "content": full}})
 print("\\nBye!")
 '''
@@ -1000,7 +1041,7 @@ while True:
     started_at = time.perf_counter()
     response = llm.create_chat_completion(messages=messages, stream=True)
     first_token_at = None
-    token_count = 0
+    output_parts = []
     for chunk in response:
         delta = chunk["choices"][0].get("delta", {{}})
         content = delta.get("content", "")
@@ -1008,9 +1049,10 @@ while True:
             if first_token_at is None:
                 first_token_at = time.perf_counter()
             print(content, end="", flush=True)
-            token_count += 1
+            output_parts.append(content)
+    full = "".join(output_parts)
     print()
-    print_decode_metrics(started_at, first_token_at, token_count)
+    print_decode_metrics(started_at, first_token_at, full)
 print("\\nBye!")
 '''
 
@@ -1079,9 +1121,10 @@ raise SystemExit(subprocess.run(cmd).returncode)
 
 def generate_transformers_text_script(model: ModelInfo, cpu_only: bool) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
-    model_class, tokenizer_class, _ = transformers_text_profile()
     imports = transformers_import_names(
-        model_class, tokenizer_class, ("TextIteratorStreamer", *quantization_import_names(model))
+        "AutoModelForCausalLM",
+        "AutoTokenizer",
+        ("TextIteratorStreamer", *quantization_import_names(model)),
     )
     runtime_setup = transformers_runtime_setup(quantization_config_lines(model))
     return f'''\
@@ -1100,8 +1143,8 @@ device_map = {device_map}
 try:
     print(f"Loading {{model_id}}...")
     load_started_at = time.perf_counter()
-    tokenizer = {tokenizer_class}.from_pretrained(model_id, trust_remote_code=True)
-    model = {model_class}.from_pretrained(model_id, **model_kwargs)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
     model.eval()
     print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
     print("Ready! Type 'exit' to quit.\\n")
@@ -1134,14 +1177,15 @@ try:
         started_at = time.perf_counter()
         thread = Thread(target=run_generate)
         thread.start()
-        full = ""
+        output_parts = []
         first_token_at = None
         for text in streamer:
             if first_token_at is None:
                 first_token_at = time.perf_counter()
             print(text, end="", flush=True)
-            full += text
+            output_parts.append(text)
         thread.join()
+        full = "".join(output_parts)
         print()
         print_decode_metrics(started_at, first_token_at, full)
         messages.append({{"role": "assistant", "content": full}})
@@ -1229,14 +1273,15 @@ try:
         started_at = time.perf_counter()
         thread = Thread(target=run_generate)
         thread.start()
-        full = ""
+        output_parts = []
         first_token_at = None
         for text in streamer:
             if first_token_at is None:
                 first_token_at = time.perf_counter()
             print(text, end="", flush=True)
-            full += text
+            output_parts.append(text)
         thread.join()
+        full = "".join(output_parts)
         print()
         print_decode_metrics(started_at, first_token_at, full)
     print("\\nBye!")
@@ -1297,14 +1342,21 @@ def generate_vllm_vlm_script(
     context_length: int,
     image_path: str,
 ) -> str:
+    metrics = backend_decode_metrics_block()
+    quantization = vllm_quantization(model)
     return f'''\
 import base64
 import mimetypes
+import psutil
+import time
 
+import torch
 from vllm import LLM, SamplingParams
 
 model_id = "{model.id}"
 image_path = {image_path!r}
+quantization = {quantization!r}
+{metrics}
 
 
 def image_data_url(path):
@@ -1315,11 +1367,16 @@ def image_data_url(path):
 
 
 print(f"Loading {{model_id}} with vLLM...")
+load_started_at = time.perf_counter()
 llm = LLM(
     model=model_id,
     trust_remote_code=True,
+    dtype="auto",
+    quantization=quantization,
     max_model_len={context_length},
+    gpu_memory_utilization=0.90,
 )
+print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
 sampling = SamplingParams(max_tokens=512)
 image_url = image_data_url(image_path)
 print("Ready! Type 'exit' to quit.\\n")
@@ -1342,8 +1399,13 @@ while True:
             ],
         }}
     ]
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+    started_at = time.perf_counter()
     outputs = llm.chat(messages, sampling_params=sampling)
-    print(outputs[0].outputs[0].text)
+    completion = outputs[0].outputs[0]
+    print(completion.text)
+    print_decode_metrics(started_at, None, len(completion.token_ids))
 print("\\nBye!")
 '''
 
@@ -1353,18 +1415,28 @@ def generate_sglang_vlm_script(
     context_length: int,
     image_path: str,
 ) -> str:
+    metrics = backend_decode_metrics_block()
     return f'''\
+import psutil
+import time
+
+import torch
 from sglang import Engine
 
 model_id = "{model.id}"
 image_path = {image_path!r}
+{metrics}
 
 print(f"Loading {{model_id}} with SGLang...")
+load_started_at = time.perf_counter()
 engine = Engine(
     model_path=model_id,
     trust_remote_code=True,
     context_length={context_length},
+    mem_fraction_static=0.90,
+    log_level="error",
 )
+print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
 try:
     print("Ready! Type 'exit' to quit.\\n")
     while True:
@@ -1376,12 +1448,24 @@ try:
             break
         if not text.strip():
             continue
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        started_at = time.perf_counter()
+        first_token_at = None
+        token_count = 0
         response = engine.generate(
             prompt=text,
             image_data=image_path,
             sampling_params={{"max_new_tokens": 512}},
+            stream=True,
         )
-        print(response["text"])
+        for chunk in response:
+            if first_token_at is None:
+                first_token_at = time.perf_counter()
+            print(chunk["text"], end="", flush=True)
+            token_count += 1
+        print()
+        print_decode_metrics(started_at, first_token_at, token_count)
     print("\\nBye!")
 finally:
     engine.shutdown()

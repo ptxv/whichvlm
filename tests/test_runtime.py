@@ -282,7 +282,7 @@ def linux_cuda_hardware() -> HardwareInfo:
 
 
 def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
-    model = vlm_model()
+    model = vlm_model(quantization_type="AWQ")
 
     deps, script_type = resolve_model_deps(
         model,
@@ -300,11 +300,14 @@ def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
         hardware=linux_cuda_hardware(),
     )
 
-    assert deps == ["vllm"]
+    assert deps == ["vllm", "psutil"]
     assert script_type == "vllm"
     assert "from vllm import LLM, SamplingParams" in script
     assert "llm.chat" in script
     assert "image_data_url" in script
+    assert "quantization = 'awq'" in script
+    assert "gpu_memory_utilization=0.90" in script
+    assert "[metrics] ttft=" in script
 
 
 def test_sglang_vlm_backend_uses_offline_engine():
@@ -326,10 +329,11 @@ def test_sglang_vlm_backend_uses_offline_engine():
         hardware=linux_cuda_hardware(),
     )
 
-    assert deps == ["sglang"]
+    assert deps == ["sglang", "psutil"]
     assert script_type == "sglang"
     assert "from sglang import Engine" in script
     assert "engine.generate" in script
+    assert "stream=True" in script
     assert "image_data=image_path" in script
 
 
