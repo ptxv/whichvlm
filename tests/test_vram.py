@@ -1,6 +1,11 @@
 from whichvlm.engine.vram import estimate_kv_cache, estimate_vram, estimate_vram_details
 from whichvlm.engine.workload import VisionWorkload
-from whichvlm.models.types import GGUFVariant, ModelComponent, ModelInfo
+from whichvlm.models.types import (
+    GGUFVariant,
+    ModelCapabilities,
+    ModelComponent,
+    ModelInfo,
+)
 
 
 def make_model(params: int, **kwargs) -> ModelInfo:
@@ -233,15 +238,18 @@ def test_spatial_merge_reduces_vision_tokens():
     merge_2 = make_model(7_000_000_000, spatial_merge_size=2, **base)
     workload = VisionWorkload(image_count=1, image_size=448)
 
-    assert estimate_vram_details(
-        no_merge,
-        None,
-        vision_workload=workload,
-    ).components.vision > estimate_vram_details(
-        merge_2,
-        None,
-        vision_workload=workload,
-    ).components.vision
+    assert (
+        estimate_vram_details(
+            no_merge,
+            None,
+            vision_workload=workload,
+        ).components.vision
+        > estimate_vram_details(
+            merge_2,
+            None,
+            vision_workload=workload,
+        ).components.vision
+    )
 
 
 def test_estimate_vram_small_model():
@@ -297,7 +305,7 @@ def test_vision_workload_does_not_change_text_model_vram():
 
 
 def test_vision_capability_enables_vram_overhead():
-    model = make_model(7_000_000_000, capabilities=["vision"])
+    model = make_model(7_000_000_000, capabilities=ModelCapabilities(image=True))
     workload = VisionWorkload(image_count=1, image_size=448)
 
     assert estimate_vram(model, None, vision_workload=workload) > estimate_vram(

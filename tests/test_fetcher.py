@@ -216,7 +216,7 @@ def test_dicts_to_models_restores_capability_components_from_architecture():
         ]
     )
 
-    assert models[0].capabilities == ["vision"]
+    assert models[0].capabilities.image is True
     assert {component.role for component in models[0].components} >= {
         "vision_encoder",
         "projector",
@@ -482,7 +482,7 @@ def test_parse_model_builds_vlm_package_metadata():
     assert parsed.model_format == "safetensors"
     assert parsed.variant_kind == "official"
     assert parsed.tags == ["vision-language", "safetensors"]
-    assert parsed.capabilities == ["vision"]
+    assert parsed.capabilities.image is True
     assert parsed.artifacts[0].format == "safetensors"
     assert parsed.artifacts[0].access == "ungated"
     assert parsed.components[0].role == "language"
@@ -508,7 +508,9 @@ def test_parse_model_uses_integration_registry_for_ocr_capabilities():
     )
 
     assert parsed is not None
-    assert parsed.capabilities == ["vision", "ocr"]
+    assert parsed.capabilities.image is True
+    assert parsed.capabilities.ocr is True
+    assert parsed.capabilities.document is True
     assert {component.role for component in parsed.components} >= {
         "language",
         "vision_encoder",
@@ -668,7 +670,6 @@ def test_parse_model_preserves_multi_parent_merged_lineage():
 
 
 def test_deepseek_v4_flash_uses_model_card_counts_over_hf_tensor_metadata():
-
 
     parsed = parse_model(
         {

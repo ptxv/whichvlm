@@ -3,13 +3,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from whichvlm.models.types import ModelInfo
+from whichvlm.models.types import ModelCapabilities
 
 
 @dataclass(frozen=True)
 class IntegrationProfile:
     integration_id: str
-    capabilities: tuple[str, ...]
+    capability_names: tuple[str, ...]
     pipeline_tags: tuple[str, ...]
     tag_patterns: tuple[str, ...]
     component_roles: tuple[str, ...]
@@ -18,7 +18,7 @@ class IntegrationProfile:
 INTEGRATION_PROFILES: tuple[IntegrationProfile, ...] = (
     IntegrationProfile(
         integration_id="vision-language",
-        capabilities=("vision",),
+        capability_names=("image",),
         pipeline_tags=(
             "image-text-to-text",
             "visual-question-answering",
@@ -33,13 +33,27 @@ INTEGRATION_PROFILES: tuple[IntegrationProfile, ...] = (
     ),
     IntegrationProfile(
         integration_id="document-ocr",
-        capabilities=("vision", "ocr"),
+        capability_names=("image", "ocr", "document"),
         pipeline_tags=(),
         tag_patterns=(
             r"(^|[-_/\s])(ocr|docvqa|document)([-_/\s]|$)",
             r"text[-_ ]?recognition",
         ),
         component_roles=("language", "vision_encoder", "projector", "processor"),
+    ),
+    IntegrationProfile(
+        integration_id="video-language",
+        capability_names=("image", "video"),
+        pipeline_tags=("video-text-to-text",),
+        tag_patterns=(r"video|onevision",),
+        component_roles=("language", "video_encoder", "projector", "processor"),
+    ),
+    IntegrationProfile(
+        integration_id="audio-language",
+        capability_names=("audio",),
+        pipeline_tags=("audio-text-to-text",),
+        tag_patterns=(r"audio|speech|whisper",),
+        component_roles=("language", "audio_encoder", "processor"),
     ),
 )
 
@@ -71,7 +85,7 @@ def _matches_profile(
     return any(re.search(pattern, haystack) for pattern in profile.tag_patterns)
 
 
-def capability_ids_for_data(
+def capability_names_for_data(
     model_id: str,
     pipeline_tag: object,
     tags: list[str],
@@ -88,38 +102,60 @@ def capability_ids_for_data(
             architecture,
             component_roles,
         ):
-            _append_unique(capabilities, profile.capabilities)
+            _append_unique(capabilities, profile.capability_names)
     return capabilities
 
 
-def capability_ids_for_model(model: ModelInfo) -> list[str]:
-    component_roles = tuple(component.role for component in model.components)
-    capabilities = capability_ids_for_data(
-        model.id,
-        model.hf_pipeline_tag,
-        model.tags,
-        model.architecture,
-        component_roles,
+def enabled_capability_names(capabilities: ModelCapabilities) -> list[str]:
+    names = []
+    for name in (
+        "image",
+        "video",
+        "audio",
+        "ocr",
+        "document",
+        "chart",
+        "multi_image",
+        "tool_use",
+    ):
+        if getattr(capabilities, name):
+            names.append(name)
+    return names
+
+
+def capabilities_for_data(
+    model_id: str,
+    pipeline_tag: object,
+    tags: list[str],
+    architecture: str = "",
+    supported_languages: list[str] | None = None,
+) -> ModelCapabilities:
+    names = set(capability_names_for_data(model_id, pipeline_tag, tags, architecture))
+    return ModelCapabilities(
+        image="image" in names,
+        video="video" in names,
+        audio="audio" in names,
+        ocr="ocr" in names,
+        document="document" in names,
+        chart="chart" in names,
+        multi_image="multi_image" in names,
+        tool_use="tool_use" in names,
+        supported_languages=supported_languages or [],
     )
-    _append_unique(capabilities, tuple(model.capabilities))
-    return capabilities
 
 
-def has_capability(model: ModelInfo, capability: str) -> bool:
-    return capability in capability_ids_for_model(model)
-
-
-def component_roles_for_capabilities(capabilities: list[str]) -> list[str]:
+def component_roles_for_capabilities(capabilities: ModelCapabilities) -> list[str]:
+    capability_names = set(enabled_capability_names(capabilities))
     roles: list[str] = []
     for profile in INTEGRATION_PROFILES:
-        if any(capability in capabilities for capability in profile.capabilities):
+        if capability_names & set(profile.capability_names):
             _append_unique(roles, profile.component_roles)
     return roles
 
 
-def pipeline_tags_for_capability(capability: str) -> tuple[str, ...]:
+def pipeline_tags_for_capabilities(capabilities: tuple[str, ...]) -> tuple[str, ...]:
     tags: list[str] = []
     for profile in INTEGRATION_PROFILES:
-        if capability in profile.capabilities:
+        if set(capabilities) & set(profile.capability_names):
             _append_unique(tags, profile.pipeline_tags)
     return tuple(tags)
