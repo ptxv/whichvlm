@@ -40,6 +40,23 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
     assert "AutoModelForImageTextToText" in script
     assert 'image_path = \'/tmp/image.png\'' in script
     assert '{"type": "image", "image": image}' in script
+    assert "model.eval()" in script
+    assert "with torch.inference_mode():" in script
+
+
+def test_transformers_text_script_uses_inference_mode():
+    model = ModelInfo(
+        id="org/Test-7B",
+        family_id="test",
+        name="Test-7B",
+        parameter_count=7_000_000_000,
+    )
+
+    script = generate_run_script(model, None, 4096, False)
+
+    assert "model.eval()" in script
+    assert "with torch.inference_mode():" in script
+    assert "target=generate" in script
 
 
 def test_gguf_vlm_runtime_requires_projector_artifact():
