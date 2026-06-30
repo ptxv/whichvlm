@@ -1106,9 +1106,12 @@ def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
             )
         ]
 
-    def fake_generate_run_script(model, variant, context_length, cpu_only):
+    def fake_generate_run_script(
+        model, variant, context_length, cpu_only, image_path=None, max_tokens=512
+    ):
         captured["model_id"] = model.id
         captured["variant"] = variant
+        captured["max_tokens"] = max_tokens
         return "print('ok')"
 
     class Completed:
@@ -1130,12 +1133,15 @@ def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
     monkeypatch.setattr(cli_mod, "generate_run_script", fake_generate_run_script)
     monkeypatch.setattr("subprocess.run", fake_run)
 
-    result = CliRunner().invoke(app, ["run", "--quant", "Q4_K_M"])
+    result = CliRunner().invoke(
+        app, ["run", "--quant", "Q4_K_M", "--max-tokens", "128"]
+    )
 
     assert result.exit_code == 0
     assert captured["quant_filter"] == "Q4_K_M"
     assert captured["model_id"] == "unsloth/Qwen3.6-27B-GGUF"
     assert captured["variant"].filename == "q4.gguf"
+    assert captured["max_tokens"] == 128
     assert "llama-cpp-python" in captured["cmd"]
     assert "transformers" not in captured["cmd"]
 
@@ -1164,6 +1170,37 @@ def test_snippet_no_model_found(monkeypatch):
     result = runner.invoke(app, ["snippet", "nonexistent_model_xyz_999"])
     assert result.exit_code != 0
     assert "No model found" in result.stdout
+
+
+def test_snippet_passes_context_length_and_max_tokens(monkeypatch):
+    model = make_model(model_id="org/Test-7B")
+    captured = {}
+
+    def fake_generate_run_script(
+        model, variant, context_length, cpu_only, image_path=None, max_tokens=512
+    ):
+        captured["context_length"] = context_length
+        captured["max_tokens"] = max_tokens
+        return "print('ok')"
+
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
+    monkeypatch.setattr(cli_mod, "generate_run_script", fake_generate_run_script)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "snippet",
+            "org/Test-7B",
+            "--context-length",
+            "8192",
+            "--max-tokens",
+            "128",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["context_length"] == 8192
+    assert captured["max_tokens"] == 128
 
 
 def render_json_output(

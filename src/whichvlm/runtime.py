@@ -56,6 +56,7 @@ def generate_run_script(
     context_length: int,
     cpu_only: bool,
     image_path: str | None = None,
+    max_tokens: int = 512,
 ) -> str:
     # Script builder. Emits the runnable snippet for one chosen path.
     vlm_model = is_vlm_model(model)
@@ -76,14 +77,19 @@ def generate_run_script(
                 context_length,
                 cpu_only,
                 image_path,
+                max_tokens,
             )
         if is_mlx_model(model):
-            return generate_mlx_vlm_script(model, image_path)
-        return generate_transformers_vlm_script(model, image_path, cpu_only)
+            return generate_mlx_vlm_script(model, image_path, max_tokens)
+        return generate_transformers_vlm_script(
+            model, image_path, cpu_only, max_tokens
+        )
 
     if variant:
-        return generate_llama_cpp_text_script(model, variant, context_length, cpu_only)
-    return generate_transformers_text_script(model, cpu_only)
+        return generate_llama_cpp_text_script(
+            model, variant, context_length, cpu_only, max_tokens
+        )
+    return generate_transformers_text_script(model, cpu_only, max_tokens)
 
 
 def is_mlx_model(model: ModelInfo) -> bool:
@@ -110,6 +116,7 @@ def generate_llama_cpp_text_script(
     variant: GGUFVariant,
     context_length: int,
     cpu_only: bool,
+    max_tokens: int,
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     return f'''\
@@ -137,7 +144,11 @@ while True:
     if not text.strip():
         continue
     messages.append({{"role": "user", "content": text}})
-    response = llm.create_chat_completion(messages=messages, stream=True)
+    response = llm.create_chat_completion(
+        messages=messages,
+        max_tokens={max_tokens},
+        stream=True,
+    )
     full = ""
     for chunk in response:
         delta = chunk["choices"][0].get("delta", {{}})
@@ -158,6 +169,7 @@ def generate_llama_cpp_vlm_script(
     context_length: int,
     cpu_only: bool,
     image_path: str,
+    max_tokens: int,
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     return f'''\
@@ -240,7 +252,11 @@ while True:
             ],
         }}
     ]
-    response = llm.create_chat_completion(messages=messages, stream=True)
+    response = llm.create_chat_completion(
+        messages=messages,
+        max_tokens={max_tokens},
+        stream=True,
+    )
     for chunk in response:
         delta = chunk["choices"][0].get("delta", {{}})
         content = delta.get("content", "")
@@ -251,7 +267,9 @@ print("\\nBye!")
 '''
 
 
-def generate_transformers_text_script(model: ModelInfo, cpu_only: bool) -> str:
+def generate_transformers_text_script(
+    model: ModelInfo, cpu_only: bool, max_tokens: int
+) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     dtype = "torch.float32" if cpu_only else '"auto"'
     return f'''\
@@ -296,7 +314,7 @@ try:
         )
         thread = Thread(
             target=model.generate,
-            kwargs=dict(**inputs, max_new_tokens=512, streamer=streamer),
+            kwargs=dict(**inputs, max_new_tokens={max_tokens}, streamer=streamer),
         )
         thread.start()
         full = ""
@@ -320,6 +338,7 @@ def generate_transformers_vlm_script(
     model: ModelInfo,
     image_path: str,
     cpu_only: bool,
+    max_tokens: int,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     dtype = "torch.float32" if cpu_only else '"auto"'
@@ -370,7 +389,7 @@ try:
             return_dict=True,
             return_tensors="pt",
         ).to(model.device)
-        outputs = model.generate(**inputs, max_new_tokens=512)
+        outputs = model.generate(**inputs, max_new_tokens={max_tokens})
         print(processor.decode(outputs[0], skip_special_tokens=True))
     print("\\nBye!")
 finally:
@@ -382,7 +401,9 @@ finally:
 '''
 
 
-def generate_mlx_vlm_script(model: ModelInfo, image_path: str) -> str:
+def generate_mlx_vlm_script(
+    model: ModelInfo, image_path: str, max_tokens: int
+) -> str:
     return f'''\
 from mlx_vlm import generate, load
 
@@ -421,7 +442,7 @@ while True:
         processor,
         prompt,
         [image_path],
-        max_tokens=512,
+        max_tokens={max_tokens},
         verbose=False,
     )
     print(output)

@@ -1193,6 +1193,9 @@ def run(
     ),
     refresh: bool = typer.Option(False, "--refresh", help="Refresh model metadata"),
     cpu_only: bool = typer.Option(False, "--cpu-only", help="CPU-only mode"),
+    max_tokens: int = typer.Option(
+        512, "--max-tokens", help="Maximum generated tokens per response"
+    ),
     image: Optional[str] = typer.Option(
         None, "--image", "-i", help="Image path for VLM runners"
     ),
@@ -1299,16 +1302,14 @@ def run(
         raise typer.Exit(code=1)
     deps, script_type = resolve_model_deps(model, variant)
     try:
-        if image is None:
-            script = generate_run_script(model, variant, context_length, cpu_only)
-        else:
-            script = generate_run_script(
-                model,
-                variant,
-                context_length,
-                cpu_only,
-                image_path=image,
-            )
+        script = generate_run_script(
+            model,
+            variant,
+            context_length,
+            cpu_only,
+            image_path=image,
+            max_tokens=max_tokens,
+        )
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(code=1)
@@ -1339,6 +1340,16 @@ def snippet(
     quant: Optional[str] = typer.Option(
         None, "--quant", "-q", help="Quantization type"
     ),
+    context_length: int = typer.Option(
+        4096,
+        "--context-length",
+        "-c",
+        click_type=CONTEXT_LENGTH,
+        help="Context length (e.g. 4096, 64k, 128k)",
+    ),
+    max_tokens: int = typer.Option(
+        512, "--max-tokens", help="Maximum generated tokens per response"
+    ),
     refresh: bool = typer.Option(False, "--refresh", help="Refresh model metadata"),
     image: Optional[str] = typer.Option(
         None, "--image", "-i", help="Image path for VLM snippets"
@@ -1368,10 +1379,14 @@ def snippet(
         console.print("[red]Error:[/] VLM models require --image PATH.")
         raise typer.Exit(code=1)
     try:
-        if image is None:
-            code = generate_run_script(model, variant, 4096, False)
-        else:
-            code = generate_run_script(model, variant, 4096, False, image_path=image)
+        code = generate_run_script(
+            model,
+            variant,
+            context_length,
+            False,
+            image_path=image,
+            max_tokens=max_tokens,
+        )
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(code=1)
