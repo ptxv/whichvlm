@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 
 from whichvlm.constants import BYTES_PER_GIB
-from whichvlm.engine.workload import VisionWorkload
+from whichvlm.engine.workload import Workload
 from whichvlm.hardware.types import HardwareInfo, ensure_backend_capabilities
 from whichvlm.models.types import GGUFVariant, ModelInfo
 from whichvlm.runtime import (
@@ -112,11 +112,26 @@ def validate_output_flags(json_output: bool, markdown_output: bool) -> None:
 
 
 def validate_profile(profile: str) -> str:
-    valid = {"general", "coding", "vision", "ocr", "math", "any"}
+    valid = {
+        "general",
+        "coding",
+        "vision",
+        "math",
+        "any",
+        "image_qa",
+        "ocr",
+        "document",
+        "chart",
+        "video",
+        "audio",
+        "general_multimodal",
+    }
     p = profile.lower()
     if p not in valid:
         console.print(
-            "[red]Error:[/] --profile must be one of: general, coding, vision, ocr, math, any."
+            "[red]Error:[/] --profile must be one of: general, coding, vision, "
+            "math, any, image_qa, ocr, document, chart, video, audio, "
+            "general_multimodal."
         )
         raise typer.Exit(code=1)
     return p
@@ -141,7 +156,6 @@ def validate_freshness_weight(value: float) -> float:
 def resolve_evidence_mode(evidence: str, direct: bool) -> str:
     mode = validate_evidence(evidence)
     if direct:
-
         return "strict"
     return mode
 
@@ -350,21 +364,54 @@ def auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float |
 
 
 def include_vision_candidates(profile: str) -> bool:
-    return profile.lower() in {"vision", "ocr", "any"}
+    return profile.lower() in {
+        "vision",
+        "any",
+        "image_qa",
+        "ocr",
+        "document",
+        "chart",
+        "video",
+        "audio",
+        "general_multimodal",
+    }
 
 
-def vision_workload_for_profile(
+def workload_for_profile(
     profile: str,
     *,
     image_count: int = 1,
     image_size: int = 448,
+    video_frames: int = 0,
+    audio_seconds: float = 0.0,
+    batch_size: int = 1,
     context_length: int = 4096,
-) -> VisionWorkload | None:
-    if profile.lower() not in {"vision", "ocr", "any"}:
+) -> Workload | None:
+    task_by_profile = {
+        "any": "general_multimodal",
+        "vision": "image_qa",
+        "image_qa": "image_qa",
+        "ocr": "ocr",
+        "document": "document",
+        "chart": "chart",
+        "video": "video",
+        "audio": "audio",
+        "general_multimodal": "general_multimodal",
+    }
+    task = task_by_profile.get(profile.lower())
+    if task is None:
         return None
-    return VisionWorkload(
+    if task == "video" and video_frames == 0:
+        video_frames = 8
+    if task == "audio" and audio_seconds == 0:
+        audio_seconds = 30.0
+    return Workload(
+        task=task,
         image_count=image_count,
         image_size=image_size,
+        video_frames=video_frames,
+        audio_seconds=audio_seconds,
+        batch_size=batch_size,
         context_length=context_length,
     ).normalized()
 
@@ -429,6 +476,21 @@ def main(
         "--image-size",
         help="Input image edge size for VLM memory estimation",
     ),
+    video_frames: int = typer.Option(
+        0,
+        "--video-frames",
+        help="Video frames per request for workload estimation",
+    ),
+    audio_seconds: float = typer.Option(
+        0.0,
+        "--audio-seconds",
+        help="Audio seconds per request for workload estimation",
+    ),
+    batch_size: int = typer.Option(
+        1,
+        "--batch-size",
+        help="Requests per batch for memory and speed estimation",
+    ),
     quant: Optional[str] = typer.Option(
         None, "--quant", "-q", help="Filter by quantization type (e.g. Q4_K_M)"
     ),
@@ -478,7 +540,7 @@ def main(
     profile: str = typer.Option(
         "vision",
         "--profile",
-        help="Ranking profile: general | coding | vision | ocr | math | any",
+        help="Ranking profile or workload task",
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     markdown_output: bool = typer.Option(
@@ -562,7 +624,6 @@ def main(
         progress.update(task, description="scoring multimodal fit...")
         families = group_models(models)
 
-
         all_models = []
         for family in families:
             all_models.append(family.base_model)
@@ -573,10 +634,13 @@ def main(
             if min_params is None
             else min_params
         )
-        vision_workload = vision_workload_for_profile(
+        workload = workload_for_profile(
             profile,
             image_count=image_count,
             image_size=image_size,
+            video_frames=video_frames,
+            audio_seconds=audio_seconds,
+            batch_size=batch_size,
             context_length=context_length,
         )
 
@@ -593,10 +657,10 @@ def main(
             min_params_b=auto_min_params,
             evidence_filter=evidence_mode,
             fit_filter=fit_filter,
-            vision_workload=vision_workload,
+            vision_workload=workload,
+            workload=workload,
             freshness_weight=freshness_weight,
         )
-
 
         if not results and auto_min_params is not None and min_params is None:
             results = rank_models(
@@ -612,10 +676,10 @@ def main(
                 min_params_b=None,
                 evidence_filter=evidence_mode,
                 fit_filter=fit_filter,
-                vision_workload=vision_workload,
+                vision_workload=workload,
+                workload=workload,
                 freshness_weight=freshness_weight,
             )
-
 
         if results:
             try:
@@ -632,7 +696,6 @@ def main(
                 progress.update(
                     task, description=f"Published date backfill skipped: {e}"
                 )
-
 
     empty_message = None
     if fit_filter == "full_gpu":
@@ -715,7 +778,7 @@ def plan(
     from whichvlm.output.display import display_plan, display_plan_json
 
     with vlm_progress() as progress:
-        task = progress.add_task("loading VLM packages...", total=None)
+        progress.add_task("loading VLM packages...", total=None)
         models = load_model_catalog(refresh, include_vision=True)
 
     model = resolve_model_match(models, model_name)
@@ -770,7 +833,9 @@ def hardware_plan(
     ),
     top: int = typer.Option(10, "--top", "-n", help="Number of models to show"),
     profile: str = typer.Option(
-        "vision", "--profile", help="Ranking profile: general | coding | vision | math | any"
+        "vision",
+        "--profile",
+        help="Ranking profile or workload task",
     ),
     image_count: int = typer.Option(
         1,
@@ -786,6 +851,16 @@ def hardware_plan(
         0,
         "--video-frames",
         help="Video frames to budget as visual inputs",
+    ),
+    audio_seconds: float = typer.Option(
+        0.0,
+        "--audio-seconds",
+        help="Audio seconds per request for workload estimation",
+    ),
+    batch_size: int = typer.Option(
+        1,
+        "--batch-size",
+        help="Requests per batch for memory and speed estimation",
     ),
     ram: Optional[str] = typer.Option(
         None,
@@ -823,7 +898,6 @@ def hardware_plan(
     from whichvlm.hardware.types import HardwareInfo
     from whichvlm.models.grouper import group_models
     from whichvlm.output.display import display_hardware, display_json, display_ranking
-    from whichvlm.output.plan import plan_vision_workload
 
     profile = validate_profile(profile)
     system_ram_bytes = (
@@ -872,8 +946,14 @@ def hardware_plan(
             benchmark_scores=bench_scores,
             task_profile=profile,
             require_direct_top=True,
-            vision_workload=plan_vision_workload(
-                context_length, image_count, image_size, video_frames
+            vision_workload=workload_for_profile(
+                profile,
+                image_count=image_count,
+                image_size=image_size,
+                video_frames=video_frames,
+                audio_seconds=audio_seconds,
+                batch_size=batch_size,
+                context_length=context_length,
             ),
         )
 
@@ -904,7 +984,7 @@ def upgrade(
     profile: str = typer.Option(
         "vision",
         "--profile",
-        help="Ranking profile: general | coding | vision | ocr | math | any",
+        help="Ranking profile or workload task",
     ),
     image_count: int = typer.Option(
         1,
@@ -915,6 +995,21 @@ def upgrade(
         448,
         "--image-size",
         help="Input image edge size for VLM memory estimation",
+    ),
+    video_frames: int = typer.Option(
+        0,
+        "--video-frames",
+        help="Video frames per request for workload estimation",
+    ),
+    audio_seconds: float = typer.Option(
+        0.0,
+        "--audio-seconds",
+        help="Audio seconds per request for workload estimation",
+    ),
+    batch_size: int = typer.Option(
+        1,
+        "--batch-size",
+        help="Requests per batch for memory and speed estimation",
     ),
     cpu_only: bool = typer.Option(
         False, "--cpu-only", help="Compare against a CPU-only baseline"
@@ -953,10 +1048,13 @@ def upgrade(
 
         def rank_for(hw: HardwareInfo):
             min_p = auto_min_params_for_profile(hw, profile)
-            vision_workload = vision_workload_for_profile(
+            workload = workload_for_profile(
                 profile,
                 image_count=image_count,
                 image_size=image_size,
+                video_frames=video_frames,
+                audio_seconds=audio_seconds,
+                batch_size=batch_size,
                 context_length=context_length,
             )
             results = rank_models(
@@ -968,7 +1066,8 @@ def upgrade(
                 task_profile=profile,
                 require_direct_top=True,
                 min_params_b=min_p,
-                vision_workload=vision_workload,
+                vision_workload=workload,
+                workload=workload,
             )
             if not results and min_p is not None:
                 results = rank_models(
@@ -980,7 +1079,8 @@ def upgrade(
                     task_profile=profile,
                     require_direct_top=True,
                     min_params_b=None,
-                    vision_workload=vision_workload,
+                    vision_workload=workload,
+                    workload=workload,
                 )
             return results
 
@@ -1242,7 +1342,16 @@ def run(
             quant_filter=quant,
             benchmark_scores=bench_scores,
             task_profile="vision",
-            vision_workload=VisionWorkload(context_length=context_length),
+            vision_workload=Workload(
+                task="image_qa",
+                context_length=context_length,
+                image_count=1,
+            ),
+            workload=Workload(
+                task="image_qa",
+                context_length=context_length,
+                image_count=1,
+            ),
         )
         if not results:
             console.print("[red]No runnable model found for your hardware.[/]")
