@@ -32,6 +32,17 @@ class RuntimeRequest:
 
 
 @dataclass(frozen=True)
+class ServeRequest:
+    model: ModelInfo
+    artifact: GGUFVariant | None
+    context_length: int
+    cpu_only: bool
+    hardware: HardwareInfo | None
+    host: str
+    port: int
+
+
+@dataclass(frozen=True)
 class CompatibilityRule:
     backend: str
     families: frozenset[str]
@@ -107,6 +118,7 @@ COMPATIBILITY_MATRIX = (
 
 class Backend(ABC):
     name: str
+    can_serve = False
 
     @abstractmethod
     def supports(
@@ -125,11 +137,10 @@ class Backend(ABC):
 
     def build_command(self, request: RuntimeRequest) -> list[str]:
         assert request.script_path is not None
-        cmd = ["uv", "run", "--no-project"]
-        for dep in self.dependencies(request.model, request.artifact):
-            cmd.extend(["--with", dep])
-        cmd.append(request.script_path)
-        return cmd
+        return uv_command(
+            self.dependencies(request.model, request.artifact),
+            [request.script_path],
+        )
 
     def run(self, request: RuntimeRequest) -> int:
         script = self.generate_script(request)
@@ -146,6 +157,23 @@ class Backend(ABC):
 
     @abstractmethod
     def generate_script(self, request: RuntimeRequest) -> str: ...
+
+    def serve_dependencies(
+        self,
+        model: ModelInfo,
+        artifact: GGUFVariant | None,
+    ) -> list[str]:
+        return self.dependencies(model, artifact)
+
+    def serve(self, request: ServeRequest) -> int:
+        raise RuntimeUnsupportedError(f"{self.name} does not support serve.")
+
+
+def uv_command(deps: list[str], command: list[str]) -> list[str]:
+    cmd = ["uv", "run", "--no-project"]
+    for dep in deps:
+        cmd.extend(["--with", dep])
+    return [*cmd, *command]
 
 
 def model_family_keys(model: ModelInfo) -> set[str]:
@@ -272,6 +300,16 @@ def run_request(request: RuntimeRequest, backend_name: str | None = None) -> int
     return backend.run(request)
 
 
+def serve_request(request: ServeRequest, backend_name: str | None = None) -> int:
+    backend = select_serve_backend(
+        request.model,
+        request.artifact,
+        request.hardware,
+        backend_name,
+    )
+    return backend.serve(request)
+
+
 def is_mlx_model(model: ModelInfo) -> bool:
     if model.model_format == "mlx":
         return True
@@ -293,6 +331,7 @@ def find_projector_artifact(model: ModelInfo) -> ModelArtifact | None:
 
 class LlamaCppBackend(Backend):
     name = "llama.cpp"
+    can_serve = True
 
     def supports(
         self,
@@ -339,6 +378,43 @@ class LlamaCppBackend(Backend):
             request.context_length,
             request.cpu_only,
         )
+
+    def serve_dependencies(
+        self,
+        model: ModelInfo,
+        artifact: GGUFVariant | None,
+    ) -> list[str]:
+        return ["llama-cpp-python[server]", "huggingface-hub"]
+
+    def serve(self, request: ServeRequest) -> int:
+        assert request.artifact is not None
+        projector = None
+        if is_vlm_model(request.model):
+            projector = find_projector_artifact(request.model)
+            if projector is None or projector.filename is None:
+                raise RuntimeUnsupportedError(
+                    "GGUF VLM server requires an mmproj/projector artifact in "
+                    "the model package metadata."
+                )
+        script = generate_llama_cpp_serve_script(
+            request.model,
+            request.artifact,
+            projector,
+            request.context_length,
+            request.cpu_only,
+            request.host,
+            request.port,
+        )
+        fd, script_path = tempfile.mkstemp(suffix=".py", prefix="whichvlm_serve_")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(script)
+            result = subprocess.run(
+                uv_command(self.serve_dependencies(request.model, request.artifact), [script_path])
+            )
+            return result.returncode
+        finally:
+            os.unlink(script_path)
 
 
 class MLXBackend(Backend):
@@ -412,6 +488,7 @@ class TransformersBackend(Backend):
 
 class VLLMBackend(Backend):
     name = "vllm"
+    can_serve = True
 
     def supports(
         self,
@@ -442,9 +519,30 @@ class VLLMBackend(Backend):
             request.image_path,
         )
 
+    def serve(self, request: ServeRequest) -> int:
+        result = subprocess.run(
+            uv_command(
+                self.serve_dependencies(request.model, request.artifact),
+                [
+                    "vllm",
+                    "serve",
+                    request.model.id,
+                    "--host",
+                    request.host,
+                    "--port",
+                    str(request.port),
+                    "--max-model-len",
+                    str(request.context_length),
+                    "--trust-remote-code",
+                ],
+            )
+        )
+        return result.returncode
+
 
 class SGLangBackend(Backend):
     name = "sglang"
+    can_serve = True
 
     def supports(
         self,
@@ -475,6 +573,28 @@ class SGLangBackend(Backend):
             request.image_path,
         )
 
+    def serve(self, request: ServeRequest) -> int:
+        result = subprocess.run(
+            uv_command(
+                self.serve_dependencies(request.model, request.artifact),
+                [
+                    "python",
+                    "-m",
+                    "sglang.launch_server",
+                    "--model-path",
+                    request.model.id,
+                    "--host",
+                    request.host,
+                    "--port",
+                    str(request.port),
+                    "--context-length",
+                    str(request.context_length),
+                    "--trust-remote-code",
+                ],
+            )
+        )
+        return result.returncode
+
 
 AUTO_BACKENDS: tuple[Backend, ...] = (
     LlamaCppBackend(),
@@ -483,6 +603,11 @@ AUTO_BACKENDS: tuple[Backend, ...] = (
 )
 EXPLICIT_BACKENDS: tuple[Backend, ...] = (
     *AUTO_BACKENDS,
+    VLLMBackend(),
+    SGLangBackend(),
+)
+SERVE_AUTO_BACKENDS: tuple[Backend, ...] = (
+    LlamaCppBackend(),
     VLLMBackend(),
     SGLangBackend(),
 )
@@ -519,6 +644,38 @@ def select_backend(
     raise RuntimeUnsupportedError(
         f"No supported run backend for {model.id}. "
         "Try --backend vllm or --backend sglang on Linux/CUDA for supported VLMs."
+    )
+
+
+def select_serve_backend(
+    model: ModelInfo,
+    artifact: GGUFVariant | None,
+    hardware: HardwareInfo | None = None,
+    backend_name: str | None = None,
+) -> Backend:
+    if backend_name and backend_name != "auto":
+        target = normalize_backend_name(backend_name)
+        for backend in EXPLICIT_BACKENDS:
+            if backend.name != target:
+                continue
+            if not backend.can_serve:
+                raise RuntimeUnsupportedError(
+                    f"{backend_name} does not support serve; use run instead."
+                )
+            if backend.supports(model, artifact, hardware):
+                return backend
+            raise RuntimeUnsupportedError(
+                f"{backend_name} cannot serve {model.id} on this hardware."
+            )
+        raise RuntimeUnsupportedError(f"Unknown backend: {backend_name}")
+
+    for backend in SERVE_AUTO_BACKENDS:
+        if backend.supports(model, artifact, hardware):
+            return backend
+
+    raise RuntimeUnsupportedError(
+        f"No supported serve backend for {model.id}. "
+        "Use a GGUF artifact for llama.cpp or --backend vllm/sglang on Linux/CUDA."
     )
 
 
@@ -668,6 +825,68 @@ print("\\nBye!")
 '''
 
 
+def llama_cpp_server_chat_format(model_id: str) -> str:
+    value = model_id.lower()
+    if "qwen" in value and "vl" in value:
+        return "qwen2-vl"
+    if "minicpm" in value:
+        return "minicpm-v-2.6"
+    return "llava-1-5"
+
+
+def generate_llama_cpp_serve_script(
+    model: ModelInfo,
+    variant: GGUFVariant,
+    projector: ModelArtifact | None,
+    context_length: int,
+    cpu_only: bool,
+    host: str,
+    port: int,
+) -> str:
+    n_gpu = 0 if cpu_only else -1
+    projector_filename = projector.filename if projector else None
+    chat_format = llama_cpp_server_chat_format(model.id)
+    return f'''\
+import subprocess
+import sys
+
+from huggingface_hub import hf_hub_download
+
+model_id = "{model.id}"
+model_filename = "{variant.filename}"
+projector_filename = {projector_filename!r}
+
+print(f"Downloading {{model_id}}...")
+model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
+cmd = [
+    sys.executable,
+    "-m",
+    "llama_cpp.server",
+    "--model",
+    model_path,
+    "--n_ctx",
+    "{context_length}",
+    "--n_gpu_layers",
+    "{n_gpu}",
+    "--host",
+    "{host}",
+    "--port",
+    "{port}",
+]
+if projector_filename is not None:
+    mmproj_path = hf_hub_download(repo_id=model_id, filename=projector_filename)
+    cmd.extend(
+        [
+            "--clip_model_path",
+            mmproj_path,
+            "--chat_format",
+            "{chat_format}",
+        ]
+    )
+raise SystemExit(subprocess.run(cmd).returncode)
+'''
+
+
 def generate_transformers_text_script(model: ModelInfo, cpu_only: bool) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     dtype = "torch.float32" if cpu_only else '"auto"'
@@ -725,10 +944,6 @@ try:
         messages.append({{"role": "assistant", "content": full}})
     print("\\nBye!")
 finally:
-    try:
-        del model
-    except NameError:
-        pass
     shutil.rmtree(offload_folder, ignore_errors=True)
 '''
 
@@ -791,10 +1006,6 @@ try:
         print(processor.decode(outputs[0], skip_special_tokens=True))
     print("\\nBye!")
 finally:
-    try:
-        del model
-    except NameError:
-        pass
     shutil.rmtree(offload_folder, ignore_errors=True)
 '''
 

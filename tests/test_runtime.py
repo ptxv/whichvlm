@@ -3,10 +3,13 @@ import pytest
 from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
 from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from whichvlm.runtime import (
+    ServeRequest,
     RuntimeUnsupportedError,
     generate_run_script,
     requires_image,
     resolve_model_deps,
+    select_serve_backend,
+    serve_request,
 )
 
 
@@ -132,9 +135,17 @@ def test_mlx_vlm_script_uses_mlx_vlm_runner():
             )
         ],
     )
+    hardware = darwin_mlx_hardware()
 
-    deps, script_type = resolve_model_deps(model, None)
-    script = generate_run_script(model, None, 4096, False, image_path="/tmp/image.png")
+    deps, script_type = resolve_model_deps(model, None, hardware=hardware)
+    script = generate_run_script(
+        model,
+        None,
+        4096,
+        False,
+        image_path="/tmp/image.png",
+        hardware=hardware,
+    )
 
     assert deps == ["mlx-vlm", "pillow"]
     assert script_type == "mlx_vlm"
@@ -143,6 +154,23 @@ def test_mlx_vlm_script_uses_mlx_vlm_runner():
     assert "except ImportError:" in script
     assert "except Exception:" not in script
     assert "[image_path]" in script
+
+
+def darwin_mlx_hardware() -> HardwareInfo:
+    return HardwareInfo(
+        os="darwin",
+        gpus=[
+            GPUInfo(
+                name="Apple Test GPU",
+                vendor="apple",
+                vram_bytes=36_000_000_000,
+                backend_capabilities=[
+                    BackendCapability("metal", True),
+                    BackendCapability("mlx", True),
+                ],
+            )
+        ],
+    )
 
 
 def linux_cuda_hardware() -> HardwareInfo:
@@ -209,3 +237,61 @@ def test_sglang_vlm_backend_uses_offline_engine():
     assert "from sglang import Engine" in script
     assert "engine.generate" in script
     assert "image_data=image_path" in script
+
+
+def test_transformers_backend_is_not_a_server_backend():
+    model = vlm_model()
+
+    with pytest.raises(RuntimeUnsupportedError, match="does not support serve"):
+        select_serve_backend(
+            model,
+            None,
+            linux_cuda_hardware(),
+            backend_name="transformers",
+        )
+
+
+def test_vllm_serve_uses_openai_server_command(monkeypatch):
+    model = vlm_model()
+    captured: dict[str, list[str]] = {}
+
+    class Result:
+        returncode = 0
+
+    def fake_run(cmd):
+        captured["cmd"] = cmd
+        return Result()
+
+    monkeypatch.setattr("whichvlm.runtime.subprocess.run", fake_run)
+
+    code = serve_request(
+        ServeRequest(
+            model=model,
+            artifact=None,
+            context_length=8192,
+            cpu_only=False,
+            hardware=linux_cuda_hardware(),
+            host="0.0.0.0",
+            port=9000,
+        ),
+        backend_name="vllm",
+    )
+
+    assert code == 0
+    assert captured["cmd"] == [
+        "uv",
+        "run",
+        "--no-project",
+        "--with",
+        "vllm",
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-VL-7B-Instruct",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "9000",
+        "--max-model-len",
+        "8192",
+        "--trust-remote-code",
+    ]

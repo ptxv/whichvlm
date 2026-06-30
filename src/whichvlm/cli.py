@@ -15,11 +15,15 @@ from whichvlm.models.types import GGUFVariant, ModelInfo
 from whichvlm.runtime import (
     RuntimeRequest,
     RuntimeUnsupportedError,
+    ServeRequest,
     generate_run_script,
+    normalize_backend_name,
     requires_image,
     resolve_model_deps,
     run_request,
     select_backend,
+    select_serve_backend,
+    serve_request,
 )
 from whichvlm.utils import current_version, CONTEXT_LENGTH
 
@@ -718,7 +722,7 @@ def plan(
     from whichvlm.output.display import display_plan, display_plan_json
 
     with vlm_progress() as progress:
-        task = progress.add_task("loading VLM packages...", total=None)
+        progress.add_task("loading VLM packages...", total=None)
         models = load_model_catalog(refresh, include_vision=True)
 
     model = resolve_model_match(models, model_name)
@@ -1109,6 +1113,12 @@ def select_gguf_variant(
     return model.gguf_variants[0]
 
 
+def should_select_gguf(backend_name: str | None) -> bool:
+    if backend_name is None or backend_name == "auto":
+        return True
+    return normalize_backend_name(backend_name) == "llama.cpp"
+
+
 def lookup_gguf_variant(model: ModelInfo, quant_type: str) -> GGUFVariant | None:
     for variant in model.gguf_variants:
         if variant.quant_type.upper() == quant_type.upper():
@@ -1300,7 +1310,7 @@ def run(
             raise typer.Exit(code=1)
 
     assert model is not None
-    if variant is None:
+    if variant is None and should_select_gguf(backend_name):
         variant = select_gguf_variant(model, quant)
     if requires_image(model) and image is None:
         console.print("[red]Error:[/] VLM models require --image PATH.")
@@ -1333,6 +1343,82 @@ def run(
             hardware=hardware,
         )
         raise typer.Exit(code=run_request(request, backend.name))
+    except RuntimeUnsupportedError as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def serve(
+    model_name: str = typer.Argument(..., help="Model to serve"),
+    context_length: int = typer.Option(
+        4096,
+        "--context-length",
+        "-c",
+        click_type=CONTEXT_LENGTH,
+        help="Context length (e.g. 4096, 64k, 128k)",
+    ),
+    quant: Optional[str] = typer.Option(
+        None, "--quant", "-q", help="Quantization type"
+    ),
+    refresh: bool = typer.Option(False, "--refresh", help="Refresh model metadata"),
+    cpu_only: bool = typer.Option(False, "--cpu-only", help="CPU-only mode"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
+    port: int = typer.Option(8000, "--port", "-p", help="Server port"),
+    backend_name: Optional[str] = typer.Option(
+        None,
+        "--backend",
+        "-b",
+        help="Server backend: auto, llama.cpp, vllm, sglang",
+    ),
+):
+    import shutil
+
+    if not shutil.which("uv"):
+        console.print("[red]uv is required.[/]")
+        console.print(
+            "Install: [bold]curl -LsSf https://astral.sh/uv/install.sh | sh[/]"
+        )
+        raise typer.Exit(code=1)
+
+    with vlm_progress() as progress:
+        task = progress.add_task("loading VLM packages...", total=None)
+        models = load_model_catalog(refresh)
+        progress.remove_task(task)
+
+    from whichvlm.hardware.detector import detect_hardware
+
+    model = resolve_model_match(models, model_name)
+    hardware = detect_hardware()
+    if cpu_only:
+        hardware.gpus = []
+
+    variant = (
+        select_gguf_variant(model, quant) if should_select_gguf(backend_name) else None
+    )
+    try:
+        backend = select_serve_backend(model, variant, hardware, backend_name)
+        deps = backend.serve_dependencies(model, variant)
+    except RuntimeUnsupportedError as e:
+        console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(code=1)
+
+    fmt = variant.quant_type if variant else backend.name.upper()
+    console.print(f"\n[bold green]Serving {model.id}[/] [dim]({fmt})[/]")
+    console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]")
+    console.print(f"[dim]Listening on http://{host}:{port}[/]\n")
+
+    try:
+        request = ServeRequest(
+            model=model,
+            artifact=variant,
+            context_length=context_length,
+            cpu_only=cpu_only,
+            hardware=hardware,
+            host=host,
+            port=port,
+        )
+        raise typer.Exit(code=serve_request(request, backend.name))
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(code=1)
@@ -1375,7 +1461,9 @@ def snippet(
         gguf_models.sort(key=lambda m: m.downloads, reverse=True)
         model = gguf_models[0]
 
-    variant = select_gguf_variant(model, quant)
+    variant = (
+        select_gguf_variant(model, quant) if should_select_gguf(backend_name) else None
+    )
     if requires_image(model) and image is None:
         console.print("[red]Error:[/] VLM models require --image PATH.")
         raise typer.Exit(code=1)

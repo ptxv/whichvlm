@@ -15,11 +15,10 @@ from whichvlm.engine.performance import estimate_tok_per_sec
 from whichvlm.engine.vram import estimate_vram, estimate_vram_details
 from whichvlm.engine.workload import VisionWorkload
 from whichvlm.hardware.catalog import (
-  HARDWARE_CATALOG,
-  GPUInfo,
-  PLAN_SYSTEM_RAM_BYTES,
-  PLAN_VRAM_HEADROOM_RATIO,
-  HardwareCatalogEntry,
+    HARDWARE_CATALOG,
+    PLAN_SYSTEM_RAM_BYTES,
+    PLAN_VRAM_HEADROOM_RATIO,
+    HardwareCatalogEntry,
 )
 from whichvlm.hardware.types import GPUInfo, HardwareInfo
 from whichvlm.models.types import GGUFVariant, ModelInfo
@@ -72,7 +71,7 @@ def plan_vram_by_quant(
     for quant in PLAN_QUANTS:
         if quant not in QUANT_BYTES_PER_WEIGHT:
             continue
-        vram_bytes = estimate_vram(
+        vram = estimate_vram_details(
             model, plan_variant_for_quant(model, quant), context_length, vision_workload
         )
         rows[quant] = {
@@ -343,12 +342,19 @@ def plan_recommendations(
     multi_gpu_rows: list[dict],
 ) -> dict:
     full_gpu = first_runnable(single_gpu_rows, "full_gpu")
+    partial_offload_rows = [
+        row for row in single_gpu_rows if row["practical_partial_offload"]
+    ]
     show_multi_gpu = full_gpu is None or full_gpu["vram_gb"] >= 80
     return {
         "smallest_full_gpu": full_gpu,
-        "smallest_partial_offload": next(
-            (row for row in single_gpu_rows if row["practical_partial_offload"]),
-            None,
+        "smallest_partial_offload": min(
+            partial_offload_rows,
+            key=lambda row: (
+                row["price_usd"] if row["price_usd"] is not None else 10**9,
+                row["usable_vram_bytes"],
+            ),
+            default=None,
         ),
         "multi_gpu_alternatives": [
             row
