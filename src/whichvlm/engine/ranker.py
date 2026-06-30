@@ -26,6 +26,7 @@ from whichvlm.models.benchmark import (
     build_score_index,
     lookup_benchmark_evidence,
 )
+from whichvlm.models.integrations import capability_ids_for_model
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # Ranking core. Expands variants, scores fit, and orders final picks.
@@ -376,20 +377,9 @@ def detect_specializations(model: ModelInfo) -> set[str]:
     lower = " ".join(
         [model.id, model.hf_pipeline_tag or "", *model.tags, model.architecture]
     ).lower()
-    tags: set[str] = set()
+    tags: set[str] = set(capability_ids_for_model(model))
     if re.search(r"(coder|codegen|starcoder|program|coding)", lower):
         tags.add("coding")
-    if re.search(
-        r"(^|[-_/])(ocr|docvqa|document)([-_/]|$)|text[-_ ]?recognition",
-        lower,
-    ):
-        tags.update({"ocr", "vision"})
-    if re.search(
-        r"(^|[-_/])(vl|vision|multimodal|llava|image)([-_/]|$)|"
-        r"image-text-to-text|visual-question-answering|image-to-text|internvl|pixtral",
-        lower,
-    ):
-        tags.add("vision")
     if re.search(r"(^|[-_/])math([-_/]|$)", lower):
         tags.add("math")
     return tags

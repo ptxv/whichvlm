@@ -28,6 +28,22 @@ def test_vlm_runtime_requires_image():
         generate_run_script(model, None, 4096, False)
 
 
+def test_runtime_uses_cached_vision_capability():
+    model = ModelInfo(
+        id="org/Test-7B",
+        family_id="test",
+        name="Test-7B",
+        parameter_count=7_000_000_000,
+        capabilities=["vision"],
+    )
+
+    deps, script_type = resolve_model_deps(model, None)
+
+    assert requires_image(model)
+    assert "pillow" in deps
+    assert script_type == "transformers_vlm"
+
+
 def test_transformers_vlm_script_uses_processor_and_image_path():
     model = vlm_model()
 

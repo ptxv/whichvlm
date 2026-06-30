@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from whichvlm.engine.quantization import infer_non_gguf_quant_type
-from whichvlm.models.package_graph import is_projector_filename, is_vision_model
+from whichvlm.models.integrations import has_capability
+from whichvlm.models.package_graph import is_projector_filename
 from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
 
 # Runtime layer. Chooses script shape for transformers, GGUF, or MLX.
@@ -12,12 +13,7 @@ class RuntimeUnsupportedError(ValueError):
 
 def is_vlm_model(model: ModelInfo) -> bool:
     # VLM check. Detects image-capable models from tags and components.
-    if is_vision_model(model.id, model.hf_pipeline_tag, model.tags):
-        return True
-    return any(
-        component.role in {"vision_encoder", "projector", "processor"}
-        for component in model.components
-    )
+    return has_capability(model, "vision")
 
 
 def requires_image(model: ModelInfo) -> bool:

@@ -296,6 +296,16 @@ def test_vision_workload_does_not_change_text_model_vram():
     assert with_image_workload == text_only
 
 
+def test_vision_capability_enables_vram_overhead():
+    model = make_model(7_000_000_000, capabilities=["vision"])
+    workload = VisionWorkload(image_count=1, image_size=448)
+
+    assert estimate_vram(model, None, vision_workload=workload) > estimate_vram(
+        model,
+        None,
+    )
+
+
 def test_vision_component_sizes_increase_vlm_overhead():
     small = make_model(
         7_000_000_000,

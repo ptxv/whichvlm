@@ -6,6 +6,7 @@ from typing import Literal
 from whichvlm.constants import FRAMEWORK_OVERHEAD_BYTES
 from whichvlm.engine.quantization import estimate_weight_bytes
 from whichvlm.engine.workload import VisionWorkload
+from whichvlm.models.integrations import has_capability
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 # Memory model. Adds weights, cache, activations, and vision overhead.
@@ -273,16 +274,7 @@ def effective_params(model: ModelInfo) -> int:
 
 
 def is_vlm(model: ModelInfo) -> bool:
-    if model.hf_pipeline_tag in {
-        "image-text-to-text",
-        "visual-question-answering",
-        "image-to-text",
-    }:
-        return True
-    return any(
-        component.role in {"vision_encoder", "projector", "processor"}
-        for component in model.components
-    )
+    return has_capability(model, "vision")
 
 
 def image_tokens(model: ModelInfo, workload: VisionWorkload) -> int:

@@ -10,6 +10,10 @@ import httpx
 from whichvlm.constants import QUANT_BYTES_PER_WEIGHT
 from whichvlm.data.vlm_inventory import known_vlm_model_ids
 from whichvlm.models.http import get_with_retries
+from whichvlm.models.integrations import (
+    capability_ids_for_data,
+    pipeline_tags_for_capability,
+)
 from whichvlm.models.package_graph import (
     artifact_from_dict,
     artifact_to_dict,
@@ -43,11 +47,7 @@ GENERAL_EVAL_KEYWORDS = (
     "ceval",
     "cmmlu",
 )
-VLM_PIPELINE_TAGS = (
-    "image-text-to-text",
-    "visual-question-answering",
-    "image-to-text",
-)
+VLM_PIPELINE_TAGS = pipeline_tags_for_capability("vision")
 VLM_VARIANT_FILTERS = (None, "gguf", "mlx", "awq", "gptq", "bnb", "fp8")
 HF_MODEL_EXPAND = (
     "config",
@@ -668,6 +668,18 @@ def parse_model(data: dict) -> ModelInfo | None:
     )
     access = extract_access(data)
     lineage = build_lineage(base_models, tags, card_data)
+    architecture = extract_architecture(config)
+    gguf_meta = data.get("gguf", {}) or {}
+    if not isinstance(gguf_meta, dict):
+        gguf_meta = {}
+    if not architecture:
+        architecture = gguf_meta.get("architecture", "")
+    capabilities = capability_ids_for_data(
+        model_id,
+        data.get("pipeline_tag"),
+        tags,
+        architecture,
+    )
     artifacts = build_artifacts(
         model_id,
         model_format=model_format,
@@ -685,14 +697,8 @@ def parse_model(data: dict) -> ModelInfo | None:
         pipeline_tag=data.get("pipeline_tag"),
         tags=tags,
         lineage=lineage,
+        capabilities=capabilities,
     )
-
-    architecture = extract_architecture(config)
-    gguf_meta = data.get("gguf", {}) or {}
-    if not isinstance(gguf_meta, dict):
-        gguf_meta = {}
-    if not architecture:
-        architecture = gguf_meta.get("architecture", "")
 
     context_length = config.get("max_position_embeddings") or config.get(
         "max_sequence_length"
@@ -791,6 +797,7 @@ def parse_model(data: dict) -> ModelInfo | None:
         base_model=base_model,
         hf_pipeline_tag=data.get("pipeline_tag"),
         tags=tags,
+        capabilities=capabilities,
         access=access,
         is_official=is_official,
         model_format=model_format,
@@ -1063,6 +1070,7 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
             "base_model": model.base_model,
             "hf_pipeline_tag": model.hf_pipeline_tag,
             "tags": model.tags,
+            "capabilities": model.capabilities,
             "access": model.access,
             "is_official": model.is_official,
             "model_format": model.model_format,
@@ -1122,6 +1130,15 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
             for v in d.get("components", [])
             if isinstance(v, dict)
         ]
+        capabilities = [
+            str(v) for v in d.get("capabilities", []) if isinstance(v, str)
+        ] or capability_ids_for_data(
+            d["id"],
+            d.get("hf_pipeline_tag"),
+            tags,
+            d.get("architecture", ""),
+            tuple(component.role for component in components),
+        )
         model_format = d.get(
             "model_format",
             infer_model_format(d["id"], tags, gguf_variants, d),
@@ -1147,6 +1164,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 pipeline_tag=d.get("hf_pipeline_tag"),
                 tags=tags,
                 lineage=lineage,
+                capabilities=capabilities,
             )
         models.append(
             ModelInfo(
@@ -1183,6 +1201,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 base_model=base_model,
                 hf_pipeline_tag=d.get("hf_pipeline_tag"),
                 tags=tags,
+                capabilities=capabilities,
                 access=access,
                 is_official=d.get("is_official", is_official_model(d["id"])),
                 model_format=model_format,

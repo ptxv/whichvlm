@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import re
 
+from whichvlm.models.integrations import (
+    capability_ids_for_data,
+    component_roles_for_capabilities,
+)
 from whichvlm.models.types import (
     GGUFVariant,
     ModelArtifact,
@@ -62,15 +66,7 @@ def is_projector_filename(filename: str) -> bool:
 
 
 def is_vision_model(model_id: str, pipeline_tag: object, tags: list[str]) -> bool:
-    haystack = " ".join([model_id, str(pipeline_tag or ""), *tags]).lower()
-    return bool(
-        re.search(
-            r"(image-text-to-text|visual-question-answering|image-to-text|"
-            r"vision-language|multimodal|qwen.*vl|llava|pixtral|internvl|"
-            r"deepseek-vl|vision)",
-            haystack,
-        )
-    )
+    return "vision" in capability_ids_for_data(model_id, pipeline_tag, tags)
 
 
 def lineage_relationship(
@@ -175,6 +171,7 @@ def build_components(
     pipeline_tag: object,
     tags: list[str],
     lineage: ModelLineage,
+    capabilities: list[str] | None = None,
 ) -> list[ModelComponent]:
     # Component builder. Describes language, vision, and projector pieces.
     if lineage.is_merged:
@@ -186,18 +183,19 @@ def build_components(
                 quantization=quantization_type,
             )
         ]
-    if not is_vision_model(model_id, pipeline_tag, tags):
+    roles = component_roles_for_capabilities(
+        capabilities or capability_ids_for_data(model_id, pipeline_tag, tags)
+    )
+    if not roles:
         return []
     return [
         ModelComponent(
-            role="language",
+            role=role,
             repo_id=model_id,
-            parameter_count=parameter_count,
-            quantization=quantization_type,
-        ),
-        ModelComponent(role="vision_encoder", repo_id=model_id),
-        ModelComponent(role="projector", repo_id=model_id),
-        ModelComponent(role="processor", repo_id=model_id),
+            parameter_count=parameter_count if role == "language" else None,
+            quantization=quantization_type if role == "language" else None,
+        )
+        for role in roles
     ]
 
 

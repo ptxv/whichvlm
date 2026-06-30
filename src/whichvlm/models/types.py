@@ -74,6 +74,7 @@ class ModelInfo:
     base_model: str | None = None
     hf_pipeline_tag: str | None = None
     tags: list[str] = field(default_factory=list)
+    capabilities: list[str] = field(default_factory=list)
     access: str = "unknown"
     is_official: bool = False
     model_format: str = "unknown"

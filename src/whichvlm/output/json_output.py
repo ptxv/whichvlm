@@ -148,6 +148,7 @@ def model_dict(rank: int, result: CompatibilityResult, details: bool = False) ->
                 "architecture": model.architecture,
                 "hf_pipeline_tag": model.hf_pipeline_tag,
                 "tags": model.tags,
+                "capabilities": model.capabilities,
                 "access": model.access,
                 "is_official": model.is_official,
                 "model_format": model.model_format,
