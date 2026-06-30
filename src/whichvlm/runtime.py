@@ -277,7 +277,7 @@ try:
     print("Ready! Type 'exit' to quit.\\n")
     messages = []
 
-    def generate(**kwargs):
+    def generate_stream(**kwargs):
         with torch.inference_mode():
             model.generate(**kwargs)
 
@@ -301,7 +301,7 @@ try:
             tokenizer, skip_prompt=True, skip_special_tokens=True
         )
         thread = Thread(
-            target=generate,
+            target=generate_stream,
             kwargs=dict(**inputs, max_new_tokens=512, streamer=streamer),
         )
         thread.start()

@@ -56,7 +56,7 @@ def test_transformers_text_script_uses_inference_mode():
 
     assert "model.eval()" in script
     assert "with torch.inference_mode():" in script
-    assert "target=generate" in script
+    assert "target=generate_stream" in script
 
 
 def test_gguf_vlm_runtime_requires_projector_artifact():

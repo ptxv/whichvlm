@@ -907,12 +907,16 @@ def rank_models(
         if best_for_model is None:
             continue
 
-        existing = results_by_family.get(model.family_id)
-        if existing is None or family_selection_key(
+        family_key = model.family_id
+        existing = results_by_family.get(family_key)
+        if existing is None:
+            results_by_family[family_key] = best_for_model
+        elif family_selection_key(
             best_for_model,
             require_direct_top,
         ) > family_selection_key(existing, require_direct_top):
-            results_by_family[model.family_id] = best_for_model
+            del results_by_family[family_key]
+            results_by_family[family_key] = best_for_model
 
     results = list(results_by_family.values())
 
