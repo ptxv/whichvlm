@@ -880,7 +880,6 @@ def rank_models(
 ) -> list[CompatibilityResult]:
     # Main rank pass. Scores every candidate against hardware and evidence.
 
-    results: list[CompatibilityResult] = []
     gguf_only_backend = is_gguf_only_backend(hardware)
     applied_freshness_weight = max(0.0, min(1.0, freshness_weight))
     workload = workload_from_profile(
@@ -902,7 +901,7 @@ def rank_models(
             family_dominant_downloads[fid] = m.downloads
             family_dominant_params[fid] = m.parameter_count
 
-    seen_families: set[str] = set()
+    results_by_family: dict[str, CompatibilityResult] = {}
 
     sorted_models = sorted(models, key=lambda m: m.downloads, reverse=True)
 
@@ -1074,20 +1073,17 @@ def rank_models(
             continue
 
         family_key = model.family_id
-        if family_key in seen_families:
-            existing = next(
-                (r for r in results if r.model.family_id == family_key), None
-            )
-            if existing and family_selection_key(
-                best_for_model,
-                require_direct_top,
-            ) > family_selection_key(existing, require_direct_top):
-                results.remove(existing)
-                results.append(best_for_model)
-            continue
+        existing = results_by_family.get(family_key)
+        if existing is None:
+            results_by_family[family_key] = best_for_model
+        elif family_selection_key(
+            best_for_model,
+            require_direct_top,
+        ) > family_selection_key(existing, require_direct_top):
+            del results_by_family[family_key]
+            results_by_family[family_key] = best_for_model
 
-        seen_families.add(family_key)
-        results.append(best_for_model)
+    results = list(results_by_family.values())
 
     if require_direct_top:
         results.sort(

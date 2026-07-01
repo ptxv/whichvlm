@@ -909,8 +909,14 @@ try:
         trust_remote_code=True,
         offload_folder=offload_folder,
     )
+    model.eval()
     print("Ready! Type 'exit' to quit.\\n")
     messages = []
+
+    def generate_stream(**kwargs):
+        with torch.inference_mode():
+            model.generate(**kwargs)
+
     while True:
         try:
             text = input("> ")
@@ -931,7 +937,7 @@ try:
             tokenizer, skip_prompt=True, skip_special_tokens=True
         )
         thread = Thread(
-            target=model.generate,
+            target=generate_stream,
             kwargs=dict(**inputs, max_new_tokens=512, streamer=streamer),
         )
         thread.start()
@@ -975,6 +981,7 @@ try:
         trust_remote_code=True,
         offload_folder=offload_folder,
     )
+    model.eval()
     image = Image.open(image_path).convert("RGB")
     print("Ready! Type 'exit' to quit.\\n")
     while True:
@@ -1002,7 +1009,8 @@ try:
             return_dict=True,
             return_tensors="pt",
         ).to(model.device)
-        outputs = model.generate(**inputs, max_new_tokens=512)
+        with torch.inference_mode():
+            outputs = model.generate(**inputs, max_new_tokens=512)
         print(processor.decode(outputs[0], skip_special_tokens=True))
     print("\\nBye!")
 finally:
