@@ -358,10 +358,7 @@ def plan_recommendations(
         "smallest_full_gpu": full_gpu,
         "smallest_partial_offload": min(
             partial_offload_rows,
-            key=lambda row: (
-                row["price_usd"] if row["price_usd"] is not None else 10**9,
-                row["usable_vram_bytes"],
-            ),
+            key=hardware_size_key,
             default=None,
         ),
         "multi_gpu_alternatives": [
