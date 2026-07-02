@@ -20,6 +20,7 @@ from whichvlm.engine.quantization import (
 from whichvlm.engine.types import CompatibilityResult
 from whichvlm.engine.workload import Workload, WorkloadTask
 from whichvlm.hardware.types import (
+    GPUInfo,
     HardwareInfo,
     has_backend,
     infer_backend_capabilities,
@@ -43,6 +44,22 @@ LINEAGE_FAMILY_MAX: dict[str, int] = {
     family: max(idx for _, idx in entries) for family, entries in LINEAGE_REGEX.items()
 }
 MULTI_GPU_SPEED_FACTOR = 0.70
+QUANT_PREFERENCE_RANK = {
+    quant: idx for idx, quant in enumerate(QUANT_PREFERENCE_ORDER)
+}
+EXTREME_QUANTS = {
+    "Q2_K",
+    "Q2_0",
+    "Q1_0",
+    "TQ2_0",
+    "TQ1_0",
+    "IQ3_XXS",
+    "IQ2_XXS",
+    "IQ2_S",
+    "IQ2_M",
+    "IQ1_M",
+    "IQ1_S",
+}
 
 
 def family_selection_key(
@@ -260,28 +277,14 @@ def iter_candidate_variants(
         if not candidates:
             return []
     else:
-        EXTREME_QUANTS = {
-            "Q2_K",
-            "Q2_0",
-            "Q1_0",
-            "TQ2_0",
-            "TQ1_0",
-            "IQ3_XXS",
-            "IQ2_XXS",
-            "IQ2_S",
-            "IQ2_M",
-            "IQ1_M",
-            "IQ1_S",
-        }
         filtered = [v for v in candidates if v.quant_type.upper() not in EXTREME_QUANTS]
         if filtered:
             candidates = filtered
 
     def variant_sort_key(v: GGUFVariant) -> int:
-        try:
-            return QUANT_PREFERENCE_ORDER.index(v.quant_type.upper())
-        except ValueError:
-            return len(QUANT_PREFERENCE_ORDER)
+        return QUANT_PREFERENCE_RANK.get(
+            v.quant_type.upper(), len(QUANT_PREFERENCE_ORDER)
+        )
 
     candidates = sorted(candidates, key=variant_sort_key)
 
@@ -662,10 +665,12 @@ def backend_priority_bonus(
     variant: GGUFVariant | None,
     hardware: HardwareInfo,
     model_backends: set[str] | None = None,
+    best_gpu: GPUInfo | None = None,
 ) -> float:
     if not hardware.gpus:
         return -4.0
-    best_gpu = max(hardware.gpus, key=lambda g: g.vram_bytes)
+    if best_gpu is None:
+        best_gpu = max(hardware.gpus, key=lambda g: g.vram_bytes)
     if model_backends is None:
         model_backends = model_artifact_backends(model)
 
@@ -1050,6 +1055,7 @@ def rank_models(
                     variant,
                     hardware,
                     model_backends=model_backends,
+                    best_gpu=best_gpu,
                 ),
             )
             if bench_evidence.score is None:

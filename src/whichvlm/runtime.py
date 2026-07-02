@@ -712,15 +712,15 @@ while True:
         continue
     messages.append({{"role": "user", "content": text}})
     response = llm.create_chat_completion(messages=messages, stream=True)
-    full = ""
+    response_parts = []
     for chunk in response:
         delta = chunk["choices"][0].get("delta", {{}})
         content = delta.get("content", "")
         if content:
             print(content, end="", flush=True)
-            full += content
+            response_parts.append(content)
     print()
-    messages.append({{"role": "assistant", "content": full}})
+    messages.append({{"role": "assistant", "content": "".join(response_parts)}})
 print("\\nBye!")
 '''
 
@@ -941,13 +941,13 @@ try:
             kwargs=dict(**inputs, max_new_tokens=512, streamer=streamer),
         )
         thread.start()
-        full = ""
+        response_parts = []
         for text in streamer:
             print(text, end="", flush=True)
-            full += text
+            response_parts.append(text)
         thread.join()
         print()
-        messages.append({{"role": "assistant", "content": full}})
+        messages.append({{"role": "assistant", "content": "".join(response_parts)}})
     print("\\nBye!")
 finally:
     shutil.rmtree(offload_folder, ignore_errors=True)

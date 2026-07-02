@@ -62,6 +62,30 @@ def test_transformers_text_script_uses_inference_mode():
     assert "model.eval()" in script
     assert "with torch.inference_mode():" in script
     assert "target=generate_stream" in script
+    assert "response_parts.append(text)" in script
+    assert "full +=" not in script
+
+
+def test_llama_cpp_text_script_joins_streamed_response():
+    model = ModelInfo(
+        id="org/Test-7B-GGUF",
+        family_id="test",
+        name="Test-7B-GGUF",
+        parameter_count=7_000_000_000,
+        gguf_variants=[
+            GGUFVariant(
+                filename="test-Q4_K_M.gguf",
+                quant_type="Q4_K_M",
+                file_size_bytes=4_000_000_000,
+            )
+        ],
+    )
+
+    script = generate_run_script(model, model.gguf_variants[0], 4096, False)
+
+    assert "response_parts.append(content)" in script
+    assert '"".join(response_parts)' in script
+    assert "full +=" not in script
 
 
 def test_unknown_transformers_vlm_is_not_claimed_supported():
