@@ -22,6 +22,7 @@ from whichvlm.models.package_graph import (
     component_to_dict,
     infer_variant_kind,
     is_projector_filename,
+    is_vision_model,
     lineage_from_dict,
     lineage_to_dict,
     looks_quantized_repo_name,
@@ -282,6 +283,7 @@ def infer_model_capabilities(
     card_data: dict,
     pipeline_tag: object,
     tags: list[str],
+    architecture: str = "",
 ) -> ModelCapabilities:
     metadata_text = " ".join(
         [
@@ -316,6 +318,8 @@ def infer_model_capabilities(
     if ocr or document or chart:
         image = True
     if video:
+        image = True
+    if is_vision_model(model_id, pipeline_tag, tags, architecture):
         image = True
 
     return ModelCapabilities(
@@ -828,6 +832,7 @@ def parse_model(data: dict) -> ModelInfo | None:
         card_data=card_data,
         pipeline_tag=data.get("pipeline_tag"),
         tags=tags,
+        architecture=architecture,
     )
 
     return ModelInfo(
@@ -1281,6 +1286,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 card_data={},
                 pipeline_tag=d.get("hf_pipeline_tag"),
                 tags=tags,
+                architecture=d.get("architecture", ""),
             )
         models.append(
             ModelInfo(

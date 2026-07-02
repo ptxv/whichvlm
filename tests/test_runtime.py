@@ -1,5 +1,6 @@
 import pytest
 
+from whichvlm.models.fetcher import parse_model
 from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
 from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from whichvlm.runtime import (
@@ -48,14 +49,21 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
 
 
 def test_runtime_detects_vlm_from_architecture():
-    model = ModelInfo(
-        id="org/ConfigOnly-3B",
-        family_id="gemma-multimodal",
-        name="ConfigOnly-3B",
-        parameter_count=3_000_000_000,
-        architecture="paligemma",
+    model = parse_model(
+        {
+            "id": "org/ConfigOnly-3B",
+            "tags": ["transformers", "safetensors"],
+            "config": {
+                "architectures": ["PaliGemmaForConditionalGeneration"],
+                "model_type": "paligemma",
+            },
+            "safetensors": {"total": 3_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
     )
 
+    assert model is not None
     deps, script_type = resolve_model_deps(model, None)
 
     assert requires_image(model)

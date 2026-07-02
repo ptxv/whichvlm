@@ -54,10 +54,17 @@ class CompatibilityRule:
 TRANSFORMERS_VLM_FAMILIES = frozenset(
     {
         "qwen-vl",
+        "qwen2vl",
+        "qwen3vl",
         "gemma-multimodal",
+        "paligemma",
         "llama-vision",
+        "mllama",
         "pixtral",
         "phi-vision",
+        "phi3v",
+        "phi3_v",
+        "deepseek_vl",
         "llava",
     }
 )

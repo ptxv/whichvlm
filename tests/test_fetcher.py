@@ -485,6 +485,7 @@ def test_parse_model_detects_transformers_vlm_from_architecture():
     assert parsed is not None
     assert parsed.hf_pipeline_tag is None
     assert parsed.architecture == "paligemma"
+    assert parsed.capabilities.image
     assert {c.role for c in parsed.components} >= {
         "vision_encoder",
         "projector",
