@@ -10,6 +10,11 @@ from dataclasses import dataclass, replace
 from whichvlm.data.vlm_inventory import canonical_vlm_family_id
 from whichvlm.engine.quantization import infer_non_gguf_quant_type
 from whichvlm.hardware.types import HardwareInfo
+from whichvlm.models.integrations import (
+    VISUAL_COMPONENT_ROLES,
+    has_visual_input,
+    pipeline_tag_has_visual_input,
+)
 from whichvlm.models.package_graph import is_projector_filename
 from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
 
@@ -178,9 +183,16 @@ def uv_command(deps: list[str], command: list[str]) -> list[str]:
 
 def model_family_keys(model: ModelInfo) -> set[str]:
     keys = {model.family_id, model.architecture}
-    for model_id in [model.id, model.base_model, model.variant_of, *model.base_models]:
-        if model_id:
-            family = canonical_vlm_family_id(model_id)
+    for value in [
+        model.id,
+        model.family_id,
+        model.architecture,
+        model.base_model,
+        model.variant_of,
+        *model.base_models,
+    ]:
+        if value:
+            family = canonical_vlm_family_id(value)
             if family:
                 keys.add(family)
     return {key for key in keys if key}
@@ -239,19 +251,12 @@ def matrix_supports(
 
 
 def is_vlm_model(model: ModelInfo) -> bool:
-    caps = model.capabilities
-    if caps.image or caps.video:
+    if has_visual_input(model.capabilities):
         return True
-    if model.hf_pipeline_tag in {
-        "image-text-to-text",
-        "visual-question-answering",
-        "image-to-text",
-        "video-text-to-text",
-    }:
+    if pipeline_tag_has_visual_input(model.hf_pipeline_tag):
         return True
     return any(
-        component.role in {"vision_encoder", "video_encoder", "projector"}
-        for component in model.components
+        component.role in VISUAL_COMPONENT_ROLES for component in model.components
     )
 
 

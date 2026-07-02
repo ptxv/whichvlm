@@ -12,7 +12,7 @@ from whichvlm.data.vlm_inventory import known_vlm_model_ids
 from whichvlm.models.http import get_with_retries
 from whichvlm.models.integrations import (
     capabilities_for_data,
-    pipeline_tags_for_capabilities,
+    discovery_pipeline_tags,
 )
 from whichvlm.models.package_graph import (
     artifact_from_dict,
@@ -55,7 +55,7 @@ TASK_EVAL_KEYWORDS: dict[str, tuple[str, ...]] = {
     "hf_video": ("video", "videomme", "mvbench", "activitynet", "nextqa"),
     "hf_audio": ("audio", "speech", "asr", "voice", "spoken"),
 }
-VLM_PIPELINE_TAGS = pipeline_tags_for_capabilities(("image", "video", "audio"))
+VLM_PIPELINE_TAGS = discovery_pipeline_tags()
 VLM_VARIANT_FILTERS = (None, "gguf", "mlx", "awq", "gptq", "bnb", "fp8")
 HF_MODEL_EXPAND = (
     "config",
@@ -637,6 +637,8 @@ def extract_architecture(config: dict) -> str:
     if arch_list:
         arch = arch_list[0].lower()
         for name in [
+            "qwen2vl",
+            "qwen3vl",
             "llama",
             "qwen2",
             "mistral",

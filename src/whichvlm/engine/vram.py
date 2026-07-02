@@ -6,18 +6,19 @@ from typing import Literal
 from whichvlm.constants import FRAMEWORK_OVERHEAD_BYTES
 from whichvlm.engine.quantization import estimate_weight_bytes
 from whichvlm.engine.workload import Workload
+from whichvlm.models.integrations import (
+    AUDIO_COMPONENT_ROLES,
+    VISUAL_COMPONENT_ROLES,
+    has_audio_input,
+    has_visual_input,
+    pipeline_tag_has_audio_input,
+    pipeline_tag_has_visual_input,
+)
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 KV_BYTES_PER_BPARAM_PER_KCTX = 3.5 * 1024 * 1024
 MOE_ATTENTION_PARAM_MULTIPLIER = 4.0
 VramConfidence = Literal["high", "medium", "low"]
-VISUAL_PIPELINE_TAGS = {
-    "image-text-to-text",
-    "visual-question-answering",
-    "image-to-text",
-    "video-text-to-text",
-}
-AUDIO_PIPELINE_TAGS = {"audio-text-to-text", "automatic-speech-recognition"}
 
 
 @dataclass(frozen=True)
@@ -279,22 +280,24 @@ def effective_params(model: ModelInfo) -> int:
 
 
 def supports_visual_inputs(model: ModelInfo) -> bool:
-    if model.capabilities.image or model.capabilities.video:
+    if has_visual_input(model.capabilities):
         return True
-    if model.hf_pipeline_tag in VISUAL_PIPELINE_TAGS:
+    if pipeline_tag_has_visual_input(model.hf_pipeline_tag):
         return True
     return any(
-        component.role in {"vision_encoder", "video_encoder", "projector"}
+        component.role in VISUAL_COMPONENT_ROLES
         for component in model.components
     )
 
 
 def supports_audio_inputs(model: ModelInfo) -> bool:
-    if model.capabilities.audio:
+    if has_audio_input(model.capabilities):
         return True
-    if model.hf_pipeline_tag in AUDIO_PIPELINE_TAGS:
+    if pipeline_tag_has_audio_input(model.hf_pipeline_tag):
         return True
-    return any(component.role == "audio_encoder" for component in model.components)
+    return any(
+        component.role in AUDIO_COMPONENT_ROLES for component in model.components
+    )
 
 
 def image_tokens(model: ModelInfo, workload: Workload) -> int:

@@ -5,6 +5,7 @@ import re
 from whichvlm.models.integrations import (
     capabilities_for_data,
     component_roles_for_capabilities,
+    pipeline_tag_has_visual_input,
 )
 from whichvlm.models.types import (
     GGUFVariant,
@@ -63,7 +64,10 @@ def is_projector_filename(filename: str) -> bool:
 
 
 def is_vision_model(model_id: str, pipeline_tag: object, tags: list[str]) -> bool:
-    return capabilities_for_data(model_id, pipeline_tag, tags).image
+    return (
+        capabilities_for_data(model_id, pipeline_tag, tags).image
+        or pipeline_tag_has_visual_input(pipeline_tag)
+    )
 
 
 def lineage_relationship(
