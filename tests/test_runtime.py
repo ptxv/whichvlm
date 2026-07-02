@@ -1,5 +1,6 @@
 import pytest
 
+from whichvlm.models.fetcher import parse_model
 from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
 from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from whichvlm.runtime import (
@@ -45,6 +46,29 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
     assert "AutoModelForImageTextToText" in script
     assert "image_path = '/tmp/image.png'" in script
     assert '{"type": "image", "image": image}' in script
+
+
+def test_runtime_detects_vlm_from_architecture():
+    model = parse_model(
+        {
+            "id": "org/ConfigOnly-3B",
+            "tags": ["transformers", "safetensors"],
+            "config": {
+                "architectures": ["PaliGemmaForConditionalGeneration"],
+                "model_type": "paligemma",
+            },
+            "safetensors": {"total": 3_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
+    )
+
+    assert model is not None
+    deps, script_type = resolve_model_deps(model, None)
+
+    assert requires_image(model)
+    assert "pillow" in deps
+    assert script_type == "transformers_vlm"
 
 
 def test_unknown_transformers_vlm_is_not_claimed_supported():
