@@ -27,6 +27,7 @@ class RuntimeRequest:
     context_length: int
     cpu_only: bool
     image_path: str | None = None
+    max_tokens: int = 512
     hardware: HardwareInfo | None = None
     script_path: str | None = None
 
@@ -284,6 +285,7 @@ def generate_run_script(
     context_length: int,
     cpu_only: bool,
     image_path: str | None = None,
+    max_tokens: int = 512,
     backend_name: str | None = None,
     hardware: HardwareInfo | None = None,
 ) -> str:
@@ -294,6 +296,7 @@ def generate_run_script(
         context_length=context_length,
         cpu_only=cpu_only,
         image_path=image_path,
+        max_tokens=max_tokens,
         hardware=hardware,
     )
     return backend.generate_script(request)
@@ -568,12 +571,14 @@ class LlamaCppBackend(Backend):
                 request.context_length,
                 request.cpu_only,
                 request.image_path,
+                request.max_tokens,
             )
         return generate_llama_cpp_text_script(
             request.model,
             request.artifact,
             request.context_length,
             request.cpu_only,
+            request.max_tokens,
         )
 
     def serve_dependencies(
@@ -637,7 +642,9 @@ class MLXBackend(Backend):
     def generate_script(self, request: RuntimeRequest) -> str:
         if request.image_path is None:
             raise RuntimeUnsupportedError("VLM runners require --image PATH.")
-        return generate_mlx_vlm_script(request.model, request.image_path)
+        return generate_mlx_vlm_script(
+            request.model, request.image_path, request.max_tokens
+        )
 
 
 class TransformersBackend(Backend):
@@ -682,8 +689,11 @@ class TransformersBackend(Backend):
                 request.model,
                 request.image_path,
                 request.cpu_only,
+                request.max_tokens,
             )
-        return generate_transformers_text_script(request.model, request.cpu_only)
+        return generate_transformers_text_script(
+            request.model, request.cpu_only, request.max_tokens
+        )
 
 
 class VLLMBackend(Backend):
@@ -724,6 +734,7 @@ class VLLMBackend(Backend):
             request.model,
             request.context_length,
             request.image_path,
+            request.max_tokens,
         )
 
     def serve(self, request: ServeRequest) -> int:
@@ -785,6 +796,7 @@ class SGLangBackend(Backend):
             request.model,
             request.context_length,
             request.image_path,
+            request.max_tokens,
         )
 
     def serve(self, request: ServeRequest) -> int:
@@ -898,6 +910,7 @@ def generate_llama_cpp_text_script(
     variant: GGUFVariant,
     context_length: int,
     cpu_only: bool,
+    max_tokens: int,
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
@@ -933,7 +946,11 @@ while True:
         continue
     messages.append({{"role": "user", "content": text}})
     started_at = time.perf_counter()
-    response = llm.create_chat_completion(messages=messages, stream=True)
+    response = llm.create_chat_completion(
+        messages=messages,
+        max_tokens={max_tokens},
+        stream=True,
+    )
     output_parts = []
     first_token_at = None
     for chunk in response:
@@ -959,6 +976,7 @@ def generate_llama_cpp_vlm_script(
     context_length: int,
     cpu_only: bool,
     image_path: str,
+    max_tokens: int,
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
@@ -1048,7 +1066,11 @@ while True:
         }}
     ]
     started_at = time.perf_counter()
-    response = llm.create_chat_completion(messages=messages, stream=True)
+    response = llm.create_chat_completion(
+        messages=messages,
+        max_tokens={max_tokens},
+        stream=True,
+    )
     first_token_at = None
     output_parts = []
     for chunk in response:
@@ -1128,7 +1150,9 @@ raise SystemExit(subprocess.run(cmd).returncode)
 '''
 
 
-def generate_transformers_text_script(model: ModelInfo, cpu_only: bool) -> str:
+def generate_transformers_text_script(
+    model: ModelInfo, cpu_only: bool, max_tokens: int
+) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     imports = transformers_import_names(
         "AutoModelForCausalLM",
@@ -1181,7 +1205,7 @@ try:
         )
         def run_generate():
             with torch.inference_mode():
-                model.generate(**inputs, max_new_tokens=512, streamer=streamer)
+                model.generate(**inputs, max_new_tokens={max_tokens}, streamer=streamer)
 
         started_at = time.perf_counter()
         thread = Thread(target=run_generate)
@@ -1208,6 +1232,7 @@ def generate_transformers_vlm_script(
     model: ModelInfo,
     image_path: str,
     cpu_only: bool,
+    max_tokens: int,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     model_class, processor_class, processor_extra_args = transformers_vlm_profile(model)
@@ -1277,7 +1302,7 @@ try:
         )
         def run_generate():
             with torch.inference_mode():
-                model.generate(**inputs, max_new_tokens=512, streamer=streamer)
+                model.generate(**inputs, max_new_tokens={max_tokens}, streamer=streamer)
 
         started_at = time.perf_counter()
         thread = Thread(target=run_generate)
@@ -1299,7 +1324,9 @@ finally:
 '''
 
 
-def generate_mlx_vlm_script(model: ModelInfo, image_path: str) -> str:
+def generate_mlx_vlm_script(
+    model: ModelInfo, image_path: str, max_tokens: int
+) -> str:
     return f'''\
 from mlx_vlm import generate, load
 
@@ -1338,7 +1365,7 @@ while True:
         processor,
         prompt,
         [image_path],
-        max_tokens=512,
+        max_tokens={max_tokens},
         verbose=False,
     )
     print(output)
@@ -1350,6 +1377,7 @@ def generate_vllm_vlm_script(
     model: ModelInfo,
     context_length: int,
     image_path: str,
+    max_tokens: int,
 ) -> str:
     metrics = backend_decode_metrics_block()
     quantization = vllm_quantization(model)
@@ -1386,7 +1414,7 @@ llm = LLM(
     gpu_memory_utilization=0.90,
 )
 print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
-sampling = SamplingParams(max_tokens=512)
+sampling = SamplingParams(max_tokens={max_tokens})
 image_url = image_data_url(image_path)
 print("Ready! Type 'exit' to quit.\\n")
 
@@ -1423,6 +1451,7 @@ def generate_sglang_vlm_script(
     model: ModelInfo,
     context_length: int,
     image_path: str,
+    max_tokens: int,
 ) -> str:
     metrics = backend_decode_metrics_block()
     return f'''\
@@ -1465,7 +1494,7 @@ try:
         response = engine.generate(
             prompt=text,
             image_data=image_path,
-            sampling_params={{"max_new_tokens": 512}},
+            sampling_params={{"max_new_tokens": {max_tokens}}},
             stream=True,
         )
         for chunk in response:
