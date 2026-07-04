@@ -60,8 +60,8 @@ uv run whichvlm --fit full-gpu
 VLM runners require an image path.
 
 ```bash
-uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg
-uv run whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg
+uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
+uv run whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
 ```
 
 Runtime support is intentionally guarded:
