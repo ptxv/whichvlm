@@ -143,4 +143,6 @@ def test_registered_integration_has_complete_path(
 
     assert "pillow" in deps
     assert script_type == "transformers_vlm"
-    assert "AutoModelForImageTextToText" in script
+    assert "AutoProcessor" in script
+    assert "TextIteratorStreamer" in script
+    assert "image_path = '/tmp/image.png'" in script

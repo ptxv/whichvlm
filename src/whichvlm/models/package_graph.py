@@ -63,9 +63,14 @@ def is_projector_filename(filename: str) -> bool:
     return "mmproj" in lower or "projector" in lower
 
 
-def is_vision_model(model_id: str, pipeline_tag: object, tags: list[str]) -> bool:
+def is_vision_model(
+    model_id: str,
+    pipeline_tag: object,
+    tags: list[str],
+    architecture: str = "",
+) -> bool:
     return (
-        capabilities_for_data(model_id, pipeline_tag, tags).image
+        capabilities_for_data(model_id, pipeline_tag, tags, architecture).image
         or pipeline_tag_has_visual_input(pipeline_tag)
     )
 
@@ -172,6 +177,7 @@ def build_components(
     tags: list[str],
     lineage: ModelLineage,
     capabilities: ModelCapabilities | None = None,
+    architecture: str = "",
 ) -> list[ModelComponent]:
     if lineage.is_merged:
         return [
@@ -183,7 +189,8 @@ def build_components(
             )
         ]
     roles = component_roles_for_capabilities(
-        capabilities or capabilities_for_data(model_id, pipeline_tag, tags)
+        capabilities
+        or capabilities_for_data(model_id, pipeline_tag, tags, architecture)
     )
     if not roles:
         return []

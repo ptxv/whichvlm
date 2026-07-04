@@ -280,7 +280,15 @@ def infer_model_capabilities(
     card_data: dict,
     pipeline_tag: object,
     tags: list[str],
+    architecture: str = "",
 ) -> ModelCapabilities:
+    if not architecture:
+        architecture = " ".join(metadata_words(config.get("architectures")))
+    if not architecture:
+        architecture = str(
+            config.get("architecture") or config.get("model_type") or ""
+        )
+
     metadata_text = " ".join(
         [
             str(pipeline_tag or ""),
@@ -316,18 +324,12 @@ def infer_model_capabilities(
     if video:
         image = True
 
-    architecture = " ".join(metadata_words(config.get("architectures")))
-    if not architecture:
-        architecture = str(
-            config.get("architecture") or config.get("model_type") or ""
-        )
-    supported_languages = extract_languages(card_data, tags)
     registry_caps = capabilities_for_data(
         model_id,
         pipeline_tag,
         tags,
         architecture,
-        supported_languages,
+        extract_languages(card_data, tags),
     )
     return ModelCapabilities(
         image=image or registry_caps.image,
@@ -637,8 +639,13 @@ def extract_architecture(config: dict) -> str:
     if arch_list:
         arch = arch_list[0].lower()
         for name in [
-            "qwen2vl",
             "qwen3vl",
+            "qwen2vl",
+            "paligemma",
+            "mllama",
+            "deepseek_vl",
+            "phi3v",
+            "phi3_v",
             "llama",
             "qwen2",
             "mistral",
@@ -799,6 +806,7 @@ def parse_model(data: dict) -> ModelInfo | None:
         card_data=card_data,
         pipeline_tag=data.get("pipeline_tag"),
         tags=tags,
+        architecture=architecture,
     )
     artifacts = build_artifacts(
         model_id,
@@ -818,6 +826,7 @@ def parse_model(data: dict) -> ModelInfo | None:
         tags=tags,
         lineage=lineage,
         capabilities=capabilities,
+        architecture=architecture,
     )
 
     context_length = config.get("max_position_embeddings") or config.get(
@@ -1258,6 +1267,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
         quantization_type = d.get("quantization_type")
         variant_kind = d.get("variant_kind", "base")
         access = d.get("access", "unknown")
+        architecture = d.get("architecture", "")
         capabilities = capabilities_from_dict(d.get("capabilities"))
         if d.get("capabilities") is None:
             capabilities = infer_model_capabilities(
@@ -1266,6 +1276,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 card_data={},
                 pipeline_tag=d.get("hf_pipeline_tag"),
                 tags=tags,
+                architecture=architecture,
             )
         if not artifacts:
             artifacts = build_artifacts(
@@ -1286,6 +1297,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 tags=tags,
                 lineage=lineage,
                 capabilities=capabilities,
+                architecture=architecture,
             )
         models.append(
             ModelInfo(
@@ -1294,7 +1306,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 name=d["name"],
                 parameter_count=param_count,
                 parameter_count_active=active_params,
-                architecture=d.get("architecture", ""),
+                architecture=architecture,
                 is_moe=d.get("is_moe", False) or active_params is not None,
                 context_length=d.get("context_length"),
                 layer_count=d.get("layer_count"),

@@ -29,7 +29,9 @@ INTEGRATION_PROFILES: tuple[IntegrationProfile, ...] = (
         tag_patterns=(
             r"(^|[-_/\s])(vl|vision|multimodal|llava|image)([-_/\s]|$)",
             r"image-text-to-text|visual-question-answering|image-to-text",
-            r"qwen.*vl|internvl|pixtral|deepseek-vl",
+            r"qwen.*vl|internvl|pixtral|deepseek[-_]vl",
+            r"paligemma|idefics|mllama|phi3v|phi3_v|glm4v",
+            r"xgenmm|fuyu|kosmos|instructblip|blip|florence",
         ),
         component_roles=("language", "vision_encoder", "projector", "processor"),
         workload_tasks=("image_qa", "general_multimodal"),

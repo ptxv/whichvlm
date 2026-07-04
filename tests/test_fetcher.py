@@ -519,6 +519,32 @@ def test_parse_model_uses_integration_registry_for_ocr_capabilities():
     }
 
 
+def test_parse_model_detects_transformers_vlm_from_architecture():
+    parsed = parse_model(
+        {
+            "id": "org/ConfigOnly-3B",
+            "tags": ["transformers", "safetensors"],
+            "config": {
+                "architectures": ["PaliGemmaForConditionalGeneration"],
+                "model_type": "paligemma",
+            },
+            "safetensors": {"total": 3_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.hf_pipeline_tag is None
+    assert parsed.architecture == "paligemma"
+    assert parsed.capabilities.image
+    assert {c.role for c in parsed.components} >= {
+        "vision_encoder",
+        "projector",
+        "processor",
+    }
+
+
 def test_inventory_discovery_uses_registered_vision_pipelines():
     provenance = inventory_source_provenance(include_vision=True)
 

@@ -9,6 +9,7 @@ from whichvlm.engine.workload import Workload
 from whichvlm.models.integrations import (
     AUDIO_COMPONENT_ROLES,
     VISUAL_COMPONENT_ROLES,
+    capabilities_for_data,
     has_audio_input,
     has_visual_input,
     pipeline_tag_has_audio_input,
@@ -281,6 +282,13 @@ def effective_params(model: ModelInfo) -> int:
 
 def supports_visual_inputs(model: ModelInfo) -> bool:
     if has_visual_input(model.capabilities):
+        return True
+    if capabilities_for_data(
+        model.id,
+        model.hf_pipeline_tag,
+        model.tags,
+        model.architecture,
+    ).image:
         return True
     if pipeline_tag_has_visual_input(model.hf_pipeline_tag):
         return True
