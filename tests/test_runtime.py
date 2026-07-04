@@ -38,7 +38,9 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
     model = vlm_model()
 
     deps, script_type = resolve_model_deps(model, None)
-    script = generate_run_script(model, None, 4096, False, image_path="/tmp/image.png")
+    script = generate_run_script(
+        model, None, 4096, False, image_path="/tmp/image.png", max_tokens=128
+    )
 
     assert "pillow" in deps
     assert script_type == "transformers_vlm"
@@ -46,11 +48,32 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
     assert "Qwen2_5_VLForConditionalGeneration" in script
     assert "image_path = '/tmp/image.png'" in script
     assert '{"type": "image", "image": image}' in script
+    assert "max_new_tokens=128" in script
     assert "min_pixels=256 * 28 * 28" in script
     assert "max_pixels=1280 * 28 * 28" in script
     assert "TextIteratorStreamer" in script
     assert "torch.inference_mode()" in script
     assert "[metrics] ttft=" in script
+
+
+def test_text_runtime_scripts_use_custom_max_tokens():
+    model = ModelInfo(
+        id="org/Test-7B",
+        family_id="test-7b",
+        name="Test-7B",
+        parameter_count=7_000_000_000,
+    )
+    variant = GGUFVariant(
+        filename="test-q4.gguf",
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+    )
+
+    transformers = generate_run_script(model, None, 4096, False, max_tokens=96)
+    gguf = generate_run_script(model, variant, 4096, False, max_tokens=96)
+
+    assert "max_new_tokens=96" in transformers
+    assert "max_tokens=96" in gguf
 
 
 def test_transformers_quantized_script_uses_bitsandbytes_loader():
@@ -107,9 +130,17 @@ def test_generated_scripts_compile():
     mlx_vlm = vlm_model(model_format="mlx")
     scripts = [
         generate_run_script(text_model, None, 4096, False),
-        generate_run_script(vlm_model(), None, 4096, False, image_path="/tmp/image.png"),
+        generate_run_script(
+            vlm_model(), None, 4096, False, image_path="/tmp/image.png"
+        ),
         generate_run_script(gguf_model, gguf_variant, 4096, False),
-        generate_run_script(gguf_vlm, gguf_variant, 4096, False, image_path="/tmp/image.png"),
+        generate_run_script(
+            gguf_vlm,
+            gguf_variant,
+            4096,
+            False,
+            image_path="/tmp/image.png",
+        ),
         generate_run_script(
             mlx_vlm,
             None,
@@ -232,6 +263,7 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
         4096,
         False,
         image_path="/tmp/image.png",
+        max_tokens=128,
     )
 
     assert "pillow" in deps
@@ -240,6 +272,7 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
     assert "clip_model_path=mmproj_path" in script
     assert 'projector_filename = "mmproj-test-f16.gguf"' in script
     assert "image_data_url" in script
+    assert "max_tokens=128" in script
 
 
 def test_mlx_vlm_script_uses_mlx_vlm_runner():
@@ -262,6 +295,7 @@ def test_mlx_vlm_script_uses_mlx_vlm_runner():
         4096,
         False,
         image_path="/tmp/image.png",
+        max_tokens=96,
         hardware=hardware,
     )
 
@@ -272,6 +306,7 @@ def test_mlx_vlm_script_uses_mlx_vlm_runner():
     assert "except ImportError:" in script
     assert "except Exception:" not in script
     assert "[image_path]" in script
+    assert "max_tokens=96" in script
 
 
 def darwin_mlx_hardware() -> HardwareInfo:
@@ -320,6 +355,7 @@ def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
         4096,
         False,
         image_path="/tmp/image.png",
+        max_tokens=96,
         backend_name="vllm",
         hardware=linux_cuda_hardware(),
     )
@@ -329,6 +365,7 @@ def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
     assert "from vllm import LLM, SamplingParams" in script
     assert "llm.chat" in script
     assert "image_data_url" in script
+    assert "SamplingParams(max_tokens=96)" in script
     assert "quantization = 'awq'" in script
     assert "gpu_memory_utilization=0.90" in script
     assert "[metrics] ttft=" in script
@@ -349,6 +386,7 @@ def test_sglang_vlm_backend_uses_offline_engine():
         4096,
         False,
         image_path="/tmp/image.png",
+        max_tokens=96,
         backend_name="sglang",
         hardware=linux_cuda_hardware(),
     )
@@ -359,6 +397,7 @@ def test_sglang_vlm_backend_uses_offline_engine():
     assert "engine.generate" in script
     assert "stream=True" in script
     assert "image_data=image_path" in script
+    assert '"max_new_tokens": 96' in script
 
 
 def test_transformers_backend_is_not_a_server_backend():

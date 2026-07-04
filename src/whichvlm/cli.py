@@ -1421,6 +1421,9 @@ def run(
     ),
     refresh: bool = typer.Option(False, "--refresh", help="Refresh model metadata"),
     cpu_only: bool = typer.Option(False, "--cpu-only", help="CPU-only mode"),
+    max_tokens: int = typer.Option(
+        512, "--max-tokens", help="Maximum generated tokens per response"
+    ),
     image: Optional[str] = typer.Option(
         None, "--image", "-i", help="Image path for VLM runners"
     ),
@@ -1564,6 +1567,7 @@ def run(
             context_length=context_length,
             cpu_only=cpu_only,
             image_path=image,
+            max_tokens=max_tokens,
             hardware=hardware,
         )
         raise typer.Exit(code=run_request(request, backend.name))
@@ -1656,6 +1660,16 @@ def snippet(
     quant: Optional[str] = typer.Option(
         None, "--quant", "-q", help="Quantization type"
     ),
+    context_length: int = typer.Option(
+        4096,
+        "--context-length",
+        "-c",
+        click_type=CONTEXT_LENGTH,
+        help="Context length (e.g. 4096, 64k, 128k)",
+    ),
+    max_tokens: int = typer.Option(
+        512, "--max-tokens", help="Maximum generated tokens per response"
+    ),
     refresh: bool = typer.Option(False, "--refresh", help="Refresh model metadata"),
     image: Optional[str] = typer.Option(
         None, "--image", "-i", help="Image path for VLM snippets"
@@ -1698,25 +1712,16 @@ def snippet(
 
             hardware = detect_hardware()
         deps, _ = resolve_model_deps(model, variant, backend_name, hardware)
-        if image is None:
-            code = generate_run_script(
-                model,
-                variant,
-                4096,
-                False,
-                backend_name=backend_name,
-                hardware=hardware,
-            )
-        else:
-            code = generate_run_script(
-                model,
-                variant,
-                4096,
-                False,
-                image_path=image,
-                backend_name=backend_name,
-                hardware=hardware,
-            )
+        code = generate_run_script(
+            model,
+            variant,
+            context_length,
+            False,
+            image_path=image,
+            max_tokens=max_tokens,
+            backend_name=backend_name,
+            hardware=hardware,
+        )
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(code=1)
