@@ -1,5 +1,5 @@
-from whichvlm.models.grouper import normalize_name, group_models
-from whichvlm.models.types import ModelArtifact, ModelInfo
+from models.grouper import normalize_name, group_models
+from models.types import ModelArtifact, ModelInfo
 
 
 def make_model(

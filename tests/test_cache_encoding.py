@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import time
 
-import whichvlm.models.benchmark as benchmark_mod
-import whichvlm.models.cache as cache_mod
+import models.benchmark as benchmark_mod
+import models.cache as cache_mod
 
 
 class ReadableCacheFile:

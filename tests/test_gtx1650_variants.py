@@ -2,11 +2,11 @@ import subprocess
 
 import pytest
 
-from whichvlm.hardware import nvidia
-from whichvlm.hardware.gpu_db import resolve_detected_bandwidth
-from whichvlm.hardware.types import GPUInfo
-from whichvlm.engine.performance import estimate_tok_per_sec
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from hardware import nvidia
+from hardware.gpu_db import resolve_detected_bandwidth
+from hardware.types import GPUInfo
+from engine.performance import estimate_tok_per_sec
+from models.types import GGUFVariant, ModelInfo
 
 GTX1650_NAME = "NVIDIA GeForce GTX 1650"
 GDDR6_CLOCK = 6001.0

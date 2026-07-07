@@ -1,12 +1,12 @@
 import pytest
 
-from whichvlm.engine.compatibility import check_compatibility
-from whichvlm.hardware.nvidia import (
+from engine.compatibility import check_compatibility
+from hardware.nvidia import (
     lookup_bandwidth,
     lookup_compute_capability,
 )
-from whichvlm.hardware.types import GPUInfo, HardwareInfo
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from hardware.types import GPUInfo, HardwareInfo
+from models.types import GGUFVariant, ModelInfo
 
 
 KEPLER_GPUS: list[tuple[str, float, tuple[int, int]]] = [

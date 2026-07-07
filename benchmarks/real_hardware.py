@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def detection(args: argparse.Namespace) -> None:
-    from whichvlm.hardware.detector import detect_hardware
+    from hardware.detector import detect_hardware
 
     durations: list[float] = []
     snapshots = []

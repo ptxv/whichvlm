@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from whichvlm.engine.ranker import rank_models
-from whichvlm.hardware.gpu_simulator import create_synthetic_gpu
-from whichvlm.hardware.types import GPUInfo, HardwareInfo
-from whichvlm.models.benchmark import params_compatible
-from whichvlm.models.benchmark_sources.vision import VISION_FALLBACK_2026_05
-from whichvlm.models.grouper import group_models
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from engine.ranker import rank_models
+from hardware.gpu_simulator import create_synthetic_gpu
+from hardware.types import GPUInfo, HardwareInfo
+from models.benchmark import params_compatible
+from models.benchmark_sources.vision import VISION_FALLBACK_2026_05
+from models.grouper import group_models
+from models.types import GGUFVariant, ModelInfo
 
 
 def hw(
@@ -307,7 +307,7 @@ class TestApplePartialOffloadPenalty:
         return m, v
 
     def test_apple_partial_offload_keeps_most_of_full_speed(self):
-        from whichvlm.engine.performance import estimate_tok_per_sec
+        from engine.performance import estimate_tok_per_sec
 
         m, v = self.model_variant()
         apple = GPUInfo(
@@ -328,7 +328,7 @@ class TestApplePartialOffloadPenalty:
         )
 
     def test_discrete_partial_offload_still_takes_pcie_penalty(self):
-        from whichvlm.engine.performance import estimate_tok_per_sec
+        from engine.performance import estimate_tok_per_sec
 
         m, v = self.model_variant()
         nvidia = GPUInfo(
@@ -349,7 +349,7 @@ class TestApplePartialOffloadPenalty:
         )
 
     def test_apple_partial_faster_than_discrete_partial_same_bandwidth(self):
-        from whichvlm.engine.performance import estimate_tok_per_sec
+        from engine.performance import estimate_tok_per_sec
 
         m, v = self.model_variant()
 
@@ -380,7 +380,7 @@ class TestMoESpeedEstimation:
 
 
     def test_qwen3_next_strix_halo_matches_reported_generation_speed(self):
-        from whichvlm.engine.performance import estimate_tok_per_sec
+        from engine.performance import estimate_tok_per_sec
 
         model = ModelInfo(
             id="Qwen/Qwen3-Next-80B-A3B-Instruct",
@@ -408,7 +408,7 @@ class TestMoESpeedEstimation:
         assert 40.0 <= speed <= 50.0
 
     def test_unknown_ultra_sparse_moe_uses_active_params_on_strix_halo(self):
-        from whichvlm.engine.performance import estimate_tok_per_sec
+        from engine.performance import estimate_tok_per_sec
 
         model = ModelInfo(
             id="unknown/Experimental-80B-A3B",
@@ -436,7 +436,7 @@ class TestMoESpeedEstimation:
         assert 40.0 <= speed <= 50.0
 
     def test_qwen3_30b_a3b_strix_halo_no_longer_uses_legacy_floor(self):
-        from whichvlm.engine.performance import estimate_tok_per_sec
+        from engine.performance import estimate_tok_per_sec
 
         model = ModelInfo(
             id="Qwen/Qwen3-30B-A3B",
@@ -464,7 +464,7 @@ class TestMoESpeedEstimation:
         assert 50.0 <= speed <= 70.0
 
     def test_high_bandwidth_gpu_keeps_moe_kernel_floor(self):
-        from whichvlm.engine.performance import estimate_tok_per_sec
+        from engine.performance import estimate_tok_per_sec
 
         model = ModelInfo(
             id="Qwen/Qwen3-30B-A3B",
@@ -541,7 +541,7 @@ class TestMoESpeedEstimation:
 
 class TestSpeedUncertainty:
     def test_strix_halo_moe_speed_is_medium_confidence_with_range(self):
-        from whichvlm.engine.performance import estimate_speed_uncertainty
+        from engine.performance import estimate_speed_uncertainty
 
         model = ModelInfo(
             id="unknown/Experimental-80B-A3B",
@@ -573,7 +573,7 @@ class TestSpeedUncertainty:
         assert any("shared-memory APU" in note for note in notes)
 
     def test_apple_silicon_moe_speed_is_low_confidence(self):
-        from whichvlm.engine.performance import estimate_speed_uncertainty
+        from engine.performance import estimate_speed_uncertainty
 
         model = ModelInfo(
             id="google/gemma-4-26B-A4B-it",

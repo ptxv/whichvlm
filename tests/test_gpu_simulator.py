@@ -1,7 +1,7 @@
 import pytest
 
-from whichvlm.data.gpu import BYTES_PER_GIB
-from whichvlm.hardware.gpu_simulator import (
+from data.gpu import BYTES_PER_GIB
+from hardware.gpu_simulator import (
     create_synthetic_gpu,
     create_synthetic_gpus,
     parse_synthetic_gpu_specs,

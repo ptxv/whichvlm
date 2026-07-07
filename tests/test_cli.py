@@ -8,10 +8,10 @@ from rich.console import Console
 from typer import Exit
 from typer.testing import CliRunner
 
-import whichvlm.cli as cli_mod
-import whichvlm.__main__ as main_mod
-import whichvlm.output.console as console_mod
-from whichvlm.cli import (
+import cli as cli_mod
+import whichvlm as main_mod
+import output.console as console_mod
+from cli import (
     apply_memory_budgets,
     apply_gpu_overrides,
     auto_min_params_for_profile,
@@ -32,12 +32,12 @@ from whichvlm.cli import (
     workload_for_profile,
     app,
 )
-from whichvlm.runtime import generate_run_script
-from whichvlm.utils import current_version
-from whichvlm.engine.types import CompatibilityResult
-from whichvlm.hardware.types import GPUInfo, HardwareInfo, has_backend
-from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
-from whichvlm.output.display import display_json
+from runtime import generate_run_script
+from utils import current_version
+from engine.types import CompatibilityResult
+from hardware.types import GPUInfo, HardwareInfo, has_backend
+from models.types import GGUFVariant, ModelArtifact, ModelInfo
+from output.display import display_json
 
 
 def hw_with_gpu(vram_gb: int) -> HardwareInfo:
@@ -261,10 +261,10 @@ def test_load_benchmark_index_uses_stale_cache_after_fetch_failure(monkeypatch):
         raise AssertionError("failed benchmark fetch should not save cache")
 
     monkeypatch.setattr(
-        "whichvlm.models.benchmark.load_benchmark_cache", fake_load_cache
+        "models.benchmark.load_benchmark_cache", fake_load_cache
     )
-    monkeypatch.setattr("whichvlm.models.benchmark.fetch_benchmark_scores", fail_fetch)
-    monkeypatch.setattr("whichvlm.models.benchmark.save_benchmark_cache", fail_save)
+    monkeypatch.setattr("models.benchmark.fetch_benchmark_scores", fail_fetch)
+    monkeypatch.setattr("models.benchmark.save_benchmark_cache", fail_save)
 
     assert load_benchmark_index(refresh=False) == {"test/stale": 1.0}
     assert cache_calls == [False, True]
@@ -436,16 +436,16 @@ def test_main_passes_gpu_only_fit_filter(monkeypatch):
         ]
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
     monkeypatch.setattr(
-        "whichvlm.output.display.display_hardware", lambda hardware: None
+        "output.display.display_hardware", lambda hardware: None
     )
     monkeypatch.setattr(
-        "whichvlm.output.display.display_ranking",
+        "output.display.display_ranking",
         lambda results, **kwargs: None,
     )
 
@@ -489,15 +489,15 @@ def test_main_passes_speed_preset_perf_budget_and_default_runtime_columns(monkey
         captured["show_status"] = kwargs.get("show_status")
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
     monkeypatch.setattr(
-        "whichvlm.output.display.display_hardware", lambda hardware: None
+        "output.display.display_hardware", lambda hardware: None
     )
-    monkeypatch.setattr("whichvlm.output.display.display_ranking", fake_display_ranking)
+    monkeypatch.setattr("output.display.display_ranking", fake_display_ranking)
 
     result = CliRunner().invoke(
         app, ["--speed", "usable", "--perf-vram", "10%", "--vram-headroom", "none"]
@@ -519,15 +519,15 @@ def test_main_details_flag_restores_metadata_columns(monkeypatch):
         captured["show_status"] = kwargs.get("show_status")
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
     monkeypatch.setattr(
-        "whichvlm.output.display.display_hardware", lambda hardware: None
+        "output.display.display_hardware", lambda hardware: None
     )
-    monkeypatch.setattr("whichvlm.output.display.display_ranking", fake_display_ranking)
+    monkeypatch.setattr("output.display.display_ranking", fake_display_ranking)
 
     result = CliRunner().invoke(app, ["--details", "--min-params", "1"])
 
@@ -569,16 +569,16 @@ def test_main_markdown_alias_dispatches_markdown_output(monkeypatch):
         raise AssertionError("markdown output should not render Rich hardware panel")
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
     monkeypatch.setattr(
-        "whichvlm.output.display.display_markdown", fake_display_markdown
+        "output.display.display_markdown", fake_display_markdown
     )
     monkeypatch.setattr(
-        "whichvlm.output.display.display_hardware", fail_display_hardware
+        "output.display.display_hardware", fail_display_hardware
     )
 
     result = CliRunner().invoke(app, ["-m"])
@@ -605,15 +605,15 @@ def test_main_empty_gpu_only_result_shows_fit_message(monkeypatch):
         captured["empty_message"] = kwargs.get("empty_message")
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
     monkeypatch.setattr(
-        "whichvlm.output.display.display_hardware", lambda hardware: None
+        "output.display.display_hardware", lambda hardware: None
     )
-    monkeypatch.setattr("whichvlm.output.display.display_ranking", fake_display_ranking)
+    monkeypatch.setattr("output.display.display_ranking", fake_display_ranking)
 
     result = CliRunner().invoke(app, ["--fit", "full-gpu", "--min-params", "1"])
 
@@ -654,12 +654,12 @@ def test_main_json_smoke_profile_vision(monkeypatch):
         captured["json_details"] = details
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
-    monkeypatch.setattr("whichvlm.output.display.display_json", fake_display_json)
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("output.display.display_json", fake_display_json)
 
     result = CliRunner().invoke(
         app,
@@ -686,10 +686,10 @@ def test_hardware_command_smoke(monkeypatch):
         captured["hardware"] = hw
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
     monkeypatch.setattr(
-        "whichvlm.output.display.display_hardware", fake_display_hardware
+        "output.display.display_hardware", fake_display_hardware
     )
 
     result = CliRunner().invoke(app, ["hardware"])
@@ -705,11 +705,11 @@ def test_hardware_command_simulated_apple_silicon(monkeypatch):
         captured["hardware"] = hw
 
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware",
+        "hardware.detector.detect_hardware",
         lambda: HardwareInfo(gpus=[], ram_bytes=16 * 1024**3, os="darwin"),
     )
     monkeypatch.setattr(
-        "whichvlm.output.display.display_hardware", fake_display_hardware
+        "output.display.display_hardware", fake_display_hardware
     )
 
     result = CliRunner().invoke(app, ["hardware", "--gpu", "Apple M3 Max"])
@@ -723,7 +723,7 @@ def test_hardware_command_simulated_apple_silicon(monkeypatch):
 
 
 def test_plan_no_model_found_shows_error(monkeypatch):
-    monkeypatch.setattr("whichvlm.models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
     runner = CliRunner()
     result = runner.invoke(app, ["plan", "nonexistent_model_xyz_999"])
     assert result.exit_code != 0
@@ -735,7 +735,7 @@ def test_plan_display_plan_renders_tables():
 
     from rich.console import Console
 
-    from whichvlm.output.display import display_plan
+    from output.display import display_plan
 
     model = ModelInfo(
         id="test-org/Test-Model-7B-GGUF",
@@ -749,7 +749,7 @@ def test_plan_display_plan_renders_tables():
         likes=10,
     )
     buf = StringIO()
-    import whichvlm.output.console as console_mod
+    import output.console as console_mod
 
     orig_console = console_mod.console
     console_mod.console = Console(file=buf, force_terminal=False, width=120)
@@ -772,7 +772,7 @@ def test_plan_display_plan_json_outputs_valid_json():
 
     from rich.console import Console
 
-    from whichvlm.output.display import display_plan_json
+    from output.display import display_plan_json
 
     model = ModelInfo(
         id="test-org/Test-Model-7B-GGUF",
@@ -787,7 +787,7 @@ def test_plan_display_plan_json_outputs_valid_json():
     )
 
     buf = StringIO()
-    import whichvlm.output.console as console_mod
+    import output.console as console_mod
 
     orig_console = console_mod.console
     console_mod.console = Console(file=buf, force_terminal=False)
@@ -823,7 +823,7 @@ def test_hardware_plan_scores_target_gpu(monkeypatch):
 
     monkeypatch.setattr(cli_mod, "load_model_catalog", lambda *args, **kwargs: [model])
     monkeypatch.setattr(cli_mod, "load_benchmark_index", lambda refresh: {})
-    monkeypatch.setattr("whichvlm.output.display.display_json", fake_display_json)
+    monkeypatch.setattr("output.display.display_json", fake_display_json)
 
     result = CliRunner().invoke(
         app,
@@ -1151,7 +1151,7 @@ def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
     monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
     monkeypatch.setattr(cli_mod, "run_request", fake_run_request)
 
@@ -1225,10 +1225,10 @@ def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
         cli_mod, "load_model_catalog", lambda refresh: [selected, real_gguf]
     )
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
-    monkeypatch.setattr("whichvlm.models.benchmark.load_benchmark_cache", lambda: {})
-    monkeypatch.setattr("whichvlm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
     monkeypatch.setattr(cli_mod, "run_request", fake_run_request)
 
     result = CliRunner().invoke(
@@ -1285,7 +1285,7 @@ def test_serve_gguf_model_uses_server_request(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
     monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
     monkeypatch.setattr(
-        "whichvlm.hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
+        "hardware.detector.detect_hardware", lambda: hw_with_gpu(8)
     )
     monkeypatch.setattr(cli_mod, "serve_request", fake_serve_request)
 

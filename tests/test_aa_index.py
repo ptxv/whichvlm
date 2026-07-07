@@ -6,7 +6,7 @@ import json
 import httpx
 import pytest
 
-from whichvlm.models.benchmark_sources.aa_index import (
+from models.benchmark_sources.aa_index import (
     AA_LEADERBOARD_URL,
     ExtractionFailed,
     canonical_name,

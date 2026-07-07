@@ -1,4 +1,4 @@
-from whichvlm.data.vlm_inventory import canonical_vlm_family_id, known_vlm_model_ids
+from data.vlm_inventory import canonical_vlm_family_id, known_vlm_model_ids
 
 
 def test_known_vlm_inventory_families_have_stable_ids():

@@ -4,8 +4,8 @@ import subprocess
 import json
 from pathlib import Path
 
-from whichvlm.hardware import apple, cpu
-from whichvlm.hardware.types import GPUInfo, ensure_backend_capabilities, has_backend
+from hardware import apple, cpu
+from hardware.types import GPUInfo, ensure_backend_capabilities, has_backend
 
 
 def test_cpu_name_lscpu_fallback(monkeypatch):

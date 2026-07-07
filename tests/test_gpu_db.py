@@ -1,4 +1,4 @@
-from whichvlm.hardware.gpu_db import (
+from hardware.gpu_db import (
     normalize_detected_gpu_name,
     static_bandwidth,
     resolve_detected_bandwidth,

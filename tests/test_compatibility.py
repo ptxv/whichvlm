@@ -1,8 +1,8 @@
-from whichvlm.data.gpu import BYTES_PER_GIB
-from whichvlm.engine.compatibility import check_compatibility
-from whichvlm.hardware.memory import estimate_usable_ram
-from whichvlm.hardware.types import GPUInfo, HardwareInfo
-from whichvlm.models.types import GGUFVariant, ModelInfo
+from data.gpu import BYTES_PER_GIB
+from engine.compatibility import check_compatibility
+from hardware.memory import estimate_usable_ram
+from hardware.types import GPUInfo, HardwareInfo
+from models.types import GGUFVariant, ModelInfo
 
 
 def make_model(

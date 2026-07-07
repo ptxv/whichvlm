@@ -2,10 +2,10 @@ from io import StringIO
 
 from rich.console import Console
 
-from whichvlm.engine.types import CompatibilityResult
-from whichvlm.hardware.types import GPUInfo, HardwareInfo
-from whichvlm.models.types import GGUFVariant, ModelInfo
-from whichvlm.output.markdown import display_markdown
+from engine.types import CompatibilityResult
+from hardware.types import GPUInfo, HardwareInfo
+from models.types import GGUFVariant, ModelInfo
+from output.markdown import display_markdown
 
 
 def capture_markdown(
@@ -15,7 +15,7 @@ def capture_markdown(
     show_status: bool,
     empty_message: str | None = None,
 ) -> str:
-    import whichvlm.output.console as console_mod
+    import output.console as console_mod
 
     buf = StringIO()
     orig_console = console_mod.console

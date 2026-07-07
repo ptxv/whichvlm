@@ -1,12 +1,12 @@
-from whichvlm.engine.quantization import effective_quant_type
-from whichvlm.engine.ranker import (
+from engine.quantization import effective_quant_type
+from engine.ranker import (
     detect_specializations,
     partial_offload_quality_factor,
     rank_models,
 )
-from whichvlm.engine.workload import Workload
-from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from whichvlm.models.types import (
+from engine.workload import Workload
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo
+from models.types import (
     GGUFVariant,
     ModelArtifact,
     ModelCapabilities,
@@ -1176,7 +1176,7 @@ def test_fit_filter_full_gpu_returns_empty_when_no_full_gpu_candidate():
 
 
 def test_multi_gpu_speed_confidence_is_low():
-    from whichvlm.engine.performance import estimate_tok_per_sec
+    from engine.performance import estimate_tok_per_sec
 
     model = ModelInfo(
         id="org/Test-34B-GGUF",

@@ -3,18 +3,18 @@ from io import StringIO
 
 from rich.console import Console
 
-import whichvlm.output.console as console_mod
-from whichvlm.data.gpu import BYTES_PER_GIB
-from whichvlm.hardware.catalog import (
+import output.console as console_mod
+from data.gpu import BYTES_PER_GIB
+from hardware.catalog import (
     HARDWARE_CATALOG,
     PLAN_SYSTEM_RAM_BYTES,
     lookup_catalog_entry,
 )
-from whichvlm.hardware.gpu_simulator import create_synthetic_gpu
-from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from whichvlm.models.types import ModelInfo
-from whichvlm.output.display import display_plan_json
-from whichvlm.output.plan import (
+from hardware.gpu_simulator import create_synthetic_gpu
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo
+from models.types import ModelInfo
+from output.display import display_plan_json
+from output.plan import (
     plan_row_for_hardware,
     plan_gpu_compatibility,
     plan_multi_gpu_compatibility,

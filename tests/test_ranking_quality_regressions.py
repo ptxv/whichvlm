@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from whichvlm.engine.ranker import (
+from engine.ranker import (
     SOURCE_WEIGHTS,
     derivative_name_penalty,
     generation_bonus,
     is_excluded_model,
     rank_models,
 )
-from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from whichvlm.models.types import GGUFVariant, ModelArtifact, ModelInfo
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo
+from models.types import GGUFVariant, ModelArtifact, ModelInfo
 
 
 def hw(
@@ -121,7 +121,7 @@ def test_q1_0_returned_when_explicitly_requested_via_quant_filter():
 
 def test_q1_q2_quality_penalty_is_severe():
 
-    from whichvlm.data.quantization import QUANT_QUALITY_PENALTY
+    from data.quantization import QUANT_QUALITY_PENALTY
 
     assert QUANT_QUALITY_PENALTY["Q1_0"] >= 0.50
     assert QUANT_QUALITY_PENALTY["Q2_0"] >= 0.40
@@ -618,8 +618,8 @@ def test_newer_generation_beats_older_at_same_size():
 
 def test_speed_estimator_differs_by_quant_and_backend():
 
-    from whichvlm.engine.performance import estimate_tok_per_sec
-    from whichvlm.hardware.types import GPUInfo
+    from engine.performance import estimate_tok_per_sec
+    from hardware.types import GPUInfo
 
     model = ModelInfo(
         id="t/x",
@@ -654,11 +654,11 @@ def test_speed_estimator_differs_by_quant_and_backend():
 
 
 def test_vlm_speed_estimate_is_discounted_for_image_prefill():
-    from whichvlm.engine.performance import (
+    from engine.performance import (
         estimate_speed_uncertainty,
         estimate_tok_per_sec,
     )
-    from whichvlm.hardware.types import GPUInfo
+    from hardware.types import GPUInfo
 
     text = ModelInfo(
         id="Qwen/Qwen2.5-7B-Instruct",
@@ -699,7 +699,7 @@ def test_vlm_speed_estimate_is_discounted_for_image_prefill():
 
 def test_vram_kv_cache_scales_with_context():
 
-    from whichvlm.engine.vram import estimate_kv_cache
+    from engine.vram import estimate_kv_cache
 
     model = ModelInfo(
         id="t/x",

@@ -1,15 +1,15 @@
 import pytest
 
-from whichvlm.models.fetcher import parse_model
-from whichvlm.models.types import (
+from models.fetcher import parse_model
+from models.types import (
     GGUFVariant,
     ModelArtifact,
     ModelCapabilities,
     ModelComponent,
     ModelInfo,
 )
-from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from whichvlm.runtime import (
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo
+from runtime import (
     ServeRequest,
     RuntimeUnsupportedError,
     generate_run_script,
@@ -501,7 +501,7 @@ def test_vllm_serve_uses_openai_server_command(monkeypatch):
         captured["cmd"] = cmd
         return Result()
 
-    monkeypatch.setattr("whichvlm.runtime.subprocess.run", fake_run)
+    monkeypatch.setattr("runtime.subprocess.run", fake_run)
 
     code = serve_request(
         ServeRequest(

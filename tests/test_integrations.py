@@ -1,17 +1,17 @@
 import pytest
 
-from whichvlm.engine.ranker import rank_models
-from whichvlm.engine.vram import estimate_vram
-from whichvlm.engine.workload import Workload
-from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from whichvlm.models.fetcher import parse_model
-from whichvlm.models.integrations import (
+from engine.ranker import rank_models
+from engine.vram import estimate_vram
+from engine.workload import Workload
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo
+from models.fetcher import parse_model
+from models.integrations import (
     INTEGRATION_PROFILES,
     capabilities_for_data,
     integration_ids_for_capabilities,
     runtime_backends_for_capabilities,
 )
-from whichvlm.runtime import generate_run_script, resolve_model_deps
+from runtime import generate_run_script, resolve_model_deps
 
 
 def linux_cuda_hardware() -> HardwareInfo:

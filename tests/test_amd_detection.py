@@ -5,8 +5,8 @@ from io import StringIO
 
 from rich.console import Console
 
-from whichvlm.hardware import amd
-from whichvlm.hardware.types import GPUInfo, HardwareInfo
+from hardware import amd
+from hardware.types import GPUInfo, HardwareInfo
 
 
 def test_detect_amd_gpu_from_lspci_when_rocm_smi_missing(monkeypatch):
@@ -111,8 +111,8 @@ def test_detect_amd_gpu_from_sysfs_when_lspci_missing(monkeypatch, tmp_path):
 
 
 def test_display_amd_shared_memory_without_zero_kb(monkeypatch):
-    from whichvlm.output import console as console_mod
-    from whichvlm.output import display as display_mod
+    from output import console as console_mod
+    from output import display as display_mod
 
     buf = StringIO()
     monkeypatch.setattr(console_mod, "console", Console(file=buf, force_terminal=False))
@@ -228,8 +228,8 @@ def test_lookup_bandwidth_compound_lspci_name():
 
 def test_display_amd_dgpu_does_not_say_shared_memory(monkeypatch):
 
-    from whichvlm.output import console as console_mod
-    from whichvlm.output import display as display_mod
+    from output import console as console_mod
+    from output import display as display_mod
 
     buf = StringIO()
     monkeypatch.setattr(console_mod, "console", Console(file=buf, force_terminal=False))
@@ -260,8 +260,8 @@ def test_display_amd_dgpu_does_not_say_shared_memory(monkeypatch):
 
 
 def test_display_amd_dgpu_zero_vram_does_not_say_shared_memory(monkeypatch):
-    from whichvlm.output import console as console_mod
-    from whichvlm.output import display as display_mod
+    from output import console as console_mod
+    from output import display as display_mod
 
     buf = StringIO()
     monkeypatch.setattr(console_mod, "console", Console(file=buf, force_terminal=False))

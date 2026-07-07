@@ -1,7 +1,7 @@
 import asyncio
 
-import whichvlm.models.fetcher as fetcher_mod
-from whichvlm.models.fetcher import (
+import models.fetcher as fetcher_mod
+from models.fetcher import (
     extract_hf_eval_score,
     extract_published_at,
     normalize_param_count,
@@ -11,7 +11,7 @@ from whichvlm.models.fetcher import (
     inventory_source_provenance,
     models_to_dicts,
 )
-from whichvlm.models.types import ModelArtifact, ModelInfo
+from models.types import ModelArtifact, ModelInfo
 
 
 def test_normalize_param_count_for_quantized_repo_uses_size_hint():
