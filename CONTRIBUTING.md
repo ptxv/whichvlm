@@ -20,4 +20,4 @@ untested. For hardware, runtime, or performance claims, include the device, OS,
 command, and observed output.
 
 Write plainly. Keep sentences short. Prefer concrete details over filler. This
-makes human review easier and makes AI-assisted work more useful.
+makes human review easier.

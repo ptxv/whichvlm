@@ -22,7 +22,6 @@ from cli import (
     format_fetch_error,
     include_vision_candidates,
     load_benchmark_index,
-    merge_model_eval_benchmarks,
     parse_memory_amount,
     resolve_model_match,
     resolve_ranked_gguf_for_run,
@@ -295,38 +294,6 @@ def test_load_benchmark_index_uses_stale_cache_after_fetch_failure(monkeypatch):
 
     assert load_benchmark_index(refresh=False) == {"test/stale": 1.0}
     assert cache_calls == [False, True]
-
-
-def test_merge_model_eval_benchmarks_is_now_a_noop():
-
-    model_direct_missing = ModelInfo(
-        id="meta-llama/Llama-3.1-8B-Instruct",
-        family_id="llama-3.1-8b",
-        name="Llama-3.1-8B-Instruct",
-        parameter_count=8_000_000_000,
-        downloads=1,
-        likes=1,
-        benchmark_scores={"hf_eval": 66.4},
-    )
-    model_already_present = ModelInfo(
-        id="Qwen/Qwen2.5-7B-Instruct",
-        family_id="qwen2.5-7b",
-        name="Qwen2.5-7B-Instruct",
-        parameter_count=7_000_000_000,
-        downloads=1,
-        likes=1,
-        benchmark_scores={"hf_eval": 70.0},
-    )
-    original = {"Qwen/Qwen2.5-7B-Instruct": 71.2}
-    merged, injected = merge_model_eval_benchmarks(
-        [model_direct_missing, model_already_present],
-        original,
-    )
-
-    assert injected == 0
-    assert merged is original or merged == original
-
-    assert "meta-llama/Llama-3.1-8B-Instruct" not in merged
 
 
 def test_validate_evidence_accepts_all_modes():

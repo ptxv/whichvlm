@@ -471,14 +471,6 @@ def fill_missing_published_at(
     return updated
 
 
-def merge_model_eval_benchmarks(
-    models: list,
-    benchmark_scores: dict[str, float],
-) -> tuple[dict[str, float], int]:
-
-    return benchmark_scores, 0
-
-
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
