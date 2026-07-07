@@ -8,7 +8,6 @@ from data.gpu import BYTES_PER_GIB, NVIDIA_COMPUTE_CAPABILITY
 from hardware.gpu_db import static_bandwidth, resolve_detected_bandwidth
 from hardware.types import GPUInfo
 
-# NVIDIA probe. Prefers NVML and falls back to nvidia-smi parsing.
 logger = logging.getLogger(__name__)
 
 NVIDIA_UNIFIED_MEMORY_MARKERS = ("GB10", "DGX SPARK")
@@ -78,7 +77,6 @@ def run_smi_query(fields: str) -> str:
 
 
 def detect_nvidia_gpus_via_smi() -> list[GPUInfo]:
-    # CLI fallback. Parses names, VRAM, and optional memory clocks.
     try:
         stdout = run_smi_query("name,memory.total,clocks.max.memory")
     except (subprocess.SubprocessError, OSError) as e:
@@ -120,7 +118,6 @@ def detect_nvidia_gpus_via_smi() -> list[GPUInfo]:
 
 
 def detect_nvidia_gpus() -> list[GPUInfo]:
-    # Main NVIDIA probe. Uses NVML when present, then falls back to smi.
     try:
         import pynvml
     except ImportError:
@@ -158,14 +155,11 @@ def detect_nvidia_gpus() -> list[GPUInfo]:
                 logger.debug(f"NVML did not report dedicated memory for {name}")
                 vram_bytes = None
 
-
             try:
                 mem_clock_mhz: float | None = float(
                     pynvml.nvmlDeviceGetMaxClockInfo(handle, pynvml.NVML_CLOCK_MEM)
                 )
             except (pynvml.NVMLError, AttributeError) as clock_err:
-
-
                 logger.debug(
                     f"max mem clock unavailable for {name} "
                     f"({clock_err}); bandwidth from name only"

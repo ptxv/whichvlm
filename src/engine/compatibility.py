@@ -10,7 +10,6 @@ from hardware.memory import effective_usable_ram
 from hardware.types import GPUInfo, HardwareInfo
 from models.types import GGUFVariant, ModelInfo
 
-# Fit layer. Turns memory pools into full, partial, or cpu-only results.
 MULTI_GPU_FRAMEWORK_OVERHEAD_BYTES = int(0.3 * BYTES_PER_GIB)
 MULTI_GPU_HOMOGENEOUS_UTILIZATION = 0.95
 MULTI_GPU_HETEROGENEOUS_UTILIZATION = 0.90
@@ -19,7 +18,6 @@ MULTI_GPU_HETEROGENEOUS_UTILIZATION = 0.90
 def gpu_available_memory(
     gpu: GPUInfo, usable_ram: int, *, ram_budget_active: bool = False
 ) -> int:
-    # Pool calculator. Resolves the bytes this GPU can really use.
     vram_bytes = (
         gpu.usable_vram_bytes if gpu.usable_vram_bytes is not None else gpu.vram_bytes
     )
@@ -76,7 +74,6 @@ def multi_gpu_effective_vram(
     available: list[int],
     warnings: list[str],
 ) -> tuple[int, bool, int | None]:
-    # Multi-GPU fit model. Shrinks raw VRAM into a conservative split budget.
     raw_total = sum(available)
     if len(gpus) <= 1:
         return raw_total, False, None
@@ -117,7 +114,6 @@ def check_compatibility(
     context_length: int = 4096,
     vision_workload: Workload | None = None,
 ) -> CompatibilityResult:
-    # Main fit pass. Produces run type, budgets, and hardware warnings.
     warnings: list[str] = []
 
     vram_estimate = estimate_vram_details(

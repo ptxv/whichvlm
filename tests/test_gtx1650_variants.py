@@ -1,7 +1,9 @@
+import importlib
 import subprocess
 
 import pytest
 
+from data.gpu import GPU_BANDWIDTH, GPU_MEMORY_CLOCK_VARIANTS
 from hardware import nvidia
 from hardware.gpu_db import resolve_detected_bandwidth
 from hardware.types import GPUInfo
@@ -11,6 +13,16 @@ from models.types import GGUFVariant, ModelInfo
 GTX1650_NAME = "NVIDIA GeForce GTX 1650"
 GDDR6_CLOCK = 6001.0
 GDDR5_CLOCK = 4001.0
+
+
+def test_variant_table_preserves_gtx1650_defaults():
+    legacy_constants = importlib.import_module("whichvlm.constants")
+    thresholds = [t for t, _ in GPU_MEMORY_CLOCK_VARIANTS["GTX 1650"]]
+
+    assert thresholds == sorted(thresholds, reverse=True)
+    assert GPU_BANDWIDTH["GTX 1650"] == 128.0
+    assert legacy_constants.GPU_BANDWIDTH is GPU_BANDWIDTH
+    assert legacy_constants.GPU_MEMORY_CLOCK_VARIANTS is GPU_MEMORY_CLOCK_VARIANTS
 
 
 def test_gddr6_clock_resolves_to_192():

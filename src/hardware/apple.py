@@ -9,7 +9,6 @@ from pathlib import Path
 from data.gpu import GPU_BANDWIDTH
 from hardware.types import BackendCapability, GPUInfo
 
-# Apple probe. Reads Metal, MLX, and unified-memory facts for Apple GPUs.
 logger = logging.getLogger(__name__)
 
 
@@ -75,7 +74,6 @@ def apple_backend_capabilities(display_data: dict | None) -> list[BackendCapabil
 
 
 def detect_apple_gpu() -> list[GPUInfo]:
-    # macOS probe. Reads system_profiler and builds one Apple GPU record.
     data = run_system_profiler("SPHardwareDataType")
     if data is None:
         logger.debug("system_profiler not available (not macOS)")
@@ -134,7 +132,6 @@ def chip_name_from_devicetree() -> str | None:
 def detect_apple_gpu_linux(
     drm_path: Path = Path("/sys/class/drm"),
 ) -> list[GPUInfo]:
-    # Asahi probe. Maps Linux Apple DRM devices into shared-memory GPU info.
     try:
         cards = sorted(drm_path.glob("card[0-9]*"))
     except OSError:
@@ -150,7 +147,6 @@ def detect_apple_gpu_linux(
             continue
 
         chip_name = chip_name_from_devicetree() or "Apple Silicon"
-
 
         import psutil
 

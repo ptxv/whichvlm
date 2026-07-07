@@ -28,7 +28,6 @@ from runtime import (
 )
 from utils import current_version, CONTEXT_LENGTH
 
-# CLI hub. Turns flags into load, rank, run, and render work.
 app = typer.Typer(
     name="whichvlm",
     help="Find local vision-language models that fit your hardware.",
@@ -62,7 +61,6 @@ OUTPUT_PANEL = "Output"
 
 
 def vlm_progress():
-    # Progress widget. Keeps network-heavy steps readable in terminal.
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
     return Progress(
@@ -74,7 +72,6 @@ def vlm_progress():
 
 
 def format_fetch_error(error: Exception) -> str:
-    # Error flattener. Gives one short message even for empty HTTP errors.
     detail = str(error).strip()
     if detail:
         return detail
@@ -205,7 +202,6 @@ MEMORY_RE = re.compile(
 def parse_memory_amount(
     value: str, *, option_name: str, total_bytes: int | None = None
 ) -> int:
-    # Memory parser. Accepts GiB, MiB, and percent budget inputs.
     raw = value.strip()
     if not raw:
         console.print(f"[red]Error:[/] {option_name} cannot be empty.")
@@ -270,7 +266,6 @@ def apply_memory_budgets(
     perf_vram: str = "none",
     ram_budget: str | None,
 ) -> HardwareInfo:
-    # Budget pass. Writes usable memory limits onto detected hardware.
     headroom_mode = vram_headroom.strip().lower()
     if not hardware.gpus and headroom_mode not in {"auto", "none", "off", "0"}:
         parse_memory_amount(
@@ -1240,7 +1235,6 @@ def upgrade(
 
 
 def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[ModelInfo]:
-    # Model loader. Reuses cache first, then falls back to live HF fetch.
     from models.cache import load_cache, save_cache
     from models.fetcher import (
         dicts_to_models,
@@ -1273,7 +1267,6 @@ def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[Model
 
 
 def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
-    # Model resolver. Turns fuzzy CLI text into one concrete repo id.
     query_lower = model_name.lower()
     terms = query_lower.split()
 
@@ -1308,7 +1301,6 @@ def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
 def select_gguf_variant(
     model: ModelInfo, quant_filter: str | None = None
 ) -> GGUFVariant | None:
-    # Variant chooser. Picks the best local GGUF file for the request.
     if not model.gguf_variants:
         return None
 
@@ -1369,7 +1361,6 @@ def resolve_ranked_gguf_for_run(
     models: list[ModelInfo],
     quant_filter: str | None = None,
 ) -> tuple[ModelInfo, GGUFVariant] | None:
-    # Runner resolver. Maps synthetic ranked variants to real GGUF repos.
     desired_quant = quant_filter or selected_variant.quant_type
 
     if selected_model.gguf_variants:

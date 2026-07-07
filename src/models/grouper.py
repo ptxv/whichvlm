@@ -6,10 +6,8 @@ from data.vlm_inventory import canonical_vlm_family_id
 from models.package_graph import merge_family_graph
 from models.types import ModelFamily, ModelInfo
 
-# Family grouper. Collapses variants onto one canonical model line.
 
 def normalize_name(model_id: str) -> str:
-    # Name normalizer. Makes official and community variants collide.
     canonical = canonical_vlm_family_id(model_id)
     if canonical:
         return canonical
@@ -44,9 +42,7 @@ def normalize_name(model_id: str) -> str:
         if name == prev:
             break
 
-
     name = re.sub(r"-\d+\.\d+(-\d+(?:\.\d+)?b(?:-a\d+b)?)$", r"\1", name)
-
 
     m = re.match(r"^(.+?)-(\d+(?:\.\d+)?b(?:-a\d+b)?)$", name)
     if m:
@@ -54,15 +50,12 @@ def normalize_name(model_id: str) -> str:
         series = re.sub(r"(\d+)\.\d+$", r"\1", series)
         name = f"{series}-{size}"
     else:
-
         name = re.sub(r"(\d+)\.\d+$", r"\1", name)
 
     return name
 
 
 def group_models(models: list[ModelInfo]) -> list[ModelFamily]:
-    # Main grouping pass. Picks a base model and merges family metadata.
-
     base_model_groups: dict[str, list[ModelInfo]] = {}
     ungrouped: list[ModelInfo] = []
 
@@ -73,33 +66,27 @@ def group_models(models: list[ModelInfo]) -> list[ModelFamily]:
         else:
             ungrouped.append(model)
 
-
     name_groups: dict[str, list[ModelInfo]] = {}
     for model in ungrouped:
         key = normalize_name(model.id)
         name_groups.setdefault(key, []).append(model)
-
 
     merged_base: dict[str, list[ModelInfo]] = {}
     for key, group in base_model_groups.items():
         norm_key = normalize_name(key)
         merged_base.setdefault(norm_key, []).extend(group)
 
-
     for norm_key, group in list(merged_base.items()):
         if norm_key in name_groups:
             group.extend(name_groups.pop(norm_key))
 
-
     base_model_groups = merged_base
-
 
     families: list[ModelFamily] = []
 
     for group_key, group in list(base_model_groups.items()) + list(name_groups.items()):
         if not group:
             continue
-
 
         referenced_as_base: set[str] = {m.base_model for m in group if m.base_model}
         referenced_candidates = [m for m in group if m.id in referenced_as_base]
@@ -124,7 +111,6 @@ def group_models(models: list[ModelInfo]) -> list[ModelFamily]:
         base.artifacts = family_artifacts or base.artifacts
         base.components = family_components or base.components
         base.lineage = family_lineage
-
 
         best_bench: dict[str, float] = {}
         for m in group:

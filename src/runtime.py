@@ -19,8 +19,6 @@ from models.integrations import (
 from models.package_graph import is_projector_filename
 from models.types import GGUFVariant, ModelArtifact, ModelInfo
 
-# Runtime layer. Chooses script shape for local run backends.
-
 
 class RuntimeUnsupportedError(ValueError):
     pass
@@ -349,7 +347,6 @@ def is_mlx_model(model: ModelInfo) -> bool:
 
 
 def find_projector_artifact(model: ModelInfo) -> ModelArtifact | None:
-    # Projector lookup. Finds the mmproj file VLM GGUF runners need.
     for artifact in model.artifacts:
         if artifact.source_kind == "mmproj" and artifact.filename:
             return artifact
@@ -425,18 +422,18 @@ def processor_kwargs_lines(processor_kwargs: tuple[str, ...]) -> str:
 def quantization_config_lines(model: ModelInfo) -> str:
     qt = transformers_quant_type(model)
     if qt == "BNB_4BIT":
-        return '''\
+        return """\
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_compute_dtype=torch_dtype,
 )
 model_kwargs["quantization_config"] = quantization_config
-'''
+"""
     if qt == "INT8":
-        return '''\
+        return """\
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 model_kwargs["quantization_config"] = quantization_config
-'''
+"""
     return ""
 
 
@@ -454,7 +451,7 @@ def vllm_quantization(model: ModelInfo) -> str | None:
 
 
 def llama_decode_metrics_block() -> str:
-    return '''\
+    return """\
 process = psutil.Process()
 
 
@@ -468,11 +465,11 @@ def print_decode_metrics(started_at, first_token_at, output_text):
         f"rss={process.memory_info().rss / 1024**3:.2f}GB"
     )
 
-    '''
+    """
 
 
 def backend_decode_metrics_block() -> str:
-    return '''\
+    return """\
 process = psutil.Process()
 
 
@@ -492,11 +489,11 @@ def print_decode_metrics(started_at, first_token_at, token_count):
         f"rss={process.memory_info().rss / 1024**3:.2f}GB{gpu_peak}"
     )
 
-'''
+"""
 
 
 def transformers_runtime_setup(quantization_lines: str) -> str:
-    return f'''\
+    return f"""\
 offload_folder = tempfile.mkdtemp(prefix="whichvlm_transformers_offload_")
 process = psutil.Process()
 
@@ -544,7 +541,7 @@ model_kwargs = dict(
     max_memory=cuda_memory_limits(),
 )
 {quantization_lines}
-'''
+"""
 
 
 class LlamaCppBackend(Backend):
@@ -630,7 +627,10 @@ class LlamaCppBackend(Backend):
             with os.fdopen(fd, "w") as f:
                 f.write(script)
             result = subprocess.run(
-                uv_command(self.serve_dependencies(request.model, request.artifact), [script_path])
+                uv_command(
+                    self.serve_dependencies(request.model, request.artifact),
+                    [script_path],
+                )
             )
             return result.returncode
         finally:
@@ -1255,7 +1255,9 @@ def generate_transformers_vlm_script(
     device_map = '"cpu"' if cpu_only else '"auto"'
     model_class, processor_class, processor_extra_args = transformers_vlm_profile(model)
     imports = transformers_import_names(
-        model_class, processor_class, ("TextIteratorStreamer", *quantization_import_names(model))
+        model_class,
+        processor_class,
+        ("TextIteratorStreamer", *quantization_import_names(model)),
     )
     processor_arg_lines = processor_kwargs_lines(processor_extra_args)
     runtime_setup = transformers_runtime_setup(quantization_config_lines(model))
@@ -1342,9 +1344,7 @@ finally:
 '''
 
 
-def generate_mlx_vlm_script(
-    model: ModelInfo, image_path: str, max_tokens: int
-) -> str:
+def generate_mlx_vlm_script(model: ModelInfo, image_path: str, max_tokens: int) -> str:
     return f'''\
 from mlx_vlm import generate, load
 

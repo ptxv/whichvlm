@@ -6,7 +6,6 @@ import re
 
 from data.gpu import BYTES_PER_GIB, GPU_BANDWIDTH, GPU_MEMORY_CLOCK_VARIANTS
 
-# GPU name db. Resolves messy driver names into bandwidth estimates.
 logger = logging.getLogger(__name__)
 
 TRADEMARK_RE = re.compile(r"\((?:tm|r)\)", re.IGNORECASE)
@@ -26,7 +25,6 @@ VRAM_GB_RE = re.compile(r"(\d+)\s*gb", re.IGNORECASE)
 
 
 def normalize_detected_gpu_name(name: str) -> str:
-    # Name cleanup. Removes vendor noise so db lookups can match.
     text = TRADEMARK_RE.sub("", name)
     text = VENDOR_WORD_RE.sub("", text)
     text = LAPTOP_GPU_RE.sub("Mobile", text)
@@ -77,7 +75,6 @@ def vram_gb(canonical_name: str) -> int | None:
 
 @functools.lru_cache(maxsize=1)
 def dbgpu_index() -> tuple[object | None, dict[str, str] | None]:
-    # DB cache. Loads dbgpu once and keeps a normalized reverse index.
     try:
         from dbgpu import GPUDatabase
 
@@ -117,7 +114,6 @@ def dbgpu_bandwidth(name: str, vram_bytes: int | None) -> float | None:
             if same_vram:
                 candidates = same_vram
 
-
     bandwidths: list[float] = []
     for canonical in candidates:
         try:
@@ -150,7 +146,6 @@ def resolve_detected_bandwidth(
     vram_bytes: int | None = None,
     mem_clock_mhz: float | None = None,
 ) -> float | None:
-    # Final lookup. Tries clock split, static table, then dbgpu fallback.
     if not name:
         return None
     variant = memory_clock_variant_bandwidth(name, mem_clock_mhz)

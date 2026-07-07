@@ -40,7 +40,6 @@ from models.integrations import (
 )
 from models.types import GGUFVariant, ModelCapabilities, ModelInfo
 
-# Ranking core. Expands variants, scores fit, and orders final picks.
 RANKING_ALGORITHM_VERSION = "ranker-v2"
 
 LINEAGE_REGEX: dict[str, list[tuple[re.Pattern[str], int]]] = {
@@ -51,9 +50,7 @@ LINEAGE_FAMILY_MAX: dict[str, int] = {
     family: max(idx for _, idx in entries) for family, entries in LINEAGE_REGEX.items()
 }
 MULTI_GPU_SPEED_FACTOR = 0.70
-QUANT_PREFERENCE_RANK = {
-    quant: idx for idx, quant in enumerate(QUANT_PREFERENCE_ORDER)
-}
+QUANT_PREFERENCE_RANK = {quant: idx for idx, quant in enumerate(QUANT_PREFERENCE_ORDER)}
 EXTREME_QUANTS = {
     "Q2_K",
     "Q2_0",
@@ -73,7 +70,6 @@ def family_selection_key(
     result: CompatibilityResult,
     require_direct_top: bool,
 ) -> tuple[float]:
-    # Family sort key. Keeps final ordering close to the shown score.
     if require_direct_top and result.benchmark_status == "direct":
         direct_bonus = 5.0
     else:
@@ -237,7 +233,6 @@ PREQUANTIZED_REPO_RE = re.compile(
 def synthesize_variants_for_official_repo(
     model: ModelInfo, quant_filter_upper: str | None
 ) -> list[GGUFVariant]:
-    # Synthetic GGUF layer. Makes safetensors-only repos rank like real quants.
     if "vision" in detect_specializations(model):
         return []
 
@@ -458,9 +453,7 @@ def detect_specializations(model: ModelInfo) -> set[str]:
             model.architecture,
         )
     )
-    if any(
-        component.role in VISUAL_COMPONENT_ROLES for component in model.components
-    ):
+    if any(component.role in VISUAL_COMPONENT_ROLES for component in model.components):
         tags.add("vision")
     if re.search(r"(^|[-_/])math([-_/]|$)", lower):
         tags.add("math")
@@ -889,8 +882,6 @@ def rank_models(
     workload: Workload | None = None,
     freshness_weight: float = 1.0,
 ) -> list[CompatibilityResult]:
-    # Main rank pass. Scores every candidate against hardware and evidence.
-
     gguf_only_backend = is_gguf_only_backend(hardware)
     applied_freshness_weight = max(0.0, min(1.0, freshness_weight))
     workload = workload_from_profile(

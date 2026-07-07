@@ -10,7 +10,6 @@ from data.gpu import AMD_SHARED_MEMORY_APU_MARKERS, BYTES_PER_GIB
 from hardware.gpu_db import static_bandwidth, resolve_detected_bandwidth
 from hardware.types import GPUInfo
 
-# AMD probe. Reads rocm-smi first, then falls back to Linux device probes.
 logger = logging.getLogger(__name__)
 
 DISPLAY_CLASSES = (
@@ -85,8 +84,6 @@ def detect_from_lspci() -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
     for line in result.stdout.splitlines():
-
-
         try:
             tokens = shlex.split(line)
         except ValueError:
@@ -169,11 +166,9 @@ def read_sysfs_amd_vram(drm_path: Path = Path("/sys/class/drm")) -> list[int]:
 
 
 def detect_amd_gpus_fallback() -> list[GPUInfo]:
-    # Linux fallback. Combines lspci names with sysfs VRAM when ROCm is absent.
     sysfs_gpus = detect_from_sysfs()
 
     if sysfs_gpus:
-
         has_generic = any(g.name == "AMD Graphics" for g in sysfs_gpus)
         if has_generic:
             lspci_names = detect_from_lspci()
@@ -187,7 +182,6 @@ def detect_amd_gpus_fallback() -> list[GPUInfo]:
                 ]
         return sysfs_gpus
 
-
     names = detect_from_lspci()
     if names:
         vram_list = read_sysfs_amd_vram()
@@ -199,7 +193,6 @@ def detect_amd_gpus_fallback() -> list[GPUInfo]:
 
 
 def detect_amd_gpus() -> list[GPUInfo]:
-    # Main AMD probe. Builds normalized GPU records from rocm-smi json.
     gpus: list[GPUInfo] = []
 
     try:
@@ -251,7 +244,6 @@ def detect_amd_gpus() -> list[GPUInfo]:
         if not key.startswith("card"):
             continue
         card_info = product_data[key]
-
 
         name = (
             card_info.get("Card Series")

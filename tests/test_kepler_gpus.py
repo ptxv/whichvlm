@@ -1,5 +1,8 @@
+import importlib
+
 import pytest
 
+from data.gpu import GPU_BANDWIDTH, NVIDIA_COMPUTE_CAPABILITY, VULKAN_ONLY_GPUS
 from engine.compatibility import check_compatibility
 from hardware.nvidia import (
     lookup_bandwidth,
@@ -20,6 +23,23 @@ KEPLER_GPUS: list[tuple[str, float, tuple[int, int]]] = [
     ("GTX 770", 224.3, (3, 0)),
     ("GTX 760", 192.2, (3, 0)),
 ]
+
+
+def test_kepler_tables_cover_vulkan_only_cards():
+    expected = {name for name, _, _ in KEPLER_GPUS}
+
+    assert set(VULKAN_ONLY_GPUS) == expected
+    assert isinstance(VULKAN_ONLY_GPUS, frozenset)
+    for name, bandwidth, cc in KEPLER_GPUS:
+        assert GPU_BANDWIDTH[name] == bandwidth
+        assert NVIDIA_COMPUTE_CAPABILITY[name] == cc
+
+
+def test_constants_shim_reexports_gpu_tables():
+    legacy_constants = importlib.import_module("whichvlm.constants")
+
+    assert legacy_constants.GPU_BANDWIDTH is GPU_BANDWIDTH
+    assert legacy_constants.VULKAN_ONLY_GPUS is VULKAN_ONLY_GPUS
 
 
 @pytest.mark.parametrize("name, bandwidth, cc", KEPLER_GPUS)

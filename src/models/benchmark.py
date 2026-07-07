@@ -18,7 +18,6 @@ from models.cache_format import (
 )
 from utils import cache_dir, current_version
 
-# Benchmark merge layer. Blends current and fallback score sources.
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = cache_dir()
@@ -47,7 +46,6 @@ VLM_BENCHMARK_ID_RE = re.compile(
 
 @dataclass(frozen=True)
 class BenchmarkEvidence:
-    # Evidence record. Carries score plus trust level for one match.
     score: float | None
     confidence: float
     source: str
@@ -71,7 +69,6 @@ def benchmark_confidence(model_id: str, source: str, default: float) -> float:
 
 
 def load_benchmark_cache(*, allow_stale: bool = False) -> dict[str, float] | None:
-    # Cache read. Reuses merged benchmark scores until ttl expires.
     payload = read_cache_payload(BENCHMARK_CACHE)
     if payload is None:
         return None
@@ -122,7 +119,6 @@ LINEAGE_REGEX_CACHE = None
 
 
 def lineage_regex_table():
-    # Regex cache. Compiles family lineage rules once for generation math.
     global LINEAGE_REGEX_CACHE
     if LINEAGE_REGEX_CACHE is not None:
         return LINEAGE_REGEX_CACHE
@@ -174,7 +170,6 @@ def apply_lineage_recency_demotion(
 
 
 async def fetch_benchmark_scores() -> dict[str, float]:
-    # Main fetch. Pulls every benchmark source and merges trust tiers.
     from models.benchmark_sources import (
         fetch_aa_index_scores,
         fetch_aider_polyglot_scores,
@@ -208,10 +203,8 @@ async def fetch_benchmark_scores() -> dict[str, float]:
             return_exceptions=True,
         )
 
-
     frozen: dict[str, float] = {}
     current: dict[str, float] = {}
-
 
     if isinstance(lb_result, BaseException):
         logger.warning(f"Leaderboard fetch failed: {lb_result}")
@@ -219,22 +212,21 @@ async def fetch_benchmark_scores() -> dict[str, float]:
         frozen.update(lb_result)
         logger.debug(f"Leaderboard: {len(lb_result)} scores (frozen)")
 
-
     if isinstance(arena_result, BaseException):
-        logger.warning(f"secondary benchmark fetch failed, using fallback: {arena_result}")
+        logger.warning(
+            f"secondary benchmark fetch failed, using fallback: {arena_result}"
+        )
     else:
         for k, v in arena_result.items():
             if frozen.get(k, 0.0) < v:
                 frozen[k] = v
         logger.debug(f"secondary benchmark: {len(arena_result)} scores (frozen)")
 
-
     livebench_result = get_livebench_data()
     for k, v in livebench_result.items():
         if current.get(k, 0.0) < v:
             current[k] = v
     logger.debug(f"vision index: {len(livebench_result)} scores (current)")
-
 
     if isinstance(aa_result, BaseException):
         logger.warning(f"capability index fetch failed, using fallback: {aa_result}")
@@ -245,7 +237,6 @@ async def fetch_benchmark_scores() -> dict[str, float]:
             current[k] = v
     logger.debug(f"capability index: {len(aa_result)} scores (current)")
 
-
     if isinstance(aider_result, BaseException):
         logger.warning(f"coding benchmark fetch failed: {aider_result}")
     else:
@@ -253,7 +244,6 @@ async def fetch_benchmark_scores() -> dict[str, float]:
             if current.get(k, 0.0) < v * 0.85:
                 current[k] = v * 0.85
         logger.debug(f"coding benchmark: {len(aider_result)} scores (current, 0.85x)")
-
 
     if isinstance(vision_result, BaseException):
         logger.warning(f"Vision fetch failed: {vision_result}")
@@ -263,10 +253,8 @@ async def fetch_benchmark_scores() -> dict[str, float]:
                 current[k] = v
         logger.debug(f"Vision: {len(vision_result)} scores (current)")
 
-
     combined: dict[str, float] = dict(frozen)
     combined.update(current)
-
 
     combined = apply_lineage_recency_demotion(combined, frozen, current)
 
@@ -291,12 +279,10 @@ def extract_model_lines(model_id: str) -> list[str]:
         return []
     lower = model_id.lower()
 
-
     stripped = re.sub(r"-(gguf|awq|gptq|fp8|fp16|bf16|mxfp4|nvfp4)$", "", lower)
     stripped = re.sub(r"-\d{4}(-hf)?$", "", stripped)
 
     lines: list[str] = []
-
 
     cleaned = re.sub(
         r"-\d+(\.\d+)?b(-a\d+b)?(-[a-z][-a-z0-9]*)*$",
@@ -305,7 +291,6 @@ def extract_model_lines(model_id: str) -> list[str]:
     )
     if cleaned != stripped and "/" in cleaned:
         lines.append(cleaned)
-
 
     for line in list(lines) + ([stripped] if not lines else []):
         broader = re.sub(r"(\d+)\.\d+$", r"\1", line)
@@ -364,7 +349,6 @@ def build_score_index(
 
         lines = extract_model_lines(key)
         if not lines and "/" in key:
-
             lines = [lk]
         for line in lines:
             if line not in line_index or val > line_index[line]:
@@ -405,12 +389,10 @@ REPO_SUFFIXES = ("-GGUF", "-gguf", "-AWQ", "-GPTQ", "-FP8", "-fp8", "-BF16", "-b
 def benchmark_id_candidates(model_id: str) -> list[str]:
     candidates = [model_id]
 
-
     for suffix in REPO_SUFFIXES:
         if model_id.endswith(suffix):
             candidates.append(model_id[: -len(suffix)])
             break
-
 
     base = candidates[-1]
     if base.endswith("-Instruct"):
@@ -503,13 +485,10 @@ def lookup_benchmark_evidence(
     self_reported_score: float | None = None,
     actual_params_b: float | None = None,
 ) -> BenchmarkEvidence:
-    # Evidence lookup. Returns score plus how that score was inferred.
-
     if ci_index is None or line_index is None:
         ci_index, line_index = build_score_index(scores)
     if line_bucket_index is None:
         line_bucket_index = build_line_bucket_index(scores)
-
 
     direct_result = lookup_score(model_id, scores, ci_index)
     if direct_result is not None:
@@ -518,7 +497,6 @@ def lookup_benchmark_evidence(
             confidence=benchmark_confidence(model_id, "direct", 1.0),
             source="direct",
         )
-
 
     variant_candidates = benchmark_id_candidates(model_id)[1:]
     for candidate in generate_score_name_candidates(model_id, scores):
@@ -534,7 +512,6 @@ def lookup_benchmark_evidence(
                 source="variant",
             )
 
-
     if base_model:
         for candidate in benchmark_id_candidates(base_model):
             result = lookup_score(candidate, scores, ci_index)
@@ -546,7 +523,6 @@ def lookup_benchmark_evidence(
                     confidence=benchmark_confidence(model_id, "base_model", 0.60),
                     source="base_model",
                 )
-
 
     size_hint = (
         actual_params_b
@@ -571,12 +547,9 @@ def lookup_benchmark_evidence(
                 if line in line_index:
                     return BenchmarkEvidence(
                         score=line_index[line],
-                        confidence=benchmark_confidence(
-                            model_id, "line_interp", 0.22
-                        ),
+                        confidence=benchmark_confidence(model_id, "line_interp", 0.22),
                         source="line_interp",
                     )
-
 
     if (
         self_reported_score is not None

@@ -15,7 +15,6 @@ from data.gpu import (
 from hardware.catalog import lookup_catalog_entry
 from hardware.types import BackendCapability, GPUInfo
 
-# GPU simulator. Turns CLI gpu text into synthetic hardware records.
 MANUFACTURER_TO_VENDOR: dict[str, str] = {
     "NVIDIA": "nvidia",
     "AMD": "amd",
@@ -63,7 +62,6 @@ APPLE_SILICON_CHIPS: dict[str, tuple[str, float]] = {
 def lookup_apple_silicon(
     name: str,
 ) -> tuple[str, str, float, float] | None:
-    # Apple alias map. Handles M-series names before dbgpu fallback runs.
     compact = re.sub(r"\s+", "", name).lower()
     if compact.startswith("apple"):
         compact = compact.removeprefix("apple")
@@ -117,7 +115,6 @@ def substring_search(db, name: str):
 
 
 def lookup_dbgpu(name: str) -> GPUSpecification | None:
-    # DB lookup. Tries exact, prefixed, substring, then fuzzy matches.
     from dbgpu import GPUDatabase
 
     db = GPUDatabase.default()
@@ -167,7 +164,6 @@ last_suggestions: list[tuple[str, int]] = []
 
 
 def parse_synthetic_gpu_specs(values: Sequence[str] | str) -> list[str]:
-    # CLI parser. Expands commas and count syntax like 2x RTX 4090.
     raw_values = [values] if isinstance(values, str) else list(values)
     gpu_names: list[str] = []
 
@@ -209,7 +205,6 @@ def create_synthetic_gpus(
 
 
 def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GPUInfo:
-    # Main builder. Creates one simulated GPU with backend metadata.
     last_suggestions.clear()
 
     amd_shared_memory_apu = is_amd_shared_memory_apu(name)
