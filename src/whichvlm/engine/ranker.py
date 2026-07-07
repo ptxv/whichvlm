@@ -3,10 +3,12 @@ from __future__ import annotations
 import math
 import re
 
-from whichvlm.constants import (
+from whichvlm.data.lineage import (
     MODEL_GENERATION_BONUS_MAX,
     MODEL_GENERATION_PENALTY_MAX,
     MODEL_LINEAGE_VERSIONS,
+)
+from whichvlm.data.quantization import (
     QUANT_BYTES_PER_WEIGHT,
     QUANT_PREFERENCE_ORDER,
 )

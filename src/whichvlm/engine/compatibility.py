@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from whichvlm.constants import BYTES_PER_GIB
-from whichvlm.constants import MIN_COMPUTE_CAPABILITY_OLLAMA
-from whichvlm.constants import VULKAN_ONLY_GPUS
+from whichvlm.data.framework import MIN_COMPUTE_CAPABILITY_OLLAMA
+from whichvlm.data.gpu import BYTES_PER_GIB, VULKAN_ONLY_GPUS
 from whichvlm.engine.quantization import estimate_weight_bytes
 from whichvlm.engine.types import CompatibilityResult
 from whichvlm.engine.vram import estimate_vram_details

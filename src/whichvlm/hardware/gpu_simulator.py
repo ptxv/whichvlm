@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from dbgpu import GPUSpecification
 
-from whichvlm.constants import (
+from whichvlm.data.gpu import (
     AMD_SHARED_MEMORY_APU_MARKERS,
-    GPU_BANDWIDTH,
     BYTES_PER_GIB,
+    GPU_BANDWIDTH,
 )
 from whichvlm.hardware.catalog import lookup_catalog_entry
 from whichvlm.hardware.types import BackendCapability, GPUInfo

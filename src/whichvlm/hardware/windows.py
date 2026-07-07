@@ -5,15 +5,13 @@ import logging
 import re
 import subprocess
 
-from whichvlm.constants import AMD_SHARED_MEMORY_APU_MARKERS, BYTES_PER_GIB
+from whichvlm.data.gpu import AMD_SHARED_MEMORY_APU_MARKERS, BYTES_PER_GIB
 from whichvlm.hardware.gpu_db import resolve_detected_bandwidth
 from whichvlm.hardware.types import GPUInfo
 
 logger = logging.getLogger(__name__)
 
 WINDOWS_DISCRETE_VRAM_FLOORS: tuple[tuple[str, int], ...] = (
-
-
     ("RX 9060 XT", 8 * BYTES_PER_GIB),
 )
 

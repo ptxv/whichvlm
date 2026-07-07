@@ -126,7 +126,7 @@ def lineage_regex_table():
     global LINEAGE_REGEX_CACHE
     if LINEAGE_REGEX_CACHE is not None:
         return LINEAGE_REGEX_CACHE
-    from whichvlm.constants import MODEL_LINEAGE_VERSIONS
+    from whichvlm.data.lineage import MODEL_LINEAGE_VERSIONS
 
     out = {}
     for family, entries in MODEL_LINEAGE_VERSIONS.items():

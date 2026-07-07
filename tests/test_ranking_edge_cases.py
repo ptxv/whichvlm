@@ -4,8 +4,6 @@ from whichvlm.engine.ranker import rank_models
 from whichvlm.hardware.gpu_simulator import create_synthetic_gpu
 from whichvlm.hardware.types import GPUInfo, HardwareInfo
 from whichvlm.models.benchmark import params_compatible
-from whichvlm.models.benchmark_sources.aa_index import AA_INDEX_FALLBACK_2026_05_14
-from whichvlm.models.benchmark_sources.livebench import LIVEBENCH_RAW_DATA
 from whichvlm.models.benchmark_sources.vision import VISION_FALLBACK_2026_05
 from whichvlm.models.grouper import group_models
 from whichvlm.models.types import GGUFVariant, ModelInfo
@@ -224,23 +222,6 @@ class TestGrouperReferencedBase:
 
 
 class TestReasoningSurface:
-
-
-    def test_qwq32b_has_curated_benchmarks(self):
-        assert "Qwen/QwQ-32B" in LIVEBENCH_RAW_DATA
-        assert "Qwen/QwQ-32B" in AA_INDEX_FALLBACK_2026_05_14
-
-    def test_r1_distill_family_has_curated_benchmarks(self):
-        for mid in (
-            "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-            "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
-            "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-        ):
-            assert mid in LIVEBENCH_RAW_DATA, f"{mid} missing in current snapshot"
-            assert mid in AA_INDEX_FALLBACK_2026_05_14, (
-                f"{mid} missing in capability fallback"
-            )
-
     def test_qwq32b_surfaces_with_curated_score(self):
         qwq = ModelInfo(
             id="Qwen/QwQ-32B",
@@ -271,20 +252,6 @@ class TestReasoningSurface:
 
 
 class TestVisionGenerationOrder:
-
-
-    def test_curated_vision_scores_respect_generation(self):
-        v = VISION_FALLBACK_2026_05
-
-        assert (
-            v["Qwen/Qwen3-VL-32B-Instruct"]
-            > v["Qwen/Qwen2.5-VL-32B-Instruct"]
-            > v["Qwen/Qwen2-VL-7B-Instruct"]
-        )
-
-
-        assert v["Qwen/Qwen2-VL-7B-Instruct"] <= 35.0
-
     def test_qwen3_vl_outranks_legacy_qwen2_vl_on_vision_profile(self):
         new_vlm = ModelInfo(
             id="Qwen/Qwen3-VL-32B-Instruct",

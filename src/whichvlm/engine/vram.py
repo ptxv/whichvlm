@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from whichvlm.constants import FRAMEWORK_OVERHEAD_BYTES
+from whichvlm.data.framework import FRAMEWORK_OVERHEAD_BYTES
 from whichvlm.engine.quantization import estimate_weight_bytes
 from whichvlm.engine.workload import Workload
 from whichvlm.models.integrations import (

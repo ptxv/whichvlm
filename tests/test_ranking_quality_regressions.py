@@ -121,7 +121,7 @@ def test_q1_0_returned_when_explicitly_requested_via_quant_filter():
 
 def test_q1_q2_quality_penalty_is_severe():
 
-    from whichvlm.constants import QUANT_QUALITY_PENALTY
+    from whichvlm.data.quantization import QUANT_QUALITY_PENALTY
 
     assert QUANT_QUALITY_PENALTY["Q1_0"] >= 0.50
     assert QUANT_QUALITY_PENALTY["Q2_0"] >= 0.40

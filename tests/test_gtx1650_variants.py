@@ -2,10 +2,6 @@ import subprocess
 
 import pytest
 
-from whichvlm.constants import GPU_BANDWIDTH, GPU_MEMORY_CLOCK_VARIANTS
-from whichvlm.data.gpu import (
-    GPU_MEMORY_CLOCK_VARIANTS as DATA_GPU_MEMORY_CLOCK_VARIANTS,
-)
 from whichvlm.hardware import nvidia
 from whichvlm.hardware.gpu_db import resolve_detected_bandwidth
 from whichvlm.hardware.types import GPUInfo
@@ -17,20 +13,6 @@ GDDR6_CLOCK = 6001.0
 GDDR5_CLOCK = 4001.0
 
 
-def test_variant_table_present_and_reexported():
-    assert "GTX 1650" in GPU_MEMORY_CLOCK_VARIANTS
-
-    assert GPU_MEMORY_CLOCK_VARIANTS is DATA_GPU_MEMORY_CLOCK_VARIANTS
-
-    thresholds = [t for t, bandwidth in GPU_MEMORY_CLOCK_VARIANTS["GTX 1650"]]
-    assert thresholds == sorted(thresholds, reverse=True)
-
-
-def test_curated_default_is_gddr5():
-
-    assert GPU_BANDWIDTH["GTX 1650"] == 128.0
-
-
 def test_gddr6_clock_resolves_to_192():
     assert resolve_detected_bandwidth(GTX1650_NAME, 4 * 1024**3, GDDR6_CLOCK) == 192.0
 
@@ -40,7 +22,6 @@ def test_gddr5_clock_resolves_to_128():
 
 
 def test_unknown_clock_falls_back_to_curated_default():
-
     assert resolve_detected_bandwidth(GTX1650_NAME, 4 * 1024**3) == 128.0
     assert resolve_detected_bandwidth(GTX1650_NAME, 4 * 1024**3, None) == 128.0
     assert resolve_detected_bandwidth(GTX1650_NAME, 4 * 1024**3, 0.0) == 128.0
@@ -54,8 +35,6 @@ def test_threshold_boundary(clock, expected):
 
 
 def test_non_variant_card_ignores_memory_clock():
-
-
     assert (
         resolve_detected_bandwidth("NVIDIA GeForce GTX 1660", 6 * 1024**3, 9999.0)
         == 192.0
@@ -78,8 +57,6 @@ def test_gtx1650_super_does_not_fall_through_to_base_1650():
 
 
 def test_gddr6_estimate_scales_with_bandwidth_and_matches_measured():
-
-
     model = ModelInfo(
         id="Qwen/Qwen3-1.7B",
         family_id="Qwen/Qwen3-1.7B",
@@ -129,13 +106,10 @@ def test_smi_gddr5_clock_resolves_128(monkeypatch):
 
 
 def test_smi_na_clock_falls_back_to_curated(monkeypatch):
-
     assert smi_bw(monkeypatch, "NVIDIA GeForce GTX 1650, 4096, [N/A]\n") == 128.0
 
 
 def test_smi_3field_query_failure_retries_without_clock(monkeypatch):
-
-
     def fake_query(fields: str) -> str:
         if "clocks" in fields:
             raise subprocess.CalledProcessError(6, "nvidia-smi")

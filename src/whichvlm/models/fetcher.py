@@ -7,7 +7,7 @@ import statistics
 
 import httpx
 
-from whichvlm.constants import QUANT_BYTES_PER_WEIGHT
+from whichvlm.data.quantization import QUANT_BYTES_PER_WEIGHT
 from whichvlm.data.vlm_inventory import known_vlm_model_ids
 from whichvlm.models.http import get_with_retries
 from whichvlm.models.integrations import (

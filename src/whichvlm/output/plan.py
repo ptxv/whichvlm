@@ -5,10 +5,10 @@ from copy import copy
 from rich.panel import Panel
 from rich.table import Table
 
-from whichvlm.constants import (
+from whichvlm.data.gpu import BYTES_PER_GIB
+from whichvlm.data.quantization import (
     QUANT_BYTES_PER_WEIGHT,
     QUANT_QUALITY_PENALTY,
-    BYTES_PER_GIB,
 )
 from whichvlm.engine.compatibility import check_compatibility
 from whichvlm.engine.performance import estimate_tok_per_sec

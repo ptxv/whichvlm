@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from whichvlm.constants import QUANT_QUALITY_PENALTY
+from whichvlm.data.quantization import QUANT_QUALITY_PENALTY
 from whichvlm.models.types import GGUFVariant, ModelInfo
 
 

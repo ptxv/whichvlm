@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from whichvlm.constants import BYTES_PER_GIB, GPU_BANDWIDTH, NVIDIA_COMPUTE_CAPABILITY
+from whichvlm.data.gpu import BYTES_PER_GIB, GPU_BANDWIDTH, NVIDIA_COMPUTE_CAPABILITY
 from whichvlm.hardware.types import BackendCapability, GPUInfo, HardwareInfo
 
 

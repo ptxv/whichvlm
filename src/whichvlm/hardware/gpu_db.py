@@ -4,7 +4,7 @@ import functools
 import logging
 import re
 
-from whichvlm.constants import GPU_BANDWIDTH, GPU_MEMORY_CLOCK_VARIANTS, BYTES_PER_GIB
+from whichvlm.data.gpu import BYTES_PER_GIB, GPU_BANDWIDTH, GPU_MEMORY_CLOCK_VARIANTS
 
 # GPU name db. Resolves messy driver names into bandwidth estimates.
 logger = logging.getLogger(__name__)

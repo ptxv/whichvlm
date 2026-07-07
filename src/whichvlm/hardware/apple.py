@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from whichvlm.constants import GPU_BANDWIDTH
+from whichvlm.data.gpu import GPU_BANDWIDTH
 from whichvlm.hardware.types import BackendCapability, GPUInfo
 
 # Apple probe. Reads Metal, MLX, and unified-memory facts for Apple GPUs.

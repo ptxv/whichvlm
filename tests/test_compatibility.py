@@ -1,4 +1,4 @@
-from whichvlm.constants import BYTES_PER_GIB
+from whichvlm.data.gpu import BYTES_PER_GIB
 from whichvlm.engine.compatibility import check_compatibility
 from whichvlm.hardware.memory import estimate_usable_ram
 from whichvlm.hardware.types import GPUInfo, HardwareInfo

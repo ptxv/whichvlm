@@ -8,7 +8,8 @@ import httpx
 import typer
 from rich.console import Console
 
-from whichvlm.constants import BYTES_PER_GIB
+from whichvlm.data.gpu import BYTES_PER_GIB
+from whichvlm.data.quantization import QUANT_PREFERENCE_ORDER
 from whichvlm.engine.workload import Workload
 from whichvlm.hardware.types import HardwareInfo, ensure_backend_capabilities
 from whichvlm.models.types import GGUFVariant, ModelInfo
@@ -1308,8 +1309,6 @@ def select_gguf_variant(
     model: ModelInfo, quant_filter: str | None = None
 ) -> GGUFVariant | None:
     # Variant chooser. Picks the best local GGUF file for the request.
-    from whichvlm.constants import QUANT_PREFERENCE_ORDER
-
     if not model.gguf_variants:
         return None
 

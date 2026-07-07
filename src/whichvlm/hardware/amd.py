@@ -6,7 +6,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from whichvlm.constants import AMD_SHARED_MEMORY_APU_MARKERS, BYTES_PER_GIB
+from whichvlm.data.gpu import AMD_SHARED_MEMORY_APU_MARKERS, BYTES_PER_GIB
 from whichvlm.hardware.gpu_db import static_bandwidth, resolve_detected_bandwidth
 from whichvlm.hardware.types import GPUInfo
 

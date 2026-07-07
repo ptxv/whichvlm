@@ -4,7 +4,7 @@ from io import StringIO
 from rich.console import Console
 
 import whichvlm.output.console as console_mod
-from whichvlm.constants import BYTES_PER_GIB
+from whichvlm.data.gpu import BYTES_PER_GIB
 from whichvlm.hardware.catalog import (
     HARDWARE_CATALOG,
     PLAN_SYSTEM_RAM_BYTES,
@@ -84,7 +84,7 @@ def test_plan_reverse_lookup_returns_full_partial_and_multi_gpu():
     recommendations = plan_recommendations(single_gpu_rows, multi_gpu_rows)
 
     assert recommendations["smallest_full_gpu"]["name"] == "H200"
-    assert recommendations["smallest_partial_offload"]["name"] == "RTX A6000"
+    assert recommendations["smallest_partial_offload"]["name"] == "A100 40GB"
     assert recommendations["multi_gpu_alternatives"][0]["name"] == "2x MI210"
     assert recommendations["multi_gpu_alternatives"][0]["uses_multi_gpu"] is True
     assert recommendations["multi_gpu_alternatives"][0]["multi_gpu_support"].startswith(

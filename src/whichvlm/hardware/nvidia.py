@@ -4,7 +4,7 @@ import logging
 import re
 import subprocess
 
-from whichvlm.constants import NVIDIA_COMPUTE_CAPABILITY, BYTES_PER_GIB
+from whichvlm.data.gpu import BYTES_PER_GIB, NVIDIA_COMPUTE_CAPABILITY
 from whichvlm.hardware.gpu_db import static_bandwidth, resolve_detected_bandwidth
 from whichvlm.hardware.types import GPUInfo
 
