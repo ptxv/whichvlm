@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [project.scripts]
-whichvlm = "cli:app"
+whichvlm = "whichvlm:app"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,4 +1,5 @@
 import inspect
+import importlib
 import json
 from io import StringIO
 
@@ -200,6 +201,14 @@ def test_version_option_prints_version_and_exits():
 
 def test_module_entrypoint_uses_cli_app():
     assert main_mod.app is app
+
+
+def test_flat_layout_preserves_package_imports():
+    cli_package = importlib.import_module("whichvlm.cli")
+    gpu_data = importlib.import_module("whichvlm.data.gpu")
+
+    assert cli_package.app is not None
+    assert gpu_data.BYTES_PER_GIB == 1024**3
 
 
 def test_main_help_groups_options_by_task():
