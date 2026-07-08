@@ -63,7 +63,6 @@ def normalize(pass_rate: float) -> float:
 
 
 def parse_yaml_lite(text: str) -> list[tuple[str, float]]:
-
     out: list[tuple[str, float]] = []
 
     records = re.split(r"\n(?=-\s+\w)", text)
@@ -86,7 +85,6 @@ def parse_yaml_lite(text: str) -> list[tuple[str, float]]:
 
 
 async def fetch_aider_polyglot_scores(client: httpx.AsyncClient) -> dict[str, float]:
-
     scores: dict[str, float] = {}
     resp = await get_with_retries(client, AIDER_POLYGLOT_YML_URL)
     resp.raise_for_status()

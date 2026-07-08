@@ -2,7 +2,6 @@ from __future__ import annotations
 
 
 LIVEBENCH_RAW_DATA: dict[str, float] = {
-
     "MiniMaxAI/MiniMax-M2.5": 60.3,
     "MiniMaxAI/MiniMax-M2.7": 65.0,
     "Qwen/Qwen3-235B-A22B-Instruct-2507": 48.0,
@@ -30,7 +29,6 @@ LIVEBENCH_RAW_DATA: dict[str, float] = {
     "zai-org/GLM-4.7": 57.3,
     "zai-org/GLM-5": 68.7,
     "zai-org/GLM-5.1": 70.6,
-
     "deepseek-ai/DeepSeek-R1-0528": 71.0,
     "deepseek-ai/DeepSeek-R1": 65.0,
     "deepseek-ai/DeepSeek-V3-0324": 57.0,
@@ -52,7 +50,6 @@ LIVEBENCH_RAW_DATA: dict[str, float] = {
     "openai/gpt-oss-20b": 52.0,
     "zai-org/GLM-4.5": 58.0,
     "zai-org/GLM-4.5-Air": 52.0,
-
     "Qwen/Qwen3-8B": 50.0,
     "Qwen/Qwen3-14B": 56.0,
     "Qwen/Qwen3-4B-Instruct-2507": 45.0,
@@ -80,7 +77,6 @@ def normalize_livebench(score: float) -> float:
 
 
 def get_livebench_data() -> dict[str, float]:
-
     return {
         hf_id: normalize_livebench(raw)
         for hf_id, raw in LIVEBENCH_RAW_DATA.items()

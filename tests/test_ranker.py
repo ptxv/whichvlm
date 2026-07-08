@@ -44,7 +44,6 @@ def make_hardware(
 
 
 def test_ranker_picks_highest_scoring_variant():
-
     model = ModelInfo(
         id="org/Test-8B-GGUF",
         family_id="org/Test-8B-GGUF",
@@ -346,13 +345,9 @@ def test_family_replacement_preserves_stable_tie_order():
             ],
         )
 
-    first_family_low = rankable_model(
-        "trusted/A-low", "family-a", 2_000_000_000, 300
-    )
+    first_family_low = rankable_model("trusted/A-low", "family-a", 2_000_000_000, 300)
     tied_other_family = rankable_model("trusted/B", "family-b", 8_000_000_000, 200)
-    first_family_best = rankable_model(
-        "trusted/A-best", "family-a", 8_000_000_000, 100
-    )
+    first_family_best = rankable_model("trusted/A-best", "family-a", 8_000_000_000, 100)
 
     results = rank_models(
         [first_family_low, tied_other_family, first_family_best],
@@ -683,7 +678,6 @@ def test_min_params_filter_excludes_small_models():
 
 
 def test_general_profile_prefers_full_gpu_when_direct_is_partial():
-
     partial_direct = ModelInfo(
         id="Qwen/Qwen2.5-72B-Instruct",
         family_id="qwen2.5-72b",
@@ -718,7 +712,6 @@ def test_general_profile_prefers_full_gpu_when_direct_is_partial():
 
 
 def test_family_dedup_prefers_direct_when_enabled():
-
     direct_base = ModelInfo(
         id="Qwen/Qwen2.5-7B-Instruct",
         family_id="qwen2.5-7b",
@@ -758,7 +751,6 @@ def test_family_dedup_prefers_direct_when_enabled():
 
 
 def test_full_gpu_estimated_ranks_above_partial_direct():
-
     partial_direct = ModelInfo(
         id="Qwen/Qwen2.5-72B-Instruct",
         family_id="qwen2.5-72b",

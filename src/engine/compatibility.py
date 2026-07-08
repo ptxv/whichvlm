@@ -3,7 +3,7 @@ from __future__ import annotations
 from data.framework import MIN_COMPUTE_CAPABILITY_OLLAMA
 from data.gpu import BYTES_PER_GIB, VULKAN_ONLY_GPUS
 from engine.quantization import estimate_weight_bytes
-from engine.types import CompatibilityResult
+from engine.types import CompatibilityResult, FitType
 from engine.vram import estimate_vram_details
 from engine.workload import Workload
 from hardware.memory import effective_usable_ram
@@ -33,7 +33,6 @@ def uses_shared_system_pool(gpu: GPUInfo) -> bool:
 
 
 def is_vulkan_only_gpu(gpu: GPUInfo) -> bool:
-
     if gpu.vendor != "nvidia":
         return False
     name_upper = gpu.name.upper()
@@ -179,6 +178,7 @@ def check_compatibility(
     if best_gpu and best_gpu.vendor == "apple" and hardware.os != "darwin":
         warnings.append("Metal requires macOS for Apple Silicon inference")
 
+    fit_type: FitType
     if fit_vram_available >= vram_required:
         fit_type = "full_gpu"
         can_run = True

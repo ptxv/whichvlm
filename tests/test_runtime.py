@@ -130,7 +130,7 @@ def test_transformers_quantized_script_uses_bitsandbytes_loader():
     assert "bitsandbytes" in deps
     assert "BitsAndBytesConfig" in script
     assert 'model_kwargs["quantization_config"]' in script
-    assert "attn_implementation=\"sdpa\"" in script
+    assert 'attn_implementation="sdpa"' in script
     assert "max_memory=cuda_memory_limits()" in script
 
 

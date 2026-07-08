@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from typing import cast
 
 from data.lineage import (
     MODEL_GENERATION_BONUS_MAX,
@@ -19,7 +20,7 @@ from engine.quantization import (
     infer_non_gguf_quant_type,
     quant_quality_penalty,
 )
-from engine.types import CompatibilityResult
+from engine.types import BenchmarkSource, BenchmarkStatus, CompatibilityResult
 from engine.workload import Workload, WorkloadTask
 from hardware.types import (
     GPUInfo,
@@ -80,7 +81,6 @@ def family_selection_key(
 
 
 def partial_offload_quality_factor(model: ModelInfo, offload_ratio: float) -> float:
-
     ratio = max(0.0, min(1.0, offload_ratio))
     if ratio >= 0.75:
         factor = 0.42
@@ -263,7 +263,9 @@ def iter_candidate_variants(
     quant_filter_upper = quant_filter.upper() if quant_filter else None
 
     if not model.gguf_variants:
-        synthetic = synthesize_variants_for_official_repo(model, quant_filter_upper)
+        synthetic: list[GGUFVariant | None] = list(
+            synthesize_variants_for_official_repo(model, quant_filter_upper)
+        )
         if synthetic:
             return synthetic
         quant_type = effective_quant_type(model, None)
@@ -271,26 +273,33 @@ def iter_candidate_variants(
             return []
         return [None]
 
-    candidates: list[GGUFVariant] = model.gguf_variants
+    candidates: list[GGUFVariant | None] = list(model.gguf_variants)
     if quant_filter_upper:
         candidates = [
-            v for v in candidates if v.quant_type.upper() == quant_filter_upper
+            v
+            for v in candidates
+            if v is not None and v.quant_type.upper() == quant_filter_upper
         ]
         if not candidates:
             return []
     else:
-        filtered = [v for v in candidates if v.quant_type.upper() not in EXTREME_QUANTS]
+        filtered = [
+            v
+            for v in candidates
+            if v is not None and v.quant_type.upper() not in EXTREME_QUANTS
+        ]
         if filtered:
-            candidates = filtered
+            candidates = cast(list[GGUFVariant | None], filtered)
 
     def variant_sort_key(v: GGUFVariant) -> int:
         return QUANT_PREFERENCE_RANK.get(
             v.quant_type.upper(), len(QUANT_PREFERENCE_ORDER)
         )
 
-    candidates = sorted(candidates, key=variant_sort_key)
-
-    return candidates
+    return cast(
+        list[GGUFVariant | None],
+        sorted(cast(list[GGUFVariant], candidates), key=variant_sort_key),
+    )
 
 
 OFFICIAL_ORGS = frozenset(
@@ -389,7 +398,6 @@ DUBIOUS_DERIVATIVE_PATTERNS = (
 
 
 def derivative_name_penalty(model_id: str) -> float:
-
     if not model_id:
         return 0.0
     lower = model_id.lower()
@@ -401,7 +409,6 @@ def derivative_name_penalty(model_id: str) -> float:
 
 
 def is_excluded_model(model_id: str) -> bool:
-
     if not model_id:
         return True
     org = model_id.split("/", 1)[0] if "/" in model_id else ""
@@ -416,7 +423,6 @@ def is_excluded_model(model_id: str) -> bool:
 
 
 def generation_bonus(model_id: str) -> float:
-
     if not model_id:
         return 0.0
     lower = model_id.lower()
@@ -571,14 +577,12 @@ def benchmark_scores_for_workload(
 
 
 def effective_params_b(model: ModelInfo) -> float:
-
     if model.is_moe and model.parameter_count_active:
         return model.parameter_count_active / 1e9
     return model.parameter_count / 1e9
 
 
 def knowledge_capacity_b(model: ModelInfo) -> float:
-
     return model.parameter_count / 1e9
 
 
@@ -741,7 +745,6 @@ def compute_quality_score(
     task_profile: str = "general",
     workload: Workload | None = None,
 ) -> float:
-
     params_b = model.parameter_count / 1e9
     if model.is_moe and model.parameter_count_active:
         effective_b = model.parameter_count_active / 1e9
@@ -765,7 +768,7 @@ def compute_quality_score(
     )
     bench_weight = source_weights.get(benchmark_source, 0.0)
     benchmark_score = 0.0
-    if has_benchmark:
+    if has_benchmark and benchmark_avg is not None:
         raw = min(100.0, benchmark_avg)
         benchmark_score = raw * bench_weight
 
@@ -1055,15 +1058,17 @@ def rank_models(
                     best_gpu=best_gpu,
                 ),
             )
+            status: BenchmarkStatus
             if bench_evidence.score is None:
-                compat.benchmark_status = "none"
+                status = "none"
             elif bench_evidence.source == "direct":
-                compat.benchmark_status = "direct"
+                status = "direct"
             elif bench_evidence.source == "self_reported":
-                compat.benchmark_status = "self_reported"
+                status = "self_reported"
             else:
-                compat.benchmark_status = "estimated"
-            compat.benchmark_source = bench_evidence.source
+                status = "estimated"
+            compat.benchmark_status = status
+            compat.benchmark_source = cast(BenchmarkSource, bench_evidence.source)
             compat.benchmark_confidence = bench_evidence.confidence
 
             if (
@@ -1101,7 +1106,7 @@ def rank_models(
     if any(r.quality_score >= 30 for r in results):
         results = [r for r in results if r.quality_score >= 20]
 
-    if any(r.estimated_tok_per_sec >= 5.0 for r in results):
-        results = [r for r in results if r.estimated_tok_per_sec >= 1.5]
+    if any((r.estimated_tok_per_sec or 0.0) >= 5.0 for r in results):
+        results = [r for r in results if (r.estimated_tok_per_sec or 0.0) >= 1.5]
 
     return results[:top_n]

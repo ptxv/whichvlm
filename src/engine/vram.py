@@ -293,8 +293,7 @@ def supports_visual_inputs(model: ModelInfo) -> bool:
     if pipeline_tag_has_visual_input(model.hf_pipeline_tag):
         return True
     return any(
-        component.role in VISUAL_COMPONENT_ROLES
-        for component in model.components
+        component.role in VISUAL_COMPONENT_ROLES for component in model.components
     )
 
 

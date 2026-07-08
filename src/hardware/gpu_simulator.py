@@ -97,7 +97,6 @@ def normalize_gpu_name(name: str) -> str:
 
 
 def substring_search(db, name: str):
-
     name_upper = name.upper()
     candidates = []
     for db_name in db.names:
@@ -194,7 +193,6 @@ def create_synthetic_gpus(
     values: Sequence[str] | str,
     vram_override_gb: float | None = None,
 ) -> list[GPUInfo]:
-
     names = parse_synthetic_gpu_specs(values)
     if vram_override_gb is not None and len(names) != 1:
         raise ValueError(
@@ -211,13 +209,13 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
 
     apple_hit = lookup_apple_silicon(name)
     if apple_hit is not None:
-        canonical, vendor, default_vram_gb, bandwidth = apple_hit
+        canonical, vendor, default_vram_gb, apple_bandwidth = apple_hit
         vram_gb = vram_override_gb if vram_override_gb is not None else default_vram_gb
         return GPUInfo(
             name=f"{canonical} (simulated)",
             vendor=vendor,
             vram_bytes=int(vram_gb * BYTES_PER_GIB),
-            memory_bandwidth_gbps=bandwidth,
+            memory_bandwidth_gbps=apple_bandwidth,
             shared_memory=True,
             backend_capabilities=[
                 BackendCapability("metal", True, details="Simulated Apple Silicon"),

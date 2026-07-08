@@ -114,9 +114,9 @@ def group_models(models: list[ModelInfo]) -> list[ModelFamily]:
 
         best_bench: dict[str, float] = {}
         for m in group:
-            for k, v in m.benchmark_scores.items():
-                if k not in best_bench or v > best_bench[k]:
-                    best_bench[k] = v
+            for k, score in m.benchmark_scores.items():
+                if k not in best_bench or score > best_bench[k]:
+                    best_bench[k] = score
 
         families.append(
             ModelFamily(

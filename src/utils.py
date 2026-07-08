@@ -20,7 +20,6 @@ MULTIPLIERS = {"k": 1024, "m": 1024 * 1024, "b": 1024 * 1024 * 1024}
 
 
 def parse_context_length(value: str) -> int:
-
     value = value.strip()
     match = SHORTHAND_RE.match(value)
     if match:
@@ -43,8 +42,6 @@ def parse_context_length(value: str) -> int:
 
 
 class ContextLengthType(click.ParamType):
-
-
     name = "context_length"
 
     def convert(self, value, param, ctx):
@@ -60,7 +57,6 @@ CONTEXT_LENGTH = ContextLengthType()
 
 
 def cache_dir() -> Path:
-
     base = os.environ.get("XDG_CACHE_HOME")
     if base and Path(base).is_absolute():
         return Path(base) / "whichvlm"

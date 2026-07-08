@@ -48,7 +48,6 @@ def test_infer_nvfp4():
 
 
 def test_fp4_patterns_do_not_false_match_plain_ids():
-
     plain = make_model("meta-llama/Llama-3.1-8B-Instruct")
     assert infer_non_gguf_quant_type(plain.id) == "FP16"
 

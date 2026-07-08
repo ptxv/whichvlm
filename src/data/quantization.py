@@ -17,11 +17,8 @@ QUANT_BYTES_PER_WEIGHT: dict[str, float] = {
     "IQ4_XS": 0.5,
     "IQ3_XXS": 0.375,
     "IQ2_XXS": 0.25,
-
-
     "MXFP4": 0.53125,
     "NVFP4": 0.5625,
-
     "Q1_0": 0.28,
     "Q2_0": 0.28,
     "TQ1_0": 0.21,
@@ -49,8 +46,6 @@ QUANT_QUALITY_PENALTY: dict[str, float] = {
     "Q4_K_M": 0.05,
     "Q4_K_S": 0.055,
     "Q4_0": 0.06,
-
-
     "NVFP4": 0.05,
     "MXFP4": 0.06,
     "Q3_K_M": 0.08,

@@ -97,7 +97,6 @@ AA_LEADERBOARD_URL = "https://artificialanalysis.ai/leaderboards/models"
 
 
 AA_INDEX_FALLBACK_2026_05_14: dict[str, float] = {
-
     "moonshotai/Kimi-K2-Thinking": 50.0,
     "moonshotai/Kimi-K2-Instruct": 47.0,
     "XiaomiMiMo/MiMo-V2.5-Pro": 54.0,
@@ -124,7 +123,6 @@ AA_INDEX_FALLBACK_2026_05_14: dict[str, float] = {
     "zai-org/GLM-4.6": 40.0,
     "zai-org/GLM-4.5": 38.0,
     "zai-org/GLM-4.5-Air": 36.0,
-
     "Qwen/Qwen3.6-27B": 46.0,
     "Qwen/Qwen3.5-397B-A17B": 45.0,
     "Qwen/Qwen3-Next-80B-A3B-Instruct": 42.0,
@@ -137,7 +135,6 @@ AA_INDEX_FALLBACK_2026_05_14: dict[str, float] = {
     "Qwen/Qwen3-4B": 26.0,
     "Qwen/Qwen3-1.7B": 20.0,
     "Qwen/Qwen3-0.6B": 16.0,
-
     "meta-llama/Llama-3.1-8B-Instruct": 22.0,
     "meta-llama/Meta-Llama-3-8B-Instruct": 20.0,
     "google/gemma-2-9b-it": 23.0,
@@ -147,7 +144,6 @@ AA_INDEX_FALLBACK_2026_05_14: dict[str, float] = {
     "Qwen/Qwen2.5-14B-Instruct": 26.0,
     "Qwen/Qwen2.5-32B-Instruct": 30.0,
     "Qwen/Qwen3-30B-A3B": 32.0,
-
     "openai/gpt-oss-120b": 41.0,
     "openai/gpt-oss-20b": 34.0,
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct": 38.0,
@@ -166,8 +162,6 @@ AA_INDEX_FALLBACK_2026_05_14: dict[str, float] = {
     "stepfun-ai/Step-3.5-Flash": 38.0,
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16": 36.0,
     "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16": 33.0,
-
-
     "allenai/Olmo-3-7B-Instruct": 22.0,
     "allenai/Olmo-3-1025-7B": 22.0,
     "ibm-granite/granite-4.0-h-small": 30.0,
@@ -201,7 +195,6 @@ PAREN_RE = re.compile(r"\([^)]*\)")
 
 
 def canonical_name(name: str) -> str:
-
     name = PAREN_RE.sub("", name)
     name = name.lower().replace("-", " ").replace("_", " ")
     return re.sub(r"\s+", " ", name).strip()
@@ -213,7 +206,6 @@ for display_name, hf_ids in AA_NAME_TO_HF_IDS.items():
 
 
 def decode_rsc_blob(html: str) -> str:
-
     parts: list[str] = []
     for m in RSC_CHUNK_RE.finditer(html):
         try:
@@ -224,7 +216,6 @@ def decode_rsc_blob(html: str) -> str:
 
 
 def extract_aa_pairs_from_html(html: str) -> list[tuple[str, float]]:
-
     blob = decode_rsc_blob(html)
     if not blob:
         return []
@@ -241,10 +232,8 @@ def extract_aa_pairs_from_html(html: str) -> list[tuple[str, float]]:
 
 
 def extract_aa_pairs(payload: dict) -> list[tuple[str, float]]:
-
     pairs: list[tuple[str, float]] = []
     for node in walk_json_dicts(payload):
-
         name = None
         score = None
         for name_key in ("model_name", "modelName", "name", "displayName"):
@@ -269,7 +258,6 @@ def extract_aa_pairs(payload: dict) -> list[tuple[str, float]]:
 
 
 async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
-
     resp = await get_with_retries(client, AA_LEADERBOARD_URL)
     resp.raise_for_status()
 
@@ -288,7 +276,6 @@ async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
             "(neither RSC __next_f nor __NEXT_DATA__ matched)"
         )
 
-
     best_by_name: dict[str, float] = {}
     for name, score in pairs:
         current = best_by_name.get(name)
@@ -297,7 +284,6 @@ async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
 
     live: dict[str, float] = {}
     for name, score in best_by_name.items():
-
         hf_ids = AA_NAME_TO_HF_IDS.get(name) or AA_CANON_TO_HF_IDS.get(
             canonical_name(name)
         )
@@ -312,7 +298,6 @@ async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
     if not live:
         raise ExtractionFailed("frontier index: live fetch returned 0 mapped scores")
 
-
     scores = get_aa_curated_fallback()
     for hf_id, normalized in live.items():
         if normalized > scores.get(hf_id, 0.0):
@@ -322,7 +307,6 @@ async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
 
 
 def get_aa_curated_fallback() -> dict[str, float]:
-
     result: dict[str, float] = {}
     for hf_id, raw in AA_INDEX_FALLBACK_2026_05_14.items():
         normalized = normalize_aa_index(raw)

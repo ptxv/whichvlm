@@ -28,6 +28,8 @@ def vendor_from_name(name: str) -> str | None:
 def parse_memory_value(value: object) -> int:
     if value is None:
         return 0
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return 0
     try:
         ram = int(value)
     except (TypeError, ValueError):
@@ -94,7 +96,6 @@ def memory_from_entry(entry: dict) -> int:
 
 
 def detect_windows_gpus() -> list[GPUInfo]:
-
     try:
         result = subprocess.run(
             [

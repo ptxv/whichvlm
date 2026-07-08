@@ -108,7 +108,6 @@ def extract_published_at(data: dict) -> str | None:
 
 
 def normalize_eval_value(raw: object) -> float | None:
-
     if not isinstance(raw, (int, float)):
         return None
     value = float(raw)
@@ -151,7 +150,6 @@ def is_general_eval_entry(entry: dict) -> bool:
 
 
 def extract_hf_eval_score(data: dict) -> float | None:
-
     eval_results = data.get("evalResults")
     if not isinstance(eval_results, list) or not eval_results:
         return None
@@ -201,7 +199,6 @@ def extract_hf_task_scores(data: dict) -> dict[str, float]:
 
 
 def extract_size_hint_from_id(model_id: str | None) -> int | None:
-
     if not model_id:
         return None
     lower = model_id.lower()
@@ -218,7 +215,6 @@ def extract_size_hint_from_id(model_id: str | None) -> int | None:
 
 
 def extract_active_size_hint_from_id(model_id: str | None) -> int | None:
-
     if not model_id:
         return None
     lower = model_id.lower()
@@ -285,9 +281,7 @@ def infer_model_capabilities(
     if not architecture:
         architecture = " ".join(metadata_words(config.get("architectures")))
     if not architecture:
-        architecture = str(
-            config.get("architecture") or config.get("model_type") or ""
-        )
+        architecture = str(config.get("architecture") or config.get("model_type") or "")
 
     metadata_text = " ".join(
         [
@@ -426,7 +420,6 @@ def resolve_moe_active_params(
     total_params: int,
     *model_refs: str | None,
 ) -> int | None:
-
     for ref in model_refs:
         if not ref:
             continue
@@ -446,7 +439,6 @@ def normalize_param_count(
     model_id: str,
     base_model: str | None,
 ) -> int:
-
     authoritative = lookup_curated_count(AUTHORITATIVE_PARAM_COUNTS, model_id)
     if authoritative and authoritative > 0:
         return authoritative
@@ -478,7 +470,6 @@ def normalize_param_count(
 
 
 def extract_quant_type(filename: str) -> str:
-
     patterns = [
         r"[.-](Q\d+_K_[SMLA])",
         r"[.-](Q\d+_\d+)",
@@ -609,13 +600,13 @@ def extract_param_count(model_data: dict) -> int:
         if isinstance(parameters, dict):
             total = sum(parameters.values())
             if total > 0:
-                return total
+                return int(total)
 
     gguf_meta = model_data.get("gguf", {}) or {}
     if isinstance(gguf_meta, dict):
-        total = gguf_meta.get("total")
-        if total and total > 0:
-            return int(total)
+        gguf_total = gguf_meta.get("total")
+        if gguf_total and gguf_total > 0:
+            return int(gguf_total)
 
     config = model_data.get("config", {}) or {}
     hidden = config.get("hidden_size", 0)
@@ -1351,7 +1342,6 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
 
 
 async def fetch_model_published_at(model_ids: list[str]) -> dict[str, str]:
-
     unique_ids = sorted({m for m in model_ids if m})
     if not unique_ids:
         return {}
@@ -1368,7 +1358,7 @@ async def fetch_model_published_at(model_ids: list[str]) -> dict[str, str]:
 
     result: dict[str, str] = {}
     for model_id, resp in zip(unique_ids, responses, strict=False):
-        if isinstance(resp, Exception):
+        if isinstance(resp, BaseException):
             logger.debug("Failed to fetch model detail for %s: %s", model_id, resp)
             continue
         if resp.status_code >= 400:

@@ -154,7 +154,6 @@ def detect_cpu_cores() -> int:
     if cores:
         return cores
 
-
     if platform.system() == "Linux":
         linux_cores = count_physical_cores_linux()
         if linux_cores:

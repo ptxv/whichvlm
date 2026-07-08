@@ -54,20 +54,15 @@ ARENA_ORG_TO_HF: dict[str, list[str]] = {
 
 
 def normalize_arena_elo(elo: float) -> float:
-
     score = (
-        (elo - ARENA_ELO_MIN)
-        / (ARENA_ELO_MAX - ARENA_ELO_MIN)
-        * ARENA_MAX_NORMALIZED
+        (elo - ARENA_ELO_MIN) / (ARENA_ELO_MAX - ARENA_ELO_MIN) * ARENA_MAX_NORMALIZED
     )
     return max(0.0, min(ARENA_MAX_NORMALIZED, round(score, 1)))
 
 
 def arena_name_to_hf_ids(model_name: str, org: str) -> list[str]:
-
     hf_orgs = ARENA_ORG_TO_HF.get(org, [])
     candidates = []
-
 
     clean_name = re.sub(r"\s*\([\d-]+\)\s*$", "", model_name).strip()
 
@@ -86,7 +81,6 @@ def arena_name_to_hf_ids(model_name: str, org: str) -> list[str]:
 
 
 async def fetch_arena_scores(client: httpx.AsyncClient) -> dict[str, float]:
-
     scores: dict[str, float] = {}
     offset = 0
 

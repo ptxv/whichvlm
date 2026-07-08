@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import logging
 import re
+from typing import Any, cast
 
 from data.gpu import BYTES_PER_GIB, GPU_BANDWIDTH, GPU_MEMORY_CLOCK_VARIANTS
 
@@ -37,7 +38,6 @@ SORTED_BW_KEYS = sorted(GPU_BANDWIDTH, key=len, reverse=True)
 
 
 def substring_bandwidth(name: str) -> float | None:
-
     if not name:
         return None
     name_upper = name.upper()
@@ -51,7 +51,6 @@ def substring_bandwidth(name: str) -> float | None:
 
 
 def static_bandwidth(name: str) -> float | None:
-
     if not name:
         return None
     if "/" not in name:
@@ -89,7 +88,6 @@ def dbgpu_index() -> tuple[object | None, dict[str, str] | None]:
 
 
 def dbgpu_bandwidth(name: str, vram_bytes: int | None) -> float | None:
-
     db, index = dbgpu_index()
     if db is None or index is None:
         return None
@@ -115,9 +113,10 @@ def dbgpu_bandwidth(name: str, vram_bytes: int | None) -> float | None:
                 candidates = same_vram
 
     bandwidths: list[float] = []
+    db_lookup = cast(Any, db)
     for canonical in candidates:
         try:
-            spec = db[canonical]
+            spec = db_lookup[canonical]
         except KeyError:
             continue
         bandwidth = getattr(spec, "memory_bandwidth_gb_s", None)
@@ -129,7 +128,6 @@ def dbgpu_bandwidth(name: str, vram_bytes: int | None) -> float | None:
 def memory_clock_variant_bandwidth(
     name: str, mem_clock_mhz: float | None
 ) -> float | None:
-
     if not name or not mem_clock_mhz or mem_clock_mhz <= 0:
         return None
     name_upper = name.upper()

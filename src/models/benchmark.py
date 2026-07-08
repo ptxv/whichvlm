@@ -134,7 +134,6 @@ def lineage_regex_table():
 
 
 def lineage_recency_factor(model_id: str) -> float:
-
     if not model_id:
         return 1.0
     lower = model_id.lower()
@@ -156,7 +155,6 @@ def apply_lineage_recency_demotion(
     frozen: dict[str, float],
     current: dict[str, float],
 ) -> dict[str, float]:
-
     if not combined:
         return combined
     out: dict[str, float] = {}
@@ -274,7 +272,6 @@ def extract_params_b_from_id(model_id: str) -> float | None:
 
 
 def extract_model_lines(model_id: str) -> list[str]:
-
     if "/" not in model_id:
         return []
     lower = model_id.lower()
@@ -304,7 +301,6 @@ def interpolate_line_score(
     bucket: list[tuple[float | None, float]],
     params_b: float | None,
 ) -> tuple[float, float]:
-
     if not bucket:
         return 0.0, 0.0
 
@@ -338,7 +334,6 @@ def interpolate_line_score(
 def build_score_index(
     scores: dict[str, float],
 ) -> tuple[dict[str, float], dict[str, float]]:
-
     ci_index: dict[str, float] = {}
     line_index: dict[str, float] = {}
 
@@ -360,7 +355,6 @@ def build_score_index(
 def build_line_bucket_index(
     scores: dict[str, float],
 ) -> dict[str, list[tuple[float | None, float]]]:
-
     buckets: dict[str, list[tuple[float | None, float]]] = {}
     for key, val in scores.items():
         params_b = extract_params_b_from_id(key)
@@ -418,7 +412,6 @@ def strip_repo_suffix(model_id: str) -> str:
 def generate_score_name_candidates(
     model_id: str, scores: dict[str, float]
 ) -> list[str]:
-
     stripped = strip_repo_suffix(model_id)
     repo_name = stripped.rsplit("/", 1)[-1]
     model_names = [repo_name]
@@ -451,7 +444,6 @@ def lookup_benchmark(
     ci_index: dict[str, float] | None = None,
     line_index: dict[str, float] | None = None,
 ) -> tuple[float, bool] | None:
-
     evidence = lookup_benchmark_evidence(
         model_id,
         base_model,
@@ -465,7 +457,6 @@ def lookup_benchmark(
 
 
 def params_compatible(actual_b: float | None, ref_id: str) -> bool:
-
     if actual_b is None or actual_b <= 0:
         return True
     ref_b = extract_params_b_from_id(ref_id)

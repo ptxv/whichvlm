@@ -45,6 +45,10 @@ sources = ["src"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+[[tool.mypy.overrides]]
+module = ["psutil", "thefuzz", "pynvml", "pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",

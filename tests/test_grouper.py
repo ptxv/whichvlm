@@ -36,8 +36,6 @@ def test_group_by_name_normalization():
 
 
 def test_fp4_suffixes_normalize_to_base_family():
-
-
     base = normalize_name("openai/gpt-oss-20b")
     assert normalize_name("openai/gpt-oss-20b-MXFP4") == base
     assert normalize_name("openai/gpt-oss-20b-NVFP4") == base

@@ -287,7 +287,6 @@ def display_upgrade_json(
     current_results: list,
     target_results: list[tuple[str, HardwareInfo, list]],
 ) -> None:
-
     current_row = summarize_upgrade_row("Current", current_hw, current_results)
     rows = []
     for name, hw, res in target_results:

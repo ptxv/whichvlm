@@ -20,7 +20,6 @@ DISPLAY_CLASSES = (
 
 
 def lookup_bandwidth(name: str) -> float | None:
-
     return static_bandwidth(name)
 
 

@@ -10,7 +10,7 @@ from rich.console import Console
 
 from data.gpu import BYTES_PER_GIB
 from data.quantization import QUANT_PREFERENCE_ORDER
-from engine.workload import Workload
+from engine.workload import Workload, WorkloadTask
 from hardware.types import HardwareInfo, ensure_backend_capabilities
 from models.types import GGUFVariant, ModelInfo
 from runtime import (
@@ -365,7 +365,6 @@ def apply_gpu_overrides(
 
 
 def auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float | None:
-
     if profile != "general":
         return None
     if not hardware.gpus:
@@ -421,7 +420,7 @@ def workload_for_profile(
     batch_size: int = 1,
     context_length: int = 4096,
 ) -> Workload | None:
-    task_by_profile = {
+    task_by_profile: dict[str, WorkloadTask] = {
         "any": "general_multimodal",
         "vision": "image_qa",
         "image_qa": "image_qa",
@@ -654,7 +653,6 @@ def main(
         rich_help_panel=RANKING_PANEL,
     ),
 ):
-
     if ctx.invoked_subcommand is not None:
         return
 
@@ -855,7 +853,6 @@ def plan(
         False, "--refresh", help="Ignore cache and re-fetch models"
     ),
 ):
-
     from output.display import display_plan, display_plan_json
 
     with vlm_progress() as progress:
@@ -997,7 +994,6 @@ def hardware_plan(
         rich_help_panel=DATA_PANEL,
     ),
 ):
-
     from engine.ranker import rank_models
     from hardware.catalog import (
         PLAN_SYSTEM_RAM_BYTES,
@@ -1127,7 +1123,6 @@ def upgrade(
     json_output: bool = typer.Option(False, "--json"),
     refresh: bool = typer.Option(False, "--refresh"),
 ):
-
     from engine.ranker import rank_models
     from hardware.detector import detect_hardware
     from hardware.gpu_simulator import create_synthetic_gpu
@@ -1416,7 +1411,6 @@ def run(
         help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
     ),
 ):
-
     import shutil
 
     if not shutil.which("uv"):
@@ -1663,7 +1657,6 @@ def snippet(
         help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
     ),
 ):
-
     from rich.syntax import Syntax
 
     with vlm_progress() as progress:
@@ -1729,7 +1722,6 @@ def hardware(
         None, "--vram", help="Override VRAM in GB (requires --gpu)"
     ),
 ):
-
     validate_gpu_flags(cpu_only, gpu, vram)
 
     from hardware.detector import detect_hardware

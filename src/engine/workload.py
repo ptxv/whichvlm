@@ -36,6 +36,7 @@ class Workload:
             batch_size=max(1, self.batch_size),
         )
 
+
 @dataclass(frozen=True)
 class VisionWorkload(Workload):
     image_count: int = 1

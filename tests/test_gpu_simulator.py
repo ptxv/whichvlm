@@ -155,7 +155,6 @@ class TestUnknownGPU:
 
 class TestFuzzySearch:
     def test_partial_name(self):
-
         gpu = create_synthetic_gpu("GTX 1080")
         assert "1080" in gpu.name
         assert gpu.vendor == "nvidia"

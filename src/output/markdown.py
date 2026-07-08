@@ -80,7 +80,6 @@ def display_markdown(
     show_status: bool = False,
     empty_message: str | None = None,
 ) -> None:
-
     lines = ["## Recommended Models", ""]
 
     if not results:

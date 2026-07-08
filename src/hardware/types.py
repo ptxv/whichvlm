@@ -42,7 +42,6 @@ class HardwareInfo:
 
 
 def infer_backend_capabilities(gpu: GPUInfo, os_name: str) -> list[BackendCapability]:
-
     if gpu.vendor == "apple":
         if os_name == "darwin":
             return [
@@ -80,4 +79,6 @@ def ensure_backend_capabilities(gpu: GPUInfo, os_name: str) -> GPUInfo:
 
 def has_backend(gpu: GPUInfo, backend_name: str) -> bool:
     target = backend_name.lower()
-    return any(c.name.lower() == target and c.available for c in gpu.backend_capabilities)
+    return any(
+        c.name.lower() == target and c.available for c in gpu.backend_capabilities
+    )

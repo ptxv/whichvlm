@@ -44,7 +44,6 @@ MODEL_LINEAGE_VERSIONS: dict[str, list[tuple[str, int]]] = {
         (r"chatglm.*vision", 1),
     ],
     "qwen": [
-
         (r"qwen3\.6", 7),
         (r"qwen3\.5", 6),
         (r"qwen3-next", 6),
@@ -80,8 +79,6 @@ MODEL_LINEAGE_VERSIONS: dict[str, list[tuple[str, int]]] = {
         (r"deepseek-coder(?!-v2)", 1),
     ],
     "gemma": [
-
-
         (r"(?<!t5)(?<!t5[-_])gemma-?4", 4),
         (r"(?<!t5)(?<!t5[-_])gemma-?3", 3),
         (r"(?<!t5)(?<!t5[-_])gemma-?2", 2),
@@ -165,8 +162,6 @@ MODEL_LINEAGE_VERSIONS: dict[str, list[tuple[str, int]]] = {
         (r"yi-(6b|9b|34b)(?!.*1\.5)", 1),
     ],
     "t5": [
-
-
         (r"t5[-_]?gemma", 5),
         (r"flan-?t5", 4),
         (r"flan-?ul2", 4),

@@ -71,7 +71,6 @@ def test_detect_strix_halo_rocm_smi_does_not_treat_aperture_as_vram(monkeypatch)
 
 
 def test_detect_amd_gpu_ignores_intel_only_lspci(monkeypatch):
-
     output = (
         '00:02.0 "VGA compatible controller" "Intel Corporation" '
         '"Alder Lake-P GT1 [UHD Graphics]" -r0c -p00 '
@@ -142,15 +141,12 @@ def test_display_amd_shared_memory_without_zero_kb(monkeypatch):
 
 
 def test_sysfs_generic_name_enriched_by_lspci(monkeypatch, tmp_path):
-
     BYTES_PER_GIB = 1024**3
-
 
     card = tmp_path / "card0" / "device"
     card.mkdir(parents=True)
     (card / "vendor").write_text("0x1002\n")
     (card / "mem_info_vram_total").write_text(str(12 * BYTES_PER_GIB))
-
 
     lspci_name = "Navi 22 [Radeon RX 6700/6700 XT/6750 XT / 6800M/6850M XT]"
     original_sysfs = amd.detect_from_sysfs
@@ -166,7 +162,6 @@ def test_sysfs_generic_name_enriched_by_lspci(monkeypatch, tmp_path):
 
 
 def test_sysfs_product_name_preferred_over_lspci(monkeypatch, tmp_path):
-
     BYTES_PER_GIB = 1024**3
 
     card = tmp_path / "card0" / "device"
@@ -194,9 +189,7 @@ def test_sysfs_product_name_preferred_over_lspci(monkeypatch, tmp_path):
 def test_lspci_enriched_with_sysfs_vram_when_sysfs_detection_fails(
     monkeypatch, tmp_path
 ):
-
     BYTES_PER_GIB = 1024**3
-
 
     monkeypatch.setattr(amd, "detect_from_sysfs", lambda: [])
     monkeypatch.setattr(
@@ -214,11 +207,8 @@ def test_lspci_enriched_with_sysfs_vram_when_sysfs_detection_fails(
 
 
 def test_lookup_bandwidth_compound_lspci_name():
-
-
     assert amd.lookup_bandwidth("AMD Radeon RX 6750 XT") == 432.0
     assert amd.lookup_bandwidth("AMD Radeon RX 6700 XT") == 384.0
-
 
     compound = "Navi 22 [Radeon RX 6700/6700 XT/6750 XT / 6800M/6850M XT]"
     bw = amd.lookup_bandwidth(compound)
@@ -227,7 +217,6 @@ def test_lookup_bandwidth_compound_lspci_name():
 
 
 def test_display_amd_dgpu_does_not_say_shared_memory(monkeypatch):
-
     from output import console as console_mod
     from output import display as display_mod
 

@@ -22,7 +22,6 @@ def lookup_compute_capability(name: str) -> tuple[int, int] | None:
 
 
 def lookup_bandwidth(name: str) -> float | None:
-
     return static_bandwidth(name)
 
 

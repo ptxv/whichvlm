@@ -9,8 +9,6 @@ from models.types import GGUFVariant, ModelInfo
 NON_GGUF_PATTERNS: list[tuple[str, str]] = [
     (r"(^|[-_/])awq($|[-_/])", "AWQ"),
     (r"(^|[-_/])gptq($|[-_/])", "GPTQ"),
-
-
     (r"(^|[-_/])mxfp4($|[-_/])", "MXFP4"),
     (r"(^|[-_/])nvfp4($|[-_/])", "NVFP4"),
     (r"(bnb[-_/]?4bit|nf4|int4|4bit)", "BNB_4BIT"),

@@ -4,6 +4,7 @@ import re
 from math import log10
 
 from rich import box
+from rich.console import RenderableType
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -31,7 +32,6 @@ AMBER = "#fbbf24"
 
 
 def detect_specializations(model_id: str) -> list[str]:
-
     lower = model_id.lower()
     tags: list[str] = []
     if re.search(r"(coder|codegen|starcoder|program|coding)", lower):
@@ -49,7 +49,6 @@ def detect_specializations(model_id: str) -> list[str]:
 
 
 def top_pick_confidence(results: list[CompatibilityResult]) -> tuple[str, str]:
-
     top = results[0]
     gap = (top.quality_score - results[1].quality_score) if len(results) > 1 else 999.0
     notes: list[str] = []
@@ -260,7 +259,7 @@ def display_ranking(
         if show_status:
             model_link.append(f"\n{params_str}", style="dim")
 
-        row_cells = [
+        row_cells: list[RenderableType] = [
             str(i),
             model_link,
             quant,

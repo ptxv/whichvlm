@@ -51,8 +51,6 @@ def test_nvidia_smi_fallback_applies_rtx_a3000_laptop_catalog(monkeypatch):
 
 
 def test_nvidia_smi_fallback_resolves_laptop_5090_via_dbgpu(monkeypatch):
-
-
     real_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
@@ -118,9 +116,7 @@ def test_nvidia_smi_fallback_detects_gb10_with_na_memory(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        "hardware.memory.detect_ram_bytes", lambda: 128 * 1024**3
-    )
+    monkeypatch.setattr("hardware.memory.detect_ram_bytes", lambda: 128 * 1024**3)
 
     gpus = detect_nvidia_gpus()
 
@@ -161,9 +157,7 @@ def test_nvml_detects_gb10_when_memory_info_is_unavailable(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        "hardware.memory.detect_ram_bytes", lambda: 128 * 1024**3
-    )
+    monkeypatch.setattr("hardware.memory.detect_ram_bytes", lambda: 128 * 1024**3)
 
     gpus = detect_nvidia_gpus()
 

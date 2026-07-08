@@ -15,7 +15,6 @@ def detect_available_ram_bytes() -> int:
 
 
 def estimate_usable_ram(total: int) -> int:
-
     BYTES_PER_GIB = 1024**3
     reserve = int(total * 0.15)
     reserve = max(4 * BYTES_PER_GIB, min(reserve, 32 * BYTES_PER_GIB))
@@ -23,7 +22,6 @@ def estimate_usable_ram(total: int) -> int:
 
 
 def effective_usable_ram(total: int, budget: int | None = None) -> int:
-
     usable = estimate_usable_ram(total)
     if budget is None:
         return usable
@@ -31,7 +29,6 @@ def effective_usable_ram(total: int, budget: int | None = None) -> int:
 
 
 def detect_disk_free_bytes(path: str | None = None) -> int:
-
     if path is None:
         path = os.path.expanduser("~")
     try:

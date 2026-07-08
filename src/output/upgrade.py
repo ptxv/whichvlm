@@ -66,7 +66,9 @@ def display_upgrade(
     target_results: list[tuple[str, HardwareInfo, list]],
 ) -> None:
     current_row = summarize_upgrade_row("Current", current_hw, current_results)
-    target_rows = [summarize_upgrade_row(name, hw, res) for name, hw, res in target_results]
+    target_rows = [
+        summarize_upgrade_row(name, hw, res) for name, hw, res in target_results
+    ]
 
     table = Table(
         title="GPU upgrade comparison",

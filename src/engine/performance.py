@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from engine.quantization import estimate_weight_bytes
 from engine.quantization import effective_quant_type
+from engine.types import SpeedConfidence
 from engine.workload import Workload
 from hardware.types import GPUInfo
 from models.package_graph import is_vision_model
@@ -113,7 +114,9 @@ def moe_effective_read_ratio(model: ModelInfo, gpu: GPUInfo) -> float:
     return min(1.0, max(active_ratio, floor))
 
 
-def lower_speed_confidence(current: str, candidate: str) -> str:
+def lower_speed_confidence(
+    current: SpeedConfidence, candidate: SpeedConfidence
+) -> SpeedConfidence:
     if SPEED_CONFIDENCE_ORDER[candidate] < SPEED_CONFIDENCE_ORDER[current]:
         return candidate
     return current
@@ -132,9 +135,7 @@ def is_multimodal_model(model: ModelInfo) -> bool:
     caps = model.capabilities
     if caps.image or caps.video or caps.audio:
         return True
-    if is_vision_model(
-        model.id, model.hf_pipeline_tag, model.tags, model.architecture
-    ):
+    if is_vision_model(model.id, model.hf_pipeline_tag, model.tags, model.architecture):
         return True
     if model.hf_pipeline_tag in MULTIMODAL_PIPELINE_TAGS:
         return True
@@ -184,11 +185,11 @@ def estimate_speed_uncertainty(
     gpu: GPUInfo | None,
     fit_type: str,
     estimated_tok_per_sec: float | None,
-) -> tuple[str, tuple[float, float] | None, list[str]]:
+) -> tuple[SpeedConfidence, tuple[float, float] | None, list[str]]:
     notes = [
         "Speed is estimated from memory bandwidth, quantization, backend, and fit type."
     ]
-    confidence = "medium"
+    confidence: SpeedConfidence = "medium"
 
     if estimated_tok_per_sec is None or estimated_tok_per_sec <= 0:
         return (

@@ -69,10 +69,9 @@ def is_vision_model(
     tags: list[str],
     architecture: str = "",
 ) -> bool:
-    return (
-        capabilities_for_data(model_id, pipeline_tag, tags, architecture).image
-        or pipeline_tag_has_visual_input(pipeline_tag)
-    )
+    return capabilities_for_data(
+        model_id, pipeline_tag, tags, architecture
+    ).image or pipeline_tag_has_visual_input(pipeline_tag)
 
 
 def lineage_relationship(

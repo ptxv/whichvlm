@@ -47,8 +47,6 @@ def gguf(quant: str, size_gb: float) -> GGUFVariant:
 
 
 class TestAppleSiliconSimulator:
-
-
     def test_m1_default_is_apple_not_ati_rage_mobility(self):
         gpu = create_synthetic_gpu("M1")
         assert gpu.vendor == "apple", (
@@ -77,42 +75,31 @@ class TestAppleSiliconSimulator:
         assert gpu.memory_bandwidth_gbps == 800.0
 
     def test_apple_chip_compact_form_is_recognized(self):
-
         for name in ("M2Max", "m2 max", "M2 MAX"):
             gpu = create_synthetic_gpu(name, vram_override_gb=32)
             assert gpu.vendor == "apple", f"{name!r} not recognized as Apple"
             assert gpu.memory_bandwidth_gbps == 400.0
 
     def test_longest_match_wins_m2_ultra_not_m2(self):
-
         gpu = create_synthetic_gpu("M2 Ultra", vram_override_gb=128)
         assert gpu.memory_bandwidth_gbps == 800.0
         assert gpu.memory_bandwidth_gbps != 100.0
 
 
 class TestFamilySizeInheritance:
-
-
     def test_params_compatible_rejects_25x_mismatch(self):
-
         assert params_compatible(6.6, "org/Some-Model-158B") is False
 
     def test_params_compatible_accepts_same_size_quant(self):
-
         assert params_compatible(7.8, "org/Llama-3-8B-GGUF") is True
 
     def test_params_compatible_permissive_when_no_actual_size(self):
-
-
         assert params_compatible(None, "org/Model-70B") is True
 
     def test_params_compatible_permissive_when_ref_has_no_size(self):
-
-
         assert params_compatible(6.6, "deepseek-ai/DeepSeek-V4-Flash") is True
 
     def test_ranker_drops_tiny_fork_inheriting_huge_base(self):
-
         base = ModelInfo(
             id="org/DeepSeek-Vx-Flash",
             family_id="deepseek-vx-flash",
@@ -156,8 +143,6 @@ class TestFamilySizeInheritance:
 
 
 class TestGrouperReferencedBase:
-
-
     def test_referenced_base_wins_over_more_downloaded_fork(self):
         official = ModelInfo(
             id="Qwen/Qwen3-4B-Thinking-2507",
@@ -200,8 +185,6 @@ class TestGrouperReferencedBase:
             assert "rio" not in m.family_id
 
     def test_falls_back_to_downloads_without_base_reference(self):
-
-
         a = ModelInfo(
             id="orgA/Model-7B",
             family_id="",
@@ -294,8 +277,6 @@ class TestVisionGenerationOrder:
 
 
 class TestApplePartialOffloadPenalty:
-
-
     def model_variant(self):
         m = ModelInfo(
             id="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
@@ -320,7 +301,6 @@ class TestApplePartialOffloadPenalty:
         partial = estimate_tok_per_sec(m, v, apple, "partial_offload")
         assert full > 0
         ratio = partial / full
-
 
         assert ratio > 0.7, (
             f"Apple partial-offload ratio {ratio:.2f} — the discrete "
@@ -353,7 +333,6 @@ class TestApplePartialOffloadPenalty:
 
         m, v = self.model_variant()
 
-
         apple = GPUInfo(
             name="Apple",
             vendor="apple",
@@ -377,8 +356,6 @@ class TestApplePartialOffloadPenalty:
 
 
 class TestMoESpeedEstimation:
-
-
     def test_qwen3_next_strix_halo_matches_reported_generation_speed(self):
         from engine.performance import estimate_tok_per_sec
 

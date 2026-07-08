@@ -19,7 +19,6 @@ ARCHIVE_SOURCE_MAX_NORMALIZED = 78.0
 
 
 async def fetch_leaderboard_parquet(client: httpx.AsyncClient) -> dict[str, float]:
-
     import pyarrow.parquet as pq
 
     resp = await get_with_retries(
@@ -41,7 +40,6 @@ async def fetch_leaderboard_parquet(client: httpx.AsyncClient) -> dict[str, floa
 
 
 async def fetch_leaderboard_api(client: httpx.AsyncClient) -> dict[str, float]:
-
     scores: dict[str, float] = {}
     offset = 0
 
@@ -79,7 +77,6 @@ async def fetch_leaderboard_api(client: httpx.AsyncClient) -> dict[str, float]:
 
 
 def normalize_leaderboard_avg(avg: float) -> float:
-
     score = avg / LB_AVG_MAX * ARCHIVE_SOURCE_MAX_NORMALIZED
     return max(0.0, min(ARCHIVE_SOURCE_MAX_NORMALIZED, round(score, 1)))
 
@@ -87,7 +84,6 @@ def normalize_leaderboard_avg(avg: float) -> float:
 async def fetch_leaderboard_with_fallback(
     client: httpx.AsyncClient,
 ) -> dict[str, float]:
-
     try:
         return await fetch_leaderboard_parquet(client)
     except ImportError:

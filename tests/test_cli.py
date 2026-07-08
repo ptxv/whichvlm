@@ -730,7 +730,6 @@ def test_plan_display_plan_renders_tables():
 
 
 def test_plan_display_plan_json_outputs_valid_json():
-
     import json as json_mod
     from io import StringIO
 
