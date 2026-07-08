@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 
 from data.vlm_inventory import canonical_vlm_family_id
 from engine.quantization import infer_non_gguf_quant_type
-from hardware.types import HardwareInfo
+from hardware.types import HardwareInfo, infer_backend_capabilities
 from models.integrations import (
     VISUAL_COMPONENT_ROLES,
     capabilities_for_data,
@@ -222,9 +222,12 @@ def hardware_accelerators(hardware: HardwareInfo | None) -> set[str]:
         if capability.available
     }
     for gpu in hardware.gpus:
+        capabilities = gpu.backend_capabilities or infer_backend_capabilities(
+            gpu, hardware.os
+        )
         names.update(
             capability.name.lower()
-            for capability in gpu.backend_capabilities
+            for capability in capabilities
             if capability.available
         )
     names.add("cpu")
@@ -855,6 +858,13 @@ SERVE_AUTO_BACKENDS: tuple[Backend, ...] = (
     VLLMBackend(),
     SGLangBackend(),
 )
+RECOMMENDED_BACKENDS: tuple[Backend, ...] = (
+    LlamaCppBackend(),
+    MLXBackend(),
+    VLLMBackend(),
+    SGLangBackend(),
+    TransformersBackend(),
+)
 
 
 def normalize_backend_name(name: str) -> str:
@@ -889,6 +899,17 @@ def select_backend(
         f"No supported run backend for {model.id}. "
         "Try --backend vllm or --backend sglang on Linux/CUDA for supported VLMs."
     )
+
+
+def recommended_runtime_backend(
+    model: ModelInfo,
+    artifact: GGUFVariant | None,
+    hardware: HardwareInfo | None = None,
+) -> str | None:
+    for backend in RECOMMENDED_BACKENDS:
+        if backend.supports(model, artifact, hardware):
+            return backend.name
+    return None
 
 
 def select_serve_backend(
