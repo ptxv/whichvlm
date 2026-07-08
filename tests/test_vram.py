@@ -1,6 +1,6 @@
-from whichvlm.engine.vram import estimate_kv_cache, estimate_vram, estimate_vram_details
-from whichvlm.engine.workload import VisionWorkload
-from whichvlm.models.types import (
+from engine.vram import estimate_kv_cache, estimate_vram, estimate_vram_details
+from engine.workload import VisionWorkload
+from models.types import (
     GGUFVariant,
     ModelCapabilities,
     ModelComponent,
