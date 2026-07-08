@@ -37,7 +37,7 @@ from cli import (
 from runtime import generate_run_script
 from utils import current_version
 from engine.types import CompatibilityResult
-from hardware.types import GPUInfo, HardwareInfo, has_backend
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo, has_backend
 from models.types import GGUFVariant, ModelArtifact, ModelInfo
 from output.display import display_json
 
@@ -1379,6 +1379,7 @@ def test_json_output_defaults_to_compact():
     compact_entry = compact["models"][0]
 
     assert compact_entry["model_id"] == "test-org/Test-7B"
+    assert compact_entry["recommended_runtime_backend"] is None
     assert compact_entry["benchmark_source"] == "line_interp"
     assert compact_entry["vram_required_range_bytes"] == [
         7_000_000_000,
@@ -1408,3 +1409,35 @@ def test_json_output_includes_diagnostics_when_requested():
     assert artifact["access"] == "gated"
     assert artifact["backend_support"] == ["mlx", "metal"]
     assert entry["lineage"]["base_model_ids"] == ["base/Test-7B"]
+
+
+def test_json_output_recommends_vllm_for_linux_cuda_vlm():
+    model = ModelInfo(
+        id="Qwen/Qwen2.5-VL-7B-Instruct",
+        family_id="qwen-vl",
+        name="Qwen2.5-VL-7B-Instruct",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+    )
+    result = CompatibilityResult(
+        model=model,
+        gguf_variant=None,
+        can_run=True,
+        vram_required_bytes=8_000_000_000,
+        vram_available_bytes=24_000_000_000,
+    )
+    hardware = HardwareInfo(
+        gpus=[
+            GPUInfo(
+                name="NVIDIA Test GPU",
+                vendor="nvidia",
+                vram_bytes=24 * 1024**3,
+                backend_capabilities=[BackendCapability("cuda", True)],
+            )
+        ],
+        os="linux",
+    )
+
+    data = render_json_output(result, hardware)
+
+    assert data["models"][0]["recommended_runtime_backend"] == "vllm"

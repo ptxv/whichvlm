@@ -855,6 +855,13 @@ SERVE_AUTO_BACKENDS: tuple[Backend, ...] = (
     VLLMBackend(),
     SGLangBackend(),
 )
+RECOMMENDED_BACKENDS: tuple[Backend, ...] = (
+    LlamaCppBackend(),
+    MLXBackend(),
+    VLLMBackend(),
+    SGLangBackend(),
+    TransformersBackend(),
+)
 
 
 def normalize_backend_name(name: str) -> str:
@@ -889,6 +896,17 @@ def select_backend(
         f"No supported run backend for {model.id}. "
         "Try --backend vllm or --backend sglang on Linux/CUDA for supported VLMs."
     )
+
+
+def recommended_runtime_backend(
+    model: ModelInfo,
+    artifact: GGUFVariant | None,
+    hardware: HardwareInfo | None = None,
+) -> str | None:
+    for backend in RECOMMENDED_BACKENDS:
+        if backend.supports(model, artifact, hardware):
+            return backend.name
+    return None
 
 
 def select_serve_backend(
