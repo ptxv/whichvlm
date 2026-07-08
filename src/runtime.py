@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 
 from data.vlm_inventory import canonical_vlm_family_id
 from engine.quantization import infer_non_gguf_quant_type
-from hardware.types import HardwareInfo
+from hardware.types import HardwareInfo, infer_backend_capabilities
 from models.integrations import (
     VISUAL_COMPONENT_ROLES,
     capabilities_for_data,
@@ -222,9 +222,12 @@ def hardware_accelerators(hardware: HardwareInfo | None) -> set[str]:
         if capability.available
     }
     for gpu in hardware.gpus:
+        capabilities = gpu.backend_capabilities or infer_backend_capabilities(
+            gpu, hardware.os
+        )
         names.update(
             capability.name.lower()
-            for capability in gpu.backend_capabilities
+            for capability in capabilities
             if capability.available
         )
     names.add("cpu")
