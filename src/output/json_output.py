@@ -221,6 +221,7 @@ def display_plan_json(
     system_ram_bytes: int | None = None,
     min_speed: float | None = None,
     os_name: str = "linux",
+    perf_vram: str = "none",
 ) -> None:
     from hardware.catalog import PLAN_SYSTEM_RAM_BYTES
     from output.plan import (
@@ -244,6 +245,7 @@ def display_plan_json(
         system_ram_bytes,
         min_speed,
         os_name,
+        perf_vram,
     )
     multi_gpu_rows = plan_multi_gpu_compatibility(
         model,
@@ -255,6 +257,7 @@ def display_plan_json(
         system_ram_bytes,
         min_speed,
         os_name,
+        perf_vram,
     )
 
     output = {
@@ -274,6 +277,8 @@ def display_plan_json(
             "system_ram_bytes": system_ram_bytes,
             "min_speed": min_speed,
             "os": os_name,
+            "vram_headroom": "auto",
+            "perf_vram": perf_vram,
         },
         "vram_by_quant": vram_by_quant,
         "gpu_compatibility": single_gpu_rows,
