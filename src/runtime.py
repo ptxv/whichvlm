@@ -34,7 +34,6 @@ class RuntimeRequest:
     max_tokens: int = 512
     hardware: HardwareInfo | None = None
     script_path: str | None = None
-    gpu_memory_utilization: float | None = None
 
 
 @dataclass(frozen=True)
@@ -46,7 +45,6 @@ class ServeRequest:
     hardware: HardwareInfo | None
     host: str
     port: int
-    gpu_memory_utilization: float | None = None
 
 
 @dataclass(frozen=True)
@@ -306,7 +304,6 @@ def generate_run_script(
     max_tokens: int = 512,
     backend_name: str | None = None,
     hardware: HardwareInfo | None = None,
-    gpu_memory_utilization: float | None = None,
 ) -> str:
     backend = select_backend(model, variant, hardware, backend_name)
     request = RuntimeRequest(
@@ -317,18 +314,8 @@ def generate_run_script(
         image_path=image_path,
         max_tokens=max_tokens,
         hardware=hardware,
-        gpu_memory_utilization=gpu_memory_utilization,
     )
     return backend.generate_script(request)
-
-
-def auto_gpu_memory_utilization(hardware: HardwareInfo) -> float:
-    gpu = hardware.gpus[0]
-    return (gpu.usable_vram_bytes or gpu.vram_bytes) / gpu.vram_bytes
-
-
-def format_gpu_memory_utilization(value: float | None) -> str:
-    return "0.90" if value is None else f"{value:g}"
 
 
 def run_request(request: RuntimeRequest, backend_name: str | None = None) -> int:
@@ -766,33 +753,24 @@ class VLLMBackend(Backend):
             request.context_length,
             request.image_path,
             request.max_tokens,
-            request.gpu_memory_utilization,
         )
 
     def serve(self, request: ServeRequest) -> int:
-        cmd = [
-            "vllm",
-            "serve",
-            request.model.id,
-            "--host",
-            request.host,
-            "--port",
-            str(request.port),
-            "--max-model-len",
-            str(request.context_length),
-            "--trust-remote-code",
-        ]
-        if request.gpu_memory_utilization is not None:
-            cmd.extend(
-                [
-                    "--gpu-memory-utilization",
-                    format_gpu_memory_utilization(request.gpu_memory_utilization),
-                ]
-            )
         result = subprocess.run(
             uv_command(
                 self.serve_dependencies(request.model, request.artifact),
-                cmd,
+                [
+                    "vllm",
+                    "serve",
+                    request.model.id,
+                    "--host",
+                    request.host,
+                    "--port",
+                    str(request.port),
+                    "--max-model-len",
+                    str(request.context_length),
+                    "--trust-remote-code",
+                ],
             )
         )
         return result.returncode
@@ -837,35 +815,26 @@ class SGLangBackend(Backend):
             request.context_length,
             request.image_path,
             request.max_tokens,
-            request.gpu_memory_utilization,
         )
 
     def serve(self, request: ServeRequest) -> int:
-        cmd = [
-            "python",
-            "-m",
-            "sglang.launch_server",
-            "--model-path",
-            request.model.id,
-            "--host",
-            request.host,
-            "--port",
-            str(request.port),
-            "--context-length",
-            str(request.context_length),
-            "--trust-remote-code",
-        ]
-        if request.gpu_memory_utilization is not None:
-            cmd.extend(
-                [
-                    "--mem-fraction-static",
-                    format_gpu_memory_utilization(request.gpu_memory_utilization),
-                ]
-            )
         result = subprocess.run(
             uv_command(
                 self.serve_dependencies(request.model, request.artifact),
-                cmd,
+                [
+                    "python",
+                    "-m",
+                    "sglang.launch_server",
+                    "--model-path",
+                    request.model.id,
+                    "--host",
+                    request.host,
+                    "--port",
+                    str(request.port),
+                    "--context-length",
+                    str(request.context_length),
+                    "--trust-remote-code",
+                ],
             )
         )
         return result.returncode
@@ -1427,11 +1396,9 @@ def generate_vllm_vlm_script(
     context_length: int,
     image_path: str,
     max_tokens: int,
-    gpu_memory_utilization: float | None = None,
 ) -> str:
     metrics = backend_decode_metrics_block()
     quantization = vllm_quantization(model)
-    utilization = format_gpu_memory_utilization(gpu_memory_utilization)
     return f'''\
 import base64
 import mimetypes
@@ -1462,7 +1429,7 @@ llm = LLM(
     dtype="auto",
     quantization=quantization,
     max_model_len={context_length},
-    gpu_memory_utilization={utilization},
+    gpu_memory_utilization=0.90,
 )
 print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
 sampling = SamplingParams(max_tokens={max_tokens})
@@ -1503,10 +1470,8 @@ def generate_sglang_vlm_script(
     context_length: int,
     image_path: str,
     max_tokens: int,
-    gpu_memory_utilization: float | None = None,
 ) -> str:
     metrics = backend_decode_metrics_block()
-    utilization = format_gpu_memory_utilization(gpu_memory_utilization)
     return f'''\
 import psutil
 import time
@@ -1524,7 +1489,7 @@ engine = Engine(
     model_path=model_id,
     trust_remote_code=True,
     context_length={context_length},
-    mem_fraction_static={utilization},
+    mem_fraction_static=0.90,
     log_level="error",
 )
 print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
