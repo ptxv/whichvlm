@@ -549,6 +549,7 @@ def main(
         "none",
         "--perf-vram",
         help="Reserve GPU memory for inference performance features: none | 1GB | 10%",
+        rich_help_panel=HARDWARE_PANEL,
     ),
     ram_budget: Optional[str] = typer.Option(
         None,

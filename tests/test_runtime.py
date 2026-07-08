@@ -14,6 +14,7 @@ from runtime import (
     RuntimeUnsupportedError,
     auto_gpu_memory_utilization,
     generate_run_script,
+    recommended_runtime_backend,
     requires_image,
     resolve_model_deps,
     select_serve_backend,
@@ -417,6 +418,27 @@ def linux_cuda_hardware() -> HardwareInfo:
             )
         ],
     )
+
+
+def test_recommended_runtime_backend_prefers_vllm_for_linux_cuda_vlm():
+    assert (
+        recommended_runtime_backend(vlm_model(), None, linux_cuda_hardware()) == "vllm"
+    )
+
+
+def test_recommended_runtime_backend_infers_missing_gpu_capabilities():
+    hardware = HardwareInfo(
+        os="linux",
+        gpus=[
+            GPUInfo(
+                name="NVIDIA Test GPU",
+                vendor="nvidia",
+                vram_bytes=24_000_000_000,
+            )
+        ],
+    )
+
+    assert recommended_runtime_backend(vlm_model(), None, hardware) == "vllm"
 
 
 def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():

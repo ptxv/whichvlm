@@ -240,6 +240,7 @@ def test_main_help_groups_options_by_task():
     assert "Ranking" in result.stdout
     assert "Workload" in result.stdout
     assert "Hardware" in result.stdout
+    assert "--perf-vram" in result.stdout
     assert "Output" in result.stdout
     assert "Data" in result.stdout
     assert "Plan memory, quantization, and GPU fit for a model." in result.stdout
@@ -376,7 +377,7 @@ def test_apply_memory_budgets_reserves_perf_vram():
     apply_memory_budgets(hw, vram_headroom="1GB", perf_vram="10%", ram_budget=None)
 
     assert hw.gpus[0].usable_vram_bytes == 17 * 1024**3
-    assert any("Performance VRAM" in note for note in hw.budget_notes)
+    assert any("Performance reserve" in note for note in hw.budget_notes)
 
 
 def test_apply_memory_budgets_validates_vram_headroom_without_gpus():
@@ -824,7 +825,7 @@ def test_hardware_plan_scores_target_gpu(monkeypatch):
     assert hardware.gpus[0].usable_vram_bytes == (
         total_vram - auto_vram_headroom(total_vram) - int(total_vram * 0.10)
     )
-    assert any("Performance VRAM" in note for note in hardware.budget_notes)
+    assert any("Performance reserve" in note for note in hardware.budget_notes)
     assert results[0].model.id == "test-org/Test-Vision-7B"
     assert results[0].can_run is True
     assert captured["details"] is True
@@ -1430,6 +1431,7 @@ def json_output_case() -> tuple[CompatibilityResult, HardwareInfo]:
         benchmark_status="estimated",
         benchmark_source="line_interp",
         benchmark_confidence=0.34,
+        ranking_evidence="benchmark score",
     )
     hw = HardwareInfo(
         gpus=[],
@@ -1450,7 +1452,9 @@ def test_json_output_defaults_to_compact():
     compact_entry = compact["models"][0]
 
     assert compact_entry["model_id"] == "test-org/Test-7B"
+    assert compact_entry["recommended_runtime_backend"] is None
     assert compact_entry["benchmark_source"] == "line_interp"
+    assert compact_entry["ranking_evidence"] == "benchmark score"
     assert compact_entry["vram_required_range_bytes"] == [
         7_000_000_000,
         10_000_000_000,

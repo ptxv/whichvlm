@@ -14,6 +14,7 @@ from models.types import (
 from models.package_graph import capabilities_to_dict
 from output import console
 from output.upgrade import summarize_upgrade_row
+from runtime import recommended_runtime_backend
 
 
 def backend_capability_dict(capability: BackendCapability) -> dict:
@@ -109,11 +110,19 @@ def result_binding_constraint(result: CompatibilityResult) -> str:
     return "none"
 
 
-def model_dict(rank: int, result: CompatibilityResult, details: bool = False) -> dict:
+def model_dict(
+    rank: int,
+    result: CompatibilityResult,
+    hardware: HardwareInfo,
+    details: bool = False,
+) -> dict:
     model = result.model
     data = {
         "rank": rank,
         "model_id": model.id,
+        "recommended_runtime_backend": recommended_runtime_backend(
+            model, result.gguf_variant, hardware
+        ),
         "parameter_count": model.parameter_count,
         "license": model.license,
         "quant_type": effective_quant_type(model, result.gguf_variant),
@@ -133,6 +142,7 @@ def model_dict(rank: int, result: CompatibilityResult, details: bool = False) ->
         "estimated_tok_per_sec": result.estimated_tok_per_sec,
         "benchmark_status": result.benchmark_status,
         "benchmark_source": result.benchmark_source,
+        "ranking_evidence": result.ranking_evidence,
         "fit_type": result.fit_type,
         "can_run": result.can_run,
         "context_fits": result.context_fits,
@@ -190,7 +200,8 @@ def display_json(
     output = {
         "hardware": hardware_dict(hardware, details),
         "models": [
-            model_dict(i, result, details) for i, result in enumerate(results, 1)
+            model_dict(i, result, hardware, details)
+            for i, result in enumerate(results, 1)
         ],
     }
     if details:
