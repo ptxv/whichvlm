@@ -6,6 +6,7 @@ from engine.types import (
     BenchmarkStatus,
     CompatibilityResult,
     SpeedConfidence,
+    VramConfidence,
 )
 from hardware.types import GPUInfo, HardwareInfo
 from models.types import GGUFVariant, ModelInfo
@@ -59,6 +60,7 @@ def markdown_result(
     *,
     benchmark_status: BenchmarkStatus = "direct",
     speed_confidence: SpeedConfidence = "medium",
+    vram_confidence: VramConfidence = "high",
 ) -> CompatibilityResult:
     model = ModelInfo(
         id=f"org/Test-{index}|Model",
@@ -80,6 +82,7 @@ def markdown_result(
         can_run=True,
         vram_required_bytes=(4 + index) * 1024**3,
         vram_available_bytes=24 * 1024**3,
+        vram_confidence=vram_confidence,
         estimated_tok_per_sec=10.0 * index,
         speed_confidence=speed_confidence,
         quality_score=80.0 - index,
@@ -95,8 +98,13 @@ def markdown_result(
 def test_display_markdown_runtime_table_top_three():
     output = capture_markdown(
         [
-            markdown_result(1, speed_confidence="medium"),
-            markdown_result(2, benchmark_status="estimated", speed_confidence="low"),
+            markdown_result(1, speed_confidence="medium", vram_confidence="medium"),
+            markdown_result(
+                2,
+                benchmark_status="estimated",
+                speed_confidence="low",
+                vram_confidence="low",
+            ),
             markdown_result(3, benchmark_status="none", speed_confidence="high"),
         ],
         hardware_fixture(),
@@ -109,9 +117,10 @@ def test_display_markdown_runtime_table_top_three():
         in output
     )
     assert (
-        "| 1 | org/Test-1\\|Model | 7.0B | Q4_K_M | Full GPU | 5.0 GB | 10.0 tok/s ~ | 2026-01-01 | 79.0 | fit quality | apache-2.0 |"
+        "| 1 | org/Test-1\\|Model | 7.0B | Q4_K_M | Full GPU | 5.0 GB ~ | 10.0 tok/s ~ | 2026-01-01 | 79.0 | fit quality | apache-2.0 |"
         in output
     )
+    assert "6.0 GB ?" in output
     assert "20.0 tok/s ?" in output
     assert "78.0 ~" in output
     assert "77.0 ?" in output

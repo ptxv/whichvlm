@@ -5,10 +5,10 @@ from engine.types import CompatibilityResult
 from hardware.types import HardwareInfo
 from output import console
 from output.formatting import (
-    format_bytes,
     format_downloads,
     format_params,
     format_published_at,
+    format_vram,
 )
 
 
@@ -109,7 +109,7 @@ def display_markdown(
                 format_markdown_params(result),
                 effective_quant_type(result.model, result.gguf_variant),
                 format_markdown_fit(result.fit_type),
-                format_bytes(result.vram_required_bytes),
+                format_vram(result),
                 format_markdown_speed(result),
                 format_published_at(result.model.published_at),
                 format_markdown_score(result),

@@ -96,7 +96,7 @@ Runtime support is intentionally guarded:
 - `ModelComponent`: language tower, vision encoder, projector, processor, tokenizer, merged checkpoint, adapter.
 - `ModelLineage`: base models, merged parents, variant relation, and fused/merged status.
 
-The ranker is VLM-aware but conservative. Vision memory includes language weights, KV cache, activation memory, estimated vision encoder/projector overhead, image-token expansion, and prefill scratch. These estimates are useful for ranking. They are not final benchmark-quality measurements.
+The ranker is VLM-aware but conservative. Vision memory includes language weights, KV cache, activation memory, estimated vision encoder/projector overhead, image-token expansion, and prefill scratch. VRAM estimates expose high, medium, or low confidence with an estimated range so calibrated fits and fallback estimates are distinguishable.
 
 ## Data Sources
 
@@ -110,7 +110,7 @@ The fetcher prioritizes:
 - GGUF, MLX, AWQ, GPTQ, BNB, and FP8 variants
 - text-generation only as backbone or variant discovery
 
-Benchmark evidence is graded as direct, variant, base model, interpolated, self-reported, or absent. Vision scores lead the `vision` and `ocr` profiles. Text benchmarks are fallback evidence.
+Benchmark evidence is graded as direct, variant, base model, interpolated, self-reported, or absent. Vision scores lead the `vision` and `ocr` profiles. Text benchmarks are fallback evidence, and output labels show when ranking evidence is indirect or missing.
 
 ## Development
 
@@ -159,7 +159,7 @@ uv run python benchmarks/real_hardware.py gguf-mmproj \
 
 The model inventory is not complete.
 
-Multimodal benchmark calibration is not final.
+Multimodal ranking and VRAM estimates should be read with their evidence and confidence labels; uncalibrated paths stay marked as estimates.
 
 GGUF VLM and MLX VLM runners are only as reliable as the concrete artifacts and runtime handlers discovered for a model package.
 

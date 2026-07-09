@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from data.framework import FRAMEWORK_OVERHEAD_BYTES
-from engine.quantization import estimate_weight_bytes
+from engine.quantization import estimate_weight_bytes, infer_non_gguf_quant_type
 from engine.workload import Workload
 from models.integrations import (
     AUDIO_COMPONENT_ROLES,
@@ -86,7 +86,7 @@ VRAM_CALIBRATIONS: tuple[VramCalibration, ...] = (
     VramCalibration(
         architecture="qwen2vl",
         backend="transformers",
-        quant_type=None,
+        quant_type="FP16",
         model_format="safetensors",
         context_length=4096,
         image_count=1,
@@ -133,8 +133,10 @@ def backend_name(model: ModelInfo, variant: GGUFVariant | None) -> str:
 
 def quant_type(model: ModelInfo, variant: GGUFVariant | None) -> str | None:
     if variant:
-        return variant.quant_type
-    return model.quantization_type
+        return variant.quant_type.upper()
+    if model.quantization_type:
+        return model.quantization_type.upper()
+    return infer_non_gguf_quant_type(model.id)
 
 
 def has_kv_shape(model: ModelInfo) -> bool:
@@ -229,7 +231,7 @@ def calibration_match(
             continue
         if sample.backend != backend or sample.model_format != fmt:
             continue
-        if sample.quant_type is not None and sample.quant_type != quant:
+        if sample.quant_type != quant:
             continue
         if sample.image_count != image_count or sample.image_size != image_size:
             continue
@@ -379,6 +381,8 @@ def estimate_audio_overhead(model: ModelInfo, workload: Workload | None) -> int:
 
 def vram_notes(
     model: ModelInfo,
+    variant: GGUFVariant | None,
+    context_length: int,
     vision_workload: Workload | None,
     calibration: VramCalibration | None,
 ) -> list[str]:
@@ -396,7 +400,15 @@ def vram_notes(
         if not (model.vision_layer_count and model.vision_hidden_size):
             notes.append("vision activations use image-size fallback")
     if calibration is None:
-        notes.append("no matching peak-memory calibration")
+        note = (
+            "no matching peak-memory calibration "
+            f"({backend_name(model, variant)}, {model_format(model, variant)}, "
+            f"{quant_type(model, variant)}, context={context_length}"
+        )
+        workload = vision_workload.normalized() if vision_workload else None
+        if workload and workload.image_count:
+            note += f", images={workload.image_count}@{workload.image_size}px"
+        notes.append(f"{note})")
     return notes
 
 
@@ -426,7 +438,7 @@ def estimate_vram_details(
     calibration = calibration_match(model, variant, effective_context, workload)
     required = apply_calibration(subtotal + FRAMEWORK_OVERHEAD_BYTES, calibration)
     runtime = required - subtotal
-    notes = vram_notes(model, vision_workload, calibration)
+    notes = vram_notes(model, variant, effective_context, workload, calibration)
     confidence = model_confidence(model, vision_workload, calibration)
     low_factor, high_factor = VRAM_RANGE_FACTORS[confidence]
     return VramEstimate(
