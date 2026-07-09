@@ -7,9 +7,7 @@ from engine.vram import estimate_vram
 from models.types import ModelComponent, ModelInfo
 
 
-def make_model(
-    model_id: str, params: int = 14_000_000_000, **kwargs
-) -> ModelInfo:
+def make_model(model_id: str, params: int = 14_000_000_000, **kwargs) -> ModelInfo:
     return ModelInfo(
         id=model_id,
         family_id=model_id,
