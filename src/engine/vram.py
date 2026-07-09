@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from data.framework import FRAMEWORK_OVERHEAD_BYTES
-from engine.quantization import effective_quant_type, estimate_weight_bytes
+from engine.quantization import estimate_weight_bytes, infer_non_gguf_quant_type
 from engine.workload import Workload
 from models.integrations import (
     AUDIO_COMPONENT_ROLES,
@@ -131,8 +131,12 @@ def backend_name(model: ModelInfo, variant: GGUFVariant | None) -> str:
     return "transformers"
 
 
-def quant_type(model: ModelInfo, variant: GGUFVariant | None) -> str:
-    return effective_quant_type(model, variant)
+def quant_type(model: ModelInfo, variant: GGUFVariant | None) -> str | None:
+    if variant:
+        return variant.quant_type.upper()
+    if model.quantization_type:
+        return model.quantization_type.upper()
+    return infer_non_gguf_quant_type(model.id)
 
 
 def has_kv_shape(model: ModelInfo) -> bool:
