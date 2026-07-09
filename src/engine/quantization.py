@@ -56,6 +56,8 @@ def infer_non_gguf_quant_type(model_id: str) -> str:
 def effective_quant_type(model: ModelInfo, variant: GGUFVariant | None) -> str:
     if variant:
         return variant.quant_type.upper()
+    if model.quantization_type:
+        return model.quantization_type.upper()
     return infer_non_gguf_quant_type(model.id)
 
 
@@ -66,7 +68,7 @@ def bytes_per_weight(quant_type: str) -> float:
 def estimate_weight_bytes(model: ModelInfo, variant: GGUFVariant | None) -> int:
     if variant:
         return variant.file_size_bytes
-    quant_type = infer_non_gguf_quant_type(model.id)
+    quant_type = effective_quant_type(model, None)
     if model.components:
         known_params = 0
         component_bytes = 0.0

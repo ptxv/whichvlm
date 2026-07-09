@@ -7,12 +7,15 @@ from engine.vram import estimate_vram
 from models.types import ModelComponent, ModelInfo
 
 
-def make_model(model_id: str, params: int = 14_000_000_000) -> ModelInfo:
+def make_model(
+    model_id: str, params: int = 14_000_000_000, **kwargs
+) -> ModelInfo:
     return ModelInfo(
         id=model_id,
         family_id=model_id,
         name=model_id.split("/")[-1],
         parameter_count=params,
+        **kwargs,
     )
 
 
@@ -24,6 +27,17 @@ def test_infer_non_gguf_awq():
 
 def test_estimate_weight_bytes_for_awq():
     model = make_model("Qwen/Qwen2.5-14B-Instruct-AWQ", params=10_000_000_000)
+    assert estimate_weight_bytes(model, None) == 5_000_000_000
+
+
+def test_model_quantization_type_overrides_name_fallback():
+    model = make_model(
+        "Qwen/Qwen2.5-14B-Instruct",
+        params=10_000_000_000,
+        quantization_type="AWQ",
+    )
+
+    assert effective_quant_type(model, None) == "AWQ"
     assert estimate_weight_bytes(model, None) == 5_000_000_000
 
 
