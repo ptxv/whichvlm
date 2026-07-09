@@ -227,7 +227,7 @@ def discovery_pipeline_tags() -> tuple[str, ...]:
 
 def specialization_tags_for_capabilities(capabilities: ModelCapabilities) -> set[str]:
     tags: set[str] = set()
-    if capabilities.image or capabilities.video:
+    if capabilities.image:
         tags.add("vision")
     if capabilities.ocr:
         tags.add("ocr")

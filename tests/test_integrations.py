@@ -109,6 +109,7 @@ def test_parse_model_uses_registered_video_profile_without_image_runtime():
     assert model.capabilities.image is False
     assert "video-language" in integration_ids_for_capabilities(model.capabilities)
     assert "video" in detect_specializations(model)
+    assert "vision" not in detect_specializations(model)
     assert "video_encoder" in {component.role for component in model.components}
     assert runtime_backends_for_capabilities(model.capabilities) == []
 
