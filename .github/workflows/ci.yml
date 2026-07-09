@@ -29,4 +29,6 @@ jobs:
         run: uv run python -m compileall -q src tests
 
       - name: Run tests
+        env:
+          TERM: dumb
         run: uv run pytest -q
