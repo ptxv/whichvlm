@@ -326,10 +326,12 @@ def generate_run_script(
 
 
 def auto_gpu_memory_utilization(hardware: HardwareInfo) -> float:
-    return min(
+    ratios = [
         (gpu.usable_vram_bytes or gpu.vram_bytes) / gpu.vram_bytes
         for gpu in hardware.gpus
-    )
+        if gpu.vram_bytes > 0
+    ]
+    return min(ratios) if ratios else 0.90
 
 
 def format_gpu_memory_utilization(value: float | None) -> str:

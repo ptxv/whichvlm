@@ -406,7 +406,17 @@ def test_apply_memory_budgets_accepts_valid_noop_vram_headroom_without_gpus():
 
 
 def test_gpu_memory_utilization_validation():
+    hw = hw_with_gpu(24)
+    apply_memory_budgets(hw, vram_headroom="auto", perf_vram="10%", ram_budget=None)
+
     assert resolve_gpu_memory_utilization("0.82", None) == 0.82
+    assert (
+        resolve_runtime_gpu_memory_utilization(None, hw_with_gpu(24), "vllm", "none")
+        is None
+    )
+    assert resolve_runtime_gpu_memory_utilization(
+        None, hw, "vllm", "10%"
+    ) == pytest.approx(0.85)
     with pytest.raises(Exit):
         resolve_gpu_memory_utilization("nope", hw_with_gpu(24))
     with pytest.raises(Exit):
@@ -1400,7 +1410,14 @@ def test_snippet_passes_context_length_and_max_tokens(monkeypatch):
     assert captured["max_tokens"] == 128
 
 
-def test_snippet_vllm_perf_budget_updates_backend_flag(monkeypatch):
+@pytest.mark.parametrize(
+    ("backend", "expected"),
+    [
+        ("vllm", "gpu_memory_utilization=0.85"),
+        ("sglang", "mem_fraction_static=0.85"),
+    ],
+)
+def test_snippet_perf_budget_updates_backend_flag(monkeypatch, backend, expected):
     model = make_vlm_model()
 
     monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
@@ -1412,7 +1429,7 @@ def test_snippet_vllm_perf_budget_updates_backend_flag(monkeypatch):
             "snippet",
             "Qwen/Qwen2.5-VL-7B-Instruct",
             "--backend",
-            "vllm",
+            backend,
             "--image",
             "/tmp/image.png",
             "--perf-vram",
@@ -1421,31 +1438,7 @@ def test_snippet_vllm_perf_budget_updates_backend_flag(monkeypatch):
     )
 
     assert result.exit_code == 0
-    assert "gpu_memory_utilization=0.85" in result.stdout
-
-
-def test_snippet_sglang_perf_budget_updates_backend_flag(monkeypatch):
-    model = make_vlm_model()
-
-    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
-    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(24))
-
-    result = CliRunner().invoke(
-        app,
-        [
-            "snippet",
-            "Qwen/Qwen2.5-VL-7B-Instruct",
-            "--backend",
-            "sglang",
-            "--image",
-            "/tmp/image.png",
-            "--perf-vram",
-            "10%",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert "mem_fraction_static=0.85" in result.stdout
+    assert expected in result.stdout
 
 
 def test_snippet_transformers_perf_budget_updates_memory_fraction(monkeypatch):

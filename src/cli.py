@@ -262,10 +262,21 @@ def apply_runtime_memory_budget(
     )
 
 
+def detect_runtime_hardware(cpu_only: bool, perf_vram: str) -> HardwareInfo:
+    from hardware.detector import detect_hardware
+
+    hardware = detect_hardware()
+    if cpu_only:
+        hardware.gpus = []
+    apply_runtime_memory_budget(hardware, perf_vram)
+    return hardware
+
+
 def resolve_runtime_gpu_memory_utilization(
     value: str | None,
     hardware: HardwareInfo | None,
     backend_name: str,
+    perf_vram: str = "none",
 ) -> float | None:
     if value is not None and backend_name not in GPU_MEMORY_BACKENDS:
         console.print(
@@ -274,6 +285,8 @@ def resolve_runtime_gpu_memory_utilization(
         raise typer.Exit(code=1)
     if value is not None:
         return resolve_gpu_memory_utilization(value, hardware)
+    if not perf_vram_reserve_enabled(perf_vram):
+        return None
     if (
         backend_name in RUNTIME_MEMORY_BUDGET_BACKENDS
         and hardware is not None
@@ -1389,14 +1402,10 @@ def run(
         model = resolve_model_match(models, model_name)
     else:
         from engine.ranker import rank_models
-        from hardware.detector import detect_hardware
         from models.benchmark import load_benchmark_cache
         from models.grouper import group_models
 
-        hardware = detect_hardware()
-        if cpu_only:
-            hardware.gpus = []
-        apply_runtime_memory_budget(hardware, perf_vram)
+        hardware = detect_runtime_hardware(cpu_only, perf_vram)
         bench_scores = load_benchmark_cache() or {}
         families = group_models(models)
         all_models = []
@@ -1482,28 +1491,18 @@ def run(
             (backend_name and backend_name != "auto")
             or is_auto_gpu_memory_utilization(gpu_memory_utilization)
         ):
-            from hardware.detector import detect_hardware
-
-            hardware = detect_hardware()
-            if cpu_only:
-                hardware.gpus = []
-            apply_runtime_memory_budget(hardware, perf_vram)
+            hardware = detect_runtime_hardware(cpu_only, perf_vram)
         backend = select_backend(model, variant, hardware, backend_name)
         if (
             hardware is None
             and backend.name in RUNTIME_MEMORY_BUDGET_BACKENDS
             and perf_vram_reserve_enabled(perf_vram)
         ):
-            from hardware.detector import detect_hardware
-
-            hardware = detect_hardware()
-            if cpu_only:
-                hardware.gpus = []
-            apply_runtime_memory_budget(hardware, perf_vram)
+            hardware = detect_runtime_hardware(cpu_only, perf_vram)
         deps = backend.dependencies(model, variant)
         _, script_type = resolve_model_deps(model, variant, backend.name, hardware)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
-            gpu_memory_utilization, hardware, backend.name
+            gpu_memory_utilization, hardware, backend.name, perf_vram
         )
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
@@ -1578,13 +1577,8 @@ def serve(
         models = load_model_catalog(refresh)
         progress.remove_task(task)
 
-    from hardware.detector import detect_hardware
-
     model = resolve_model_match(models, model_name)
-    hardware = detect_hardware()
-    if cpu_only:
-        hardware.gpus = []
-    apply_runtime_memory_budget(hardware, perf_vram)
+    hardware = detect_runtime_hardware(cpu_only, perf_vram)
 
     variant = (
         select_gguf_variant(model, quant) if should_select_gguf(backend_name) else None
@@ -1593,7 +1587,7 @@ def serve(
         backend = select_serve_backend(model, variant, hardware, backend_name)
         deps = backend.serve_dependencies(model, variant)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
-            gpu_memory_utilization, hardware, backend.name
+            gpu_memory_utilization, hardware, backend.name, perf_vram
         )
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
@@ -1688,23 +1682,17 @@ def snippet(
         if (backend_name and backend_name != "auto") or is_auto_gpu_memory_utilization(
             gpu_memory_utilization
         ):
-            from hardware.detector import detect_hardware
-
-            hardware = detect_hardware()
-            apply_runtime_memory_budget(hardware, perf_vram)
+            hardware = detect_runtime_hardware(False, perf_vram)
         backend = select_backend(model, variant, hardware, backend_name)
         if (
             hardware is None
             and backend.name in RUNTIME_MEMORY_BUDGET_BACKENDS
             and perf_vram_reserve_enabled(perf_vram)
         ):
-            from hardware.detector import detect_hardware
-
-            hardware = detect_hardware()
-            apply_runtime_memory_budget(hardware, perf_vram)
+            hardware = detect_runtime_hardware(False, perf_vram)
         deps = backend.dependencies(model, variant)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
-            gpu_memory_utilization, hardware, backend.name
+            gpu_memory_utilization, hardware, backend.name, perf_vram
         )
         code = generate_run_script(
             model,
