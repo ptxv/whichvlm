@@ -8,10 +8,10 @@ from models.types import (
 )
 
 
-def make_model(params: int, **kwargs) -> ModelInfo:
+def make_model(params: int, model_id: str = "test/model", **kwargs) -> ModelInfo:
     return ModelInfo(
-        id="test/model",
-        family_id="test/model",
+        id=model_id,
+        family_id=model_id,
         name="model",
         parameter_count=params,
         **kwargs,
@@ -118,7 +118,10 @@ def test_full_metadata_without_calibration_returns_medium_confidence():
     estimate = estimate_vram_details(model, None, context_length=4096)
 
     assert estimate.confidence == "medium"
-    assert estimate.notes == ["no matching peak-memory calibration"]
+    assert estimate.notes == [
+        "no matching peak-memory calibration "
+        "(transformers, safetensors, FP16, context=4096)"
+    ]
 
 
 def test_missing_architecture_metadata_returns_low_confidence_range():
@@ -203,6 +206,45 @@ def test_vision_architecture_metadata_changes_image_token_cost():
 
     assert small_patch.confidence == "high"
     assert small_patch.components.vision > large_patch.components.vision
+
+
+def test_quantized_transformers_variant_does_not_use_fp16_calibration():
+    model = make_model(
+        7_000_000_000,
+        model_id="test/model-awq",
+        hf_pipeline_tag="image-text-to-text",
+        architecture="qwen2vl",
+        model_format="safetensors",
+        layer_count=28,
+        hidden_size=3584,
+        attention_heads=28,
+        kv_heads=4,
+        dtype="bfloat16",
+        vision_layer_count=32,
+        vision_hidden_size=1280,
+        projector_hidden_size=3584,
+        components=[
+            ModelComponent(
+                role="vision_encoder",
+                repo_id="test/model",
+                parameter_count=300_000_000,
+            ),
+            ModelComponent(
+                role="projector",
+                repo_id="test/model",
+                parameter_count=50_000_000,
+            ),
+        ],
+    )
+    workload = VisionWorkload(image_count=1, image_size=448)
+
+    estimate = estimate_vram_details(model, None, vision_workload=workload)
+
+    assert estimate.confidence == "medium"
+    assert estimate.notes == [
+        "no matching peak-memory calibration "
+        "(transformers, safetensors, AWQ, context=4096, images=1@448px)"
+    ]
 
 
 def test_spatial_merge_reduces_vision_tokens():

@@ -20,6 +20,7 @@ from output.formatting import (
     format_params,
     format_published_at,
     format_speed,
+    format_vram,
     parse_published_at,
     published_style,
 )
@@ -219,7 +220,7 @@ def display_ranking(
 
     for i, r in enumerate(results, 1):
         quant = effective_quant_type(r.model, r.gguf_variant)
-        vram_str = format_bytes(r.vram_required_bytes)
+        vram_str = format_vram(r)
         speed_str = format_speed(r)
 
         score_val = f"{r.quality_score:.1f}"
@@ -292,6 +293,16 @@ def display_ranking(
         console.console.print(f"  [dim]Score:[/dim]  {',  '.join(parts)}")
 
     if show_status:
+        has_vram_medium = any(r.vram_confidence == "medium" for r in results)
+        has_vram_low = any(r.vram_confidence == "low" for r in results)
+        if has_vram_medium or has_vram_low:
+            parts = []
+            if has_vram_medium:
+                parts.append("[yellow]~[/yellow] = estimated VRAM range")
+            if has_vram_low:
+                parts.append("[red]?[/red] = low-confidence VRAM fallback")
+            console.console.print(f"  [dim]VRAM:[/dim]   {',  '.join(parts)}")
+
         has_speed_medium = any(r.speed_confidence == "medium" for r in results)
         has_speed_low = any(r.speed_confidence == "low" for r in results)
         if has_speed_medium or has_speed_low:
