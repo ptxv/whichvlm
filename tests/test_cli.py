@@ -17,6 +17,7 @@ import output.console as console_mod
 from hardware.budget import auto_vram_headroom
 from cli import (
     apply_memory_budgets,
+    apply_runtime_memory_budget,
     apply_gpu_overrides,
     auto_min_params_for_profile,
     fill_missing_published_at,
@@ -378,6 +379,14 @@ def test_apply_memory_budgets_reserves_perf_vram():
 
     assert hw.gpus[0].usable_vram_bytes == 17 * 1024**3
     assert any("Performance reserve" in note for note in hw.budget_notes)
+
+
+def test_runtime_memory_budget_default_is_noop():
+    hw = hw_with_gpu(24)
+
+    apply_runtime_memory_budget(hw, None, "none")
+
+    assert hw.gpus[0].usable_vram_bytes is None
 
 
 def test_apply_memory_budgets_validates_vram_headroom_without_gpus():

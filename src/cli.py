@@ -1415,7 +1415,7 @@ def run(
         from models.benchmark import load_benchmark_cache
         from models.grouper import group_models
 
-        hardware = detect_runtime_hardware(cpu_only, perf_vram)
+        hardware = detect_runtime_hardware(cpu_only, gpu_memory_utilization, perf_vram)
         bench_scores = load_benchmark_cache() or {}
         families = group_models(models)
         all_models = []
@@ -1501,14 +1501,18 @@ def run(
             (backend_name and backend_name != "auto")
             or is_auto_gpu_memory_utilization(gpu_memory_utilization)
         ):
-            hardware = detect_runtime_hardware(cpu_only, perf_vram)
+            hardware = detect_runtime_hardware(
+                cpu_only, gpu_memory_utilization, perf_vram
+            )
         backend = select_backend(model, variant, hardware, backend_name)
         if (
             hardware is None
             and backend.name in RUNTIME_MEMORY_BUDGET_BACKENDS
             and perf_vram_reserve_enabled(perf_vram)
         ):
-            hardware = detect_runtime_hardware(cpu_only, perf_vram)
+            hardware = detect_runtime_hardware(
+                cpu_only, gpu_memory_utilization, perf_vram
+            )
         deps = backend.dependencies(model, variant)
         _, script_type = resolve_model_deps(model, variant, backend.name, hardware)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
@@ -1588,7 +1592,7 @@ def serve(
         progress.remove_task(task)
 
     model = resolve_model_match(models, model_name)
-    hardware = detect_runtime_hardware(cpu_only, perf_vram)
+    hardware = detect_runtime_hardware(cpu_only, gpu_memory_utilization, perf_vram)
 
     variant = (
         select_gguf_variant(model, quant) if should_select_gguf(backend_name) else None
@@ -1692,14 +1696,14 @@ def snippet(
         if (backend_name and backend_name != "auto") or is_auto_gpu_memory_utilization(
             gpu_memory_utilization
         ):
-            hardware = detect_runtime_hardware(False, perf_vram)
+            hardware = detect_runtime_hardware(False, gpu_memory_utilization, perf_vram)
         backend = select_backend(model, variant, hardware, backend_name)
         if (
             hardware is None
             and backend.name in RUNTIME_MEMORY_BUDGET_BACKENDS
             and perf_vram_reserve_enabled(perf_vram)
         ):
-            hardware = detect_runtime_hardware(False, perf_vram)
+            hardware = detect_runtime_hardware(False, gpu_memory_utilization, perf_vram)
         deps = backend.dependencies(model, variant)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
             gpu_memory_utilization, hardware, backend.name, perf_vram
