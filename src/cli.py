@@ -255,20 +255,30 @@ def perf_vram_reserve_enabled(value: str) -> bool:
 
 def apply_runtime_memory_budget(
     hardware: HardwareInfo,
+    gpu_memory_utilization: str | None,
     perf_vram: str,
 ) -> None:
+    if not (
+        is_auto_gpu_memory_utilization(gpu_memory_utilization)
+        or perf_vram_reserve_enabled(perf_vram)
+    ):
+        return
     apply_memory_budgets(
         hardware, vram_headroom="auto", perf_vram=perf_vram, ram_budget=None
     )
 
 
-def detect_runtime_hardware(cpu_only: bool, perf_vram: str) -> HardwareInfo:
+def detect_runtime_hardware(
+    cpu_only: bool,
+    gpu_memory_utilization: str | None,
+    perf_vram: str,
+) -> HardwareInfo:
     from hardware.detector import detect_hardware
 
     hardware = detect_hardware()
     if cpu_only:
         hardware.gpus = []
-    apply_runtime_memory_budget(hardware, perf_vram)
+    apply_runtime_memory_budget(hardware, gpu_memory_utilization, perf_vram)
     return hardware
 
 
