@@ -208,7 +208,8 @@ def quant_type(model: ModelInfo, variant: GGUFVariant | None) -> str | None:
 
 
 def calibration_architecture_key(architecture: str) -> str:
-    return architecture.lower().replace("_", "").replace("-", "").replace(".", "")
+    key = architecture.lower().replace("_", "").replace("-", "").replace(".", "")
+    return key.replace("qwen25vl", "qwen2vl")
 
 
 def has_kv_shape(model: ModelInfo) -> bool:

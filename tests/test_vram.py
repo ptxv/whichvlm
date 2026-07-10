@@ -21,7 +21,7 @@ def make_model(params: int, model_id: str = "test/model", **kwargs) -> ModelInfo
 def vlm_calibration_model(
     *,
     params: int = 7_000_000_000,
-    architecture: str = "qwen2vl",
+    architecture: str = "qwen2_5_vl",
     model_id: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     quantization_type: str | None = None,
 ) -> ModelInfo:
