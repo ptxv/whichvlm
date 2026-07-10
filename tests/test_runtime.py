@@ -70,6 +70,19 @@ def test_vlm_runtime_requires_image():
         generate_run_script(model, None, 4096, False)
 
 
+def test_generic_vlm_does_not_require_video():
+    model = ModelInfo(
+        id="org/Test-VL-7B",
+        family_id="test-vl",
+        name="Test-VL-7B",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+    )
+
+    assert requires_image(model)
+    assert not requires_video(model)
+
+
 def test_runtime_uses_cached_vision_capability():
     model = ModelInfo(
         id="Qwen/Qwen2-VL-7B",
@@ -165,11 +178,12 @@ def test_qwen25_vl_video_runtime_uses_transformers_video_path():
     )
     assert "transformers" in deps
     assert "torchvision" in deps
+    assert "qwen-vl-utils" in deps
     assert script_type == "transformers_video"
     assert "Qwen2_5_VLForConditionalGeneration" in script
     assert "video_path = '/tmp/video.mp4'" in script
-    assert '{"type": "video", "path": video_path}' in script
-    assert "fps=1" in script
+    assert '{"type": "video", "video": video_uri, "fps": 1.0}' in script
+    assert "process_vision_info" in script
     assert "max_new_tokens=96" in script
     assert "[metrics] ttft=" in script
     compile(script, "<whichvlm-video>", "exec")
@@ -207,6 +221,7 @@ def test_qwen2_audio_runtime_uses_transformers_audio_path():
     assert "Qwen2AudioForConditionalGeneration" in script
     assert "audio_path = '/tmp/audio.wav'" in script
     assert '{"type": "audio", "audio_url": audio_path}' in script
+    assert "audios=[audio]" in script
     assert "librosa.load" in script
     assert "max_new_tokens=96" in script
     assert "[metrics] ttft=" in script

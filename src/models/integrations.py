@@ -355,5 +355,9 @@ def pipeline_tag_has_image_input(pipeline_tag: object) -> bool:
     return pipeline_tag in set(pipeline_tags_for_capabilities(("image",)))
 
 
+def pipeline_tag_has_video_input(pipeline_tag: object) -> bool:
+    return pipeline_tag in VIDEO_PIPELINE_TAGS
+
+
 def pipeline_tag_has_audio_input(pipeline_tag: object) -> bool:
     return pipeline_tag in AUDIO_PIPELINE_TAGS

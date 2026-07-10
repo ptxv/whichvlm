@@ -15,6 +15,7 @@ from models.integrations import (
     capabilities_for_data,
     pipeline_tag_has_audio_input,
     pipeline_tag_has_image_input,
+    pipeline_tag_has_video_input,
     pipeline_tag_has_visual_input,
     runtime_backends_for_data,
 )
@@ -292,7 +293,7 @@ def has_video_input(model: ModelInfo) -> bool:
         model.architecture,
     ).video:
         return True
-    if pipeline_tag_has_visual_input(model.hf_pipeline_tag):
+    if pipeline_tag_has_video_input(model.hf_pipeline_tag):
         return True
     return any(component.role == "video_encoder" for component in model.components)
 
@@ -832,7 +833,7 @@ class TransformersBackend(Backend):
                 *transformers_quant_deps(model),
             ]
         if is_vlm_model(model):
-            return [
+            deps = [
                 "transformers",
                 "torch",
                 "torchvision",
@@ -841,12 +842,16 @@ class TransformersBackend(Backend):
                 "psutil",
                 *transformers_quant_deps(model),
             ]
+            if is_transformers_video_model(model):
+                deps.append("qwen-vl-utils")
+            return deps
         if is_transformers_video_model(model):
             return [
                 "transformers",
                 "torch",
                 "torchvision",
                 "accelerate",
+                "qwen-vl-utils",
                 "psutil",
                 *transformers_quant_deps(model),
             ]
@@ -1602,13 +1607,16 @@ def generate_transformers_video_script(
 import shutil
 import tempfile
 import time
+from pathlib import Path
 
 import psutil
 import torch
+from qwen_vl_utils import process_vision_info
 from transformers import {imports}
 
 model_id = "{model.id}"
 video_path = {video_path!r}
+video_uri = Path(video_path).expanduser().resolve().as_uri()
 device_map = {device_map}
 {runtime_setup}
 try:
@@ -1636,18 +1644,27 @@ try:
             {{
                 "role": "user",
                 "content": [
-                    {{"type": "video", "path": video_path}},
+                    {{"type": "video", "video": video_uri, "fps": 1.0}},
                     {{"type": "text", "text": text}},
                 ],
             }}
         ]
-        inputs = processor.apply_chat_template(
+        prompt = processor.apply_chat_template(
             messages,
-            fps=1,
             add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
+            tokenize=False,
+        )
+        image_inputs, video_inputs, video_kwargs = process_vision_info(
+            messages,
+            return_video_kwargs=True,
+        )
+        inputs = processor(
+            text=[prompt],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
             return_tensors="pt",
+            **video_kwargs,
         ).to(model.device)
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
@@ -1658,7 +1675,7 @@ try:
         output_text = processor.batch_decode(
             generated_ids,
             skip_special_tokens=True,
-            clean_up_tokenization_spaces=True,
+            clean_up_tokenization_spaces=False,
         )[0]
         print(output_text)
         print_decode_metrics(started_at, None, output_text)
@@ -1736,7 +1753,7 @@ try:
         )
         inputs = processor(
             text=prompt,
-            audio=[audio],
+            audios=[audio],
             return_tensors="pt",
             padding=True,
         ).to(model.device)

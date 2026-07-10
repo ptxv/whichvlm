@@ -1291,6 +1291,7 @@ def test_run_vlm_requires_image(monkeypatch):
 
     assert result.exit_code == 1
     assert "VLM models require --image PATH" in result.stdout
+    assert "--video PATH" not in result.stdout
 
 
 def test_run_qwen25_video_passes_video_path(monkeypatch):

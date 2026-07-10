@@ -178,10 +178,12 @@ def test_qwen25_vl_video_profile_has_transformers_runtime_path():
 
     assert recommended_runtime_backend(model, None, linux_cuda_hardware()) == "vllm"
     assert "torchvision" in deps
+    assert "qwen-vl-utils" in deps
     assert script_type == "transformers_vlm"
     assert "Qwen2_5_VLForConditionalGeneration" in script
     assert "video_path = '/tmp/video.mp4'" in script
-    assert '{"type": "video", "path": video_path}' in script
+    assert '{"type": "video", "video": video_uri, "fps": 1.0}' in script
+    assert "process_vision_info" in script
 
 
 def test_qwen2_audio_profile_has_transformers_runtime_path():
@@ -232,6 +234,7 @@ def test_qwen2_audio_profile_has_transformers_runtime_path():
     assert script_type == "transformers_audio"
     assert "Qwen2AudioForConditionalGeneration" in script
     assert "audio_path = '/tmp/audio.wav'" in script
+    assert "audios=[audio]" in script
 
 
 def test_parse_model_uses_registered_chart_profile_with_image_runtime():
