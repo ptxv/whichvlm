@@ -15,7 +15,9 @@ from runtime import (
     auto_gpu_memory_utilization,
     generate_run_script,
     recommended_runtime_backend,
+    requires_audio,
     requires_image,
+    requires_video,
     resolve_model_deps,
     select_serve_backend,
     serve_request,
@@ -30,6 +32,32 @@ def vlm_model(**kwargs) -> ModelInfo:
         parameter_count=kwargs.pop("parameter_count", 7_000_000_000),
         architecture=kwargs.pop("architecture", "qwen2"),
         hf_pipeline_tag=kwargs.pop("hf_pipeline_tag", "image-text-to-text"),
+        **kwargs,
+    )
+
+
+def qwen25_video_model(**kwargs) -> ModelInfo:
+    return ModelInfo(
+        id=kwargs.pop("id", "Qwen/Qwen2.5-VL-7B-Instruct"),
+        family_id=kwargs.pop("family_id", "qwen-vl"),
+        name=kwargs.pop("name", "Qwen2.5-VL-7B-Instruct"),
+        parameter_count=kwargs.pop("parameter_count", 7_000_000_000),
+        architecture=kwargs.pop("architecture", "qwen2_5_vl"),
+        hf_pipeline_tag=kwargs.pop("hf_pipeline_tag", "video-text-to-text"),
+        capabilities=kwargs.pop("capabilities", ModelCapabilities(video=True)),
+        **kwargs,
+    )
+
+
+def qwen2_audio_model(**kwargs) -> ModelInfo:
+    return ModelInfo(
+        id=kwargs.pop("id", "Qwen/Qwen2-Audio-7B-Instruct"),
+        family_id=kwargs.pop("family_id", "qwen2-audio"),
+        name=kwargs.pop("name", "Qwen2-Audio-7B-Instruct"),
+        parameter_count=kwargs.pop("parameter_count", 7_000_000_000),
+        architecture=kwargs.pop("architecture", "qwen2audio"),
+        hf_pipeline_tag=kwargs.pop("hf_pipeline_tag", "audio-text-to-text"),
+        capabilities=kwargs.pop("capabilities", ModelCapabilities(audio=True)),
         **kwargs,
     )
 
@@ -114,6 +142,82 @@ def test_video_only_model_is_not_treated_as_image_vlm():
     assert recommended_runtime_backend(model, None, linux_cuda_hardware()) is None
     with pytest.raises(RuntimeUnsupportedError, match="No supported run backend"):
         generate_run_script(model, None, 4096, False, image_path="/tmp/image.png")
+
+
+def test_qwen25_vl_video_runtime_uses_transformers_video_path():
+    model = qwen25_video_model()
+
+    deps, script_type = resolve_model_deps(model, None)
+    script = generate_run_script(
+        model,
+        None,
+        4096,
+        False,
+        video_path="/tmp/video.mp4",
+        max_tokens=96,
+    )
+
+    assert requires_video(model)
+    assert requires_image(model)
+    assert (
+        recommended_runtime_backend(model, None, linux_cuda_hardware())
+        == "transformers"
+    )
+    assert "transformers" in deps
+    assert "torchvision" in deps
+    assert script_type == "transformers_video"
+    assert "Qwen2_5_VLForConditionalGeneration" in script
+    assert "video_path = '/tmp/video.mp4'" in script
+    assert '{"type": "video", "path": video_path}' in script
+    assert "fps=1" in script
+    assert "max_new_tokens=96" in script
+    assert "[metrics] ttft=" in script
+    compile(script, "<whichvlm-video>", "exec")
+
+
+def test_qwen25_vl_video_runtime_requires_video_path():
+    model = qwen25_video_model()
+
+    with pytest.raises(RuntimeUnsupportedError, match="--video"):
+        generate_run_script(model, None, 4096, False)
+
+
+def test_qwen2_audio_runtime_uses_transformers_audio_path():
+    model = qwen2_audio_model()
+
+    deps, script_type = resolve_model_deps(model, None)
+    script = generate_run_script(
+        model,
+        None,
+        4096,
+        False,
+        audio_path="/tmp/audio.wav",
+        max_tokens=96,
+    )
+
+    assert requires_audio(model)
+    assert not requires_image(model)
+    assert (
+        recommended_runtime_backend(model, None, linux_cuda_hardware())
+        == "transformers"
+    )
+    assert "transformers" in deps
+    assert "librosa" in deps
+    assert script_type == "transformers_audio"
+    assert "Qwen2AudioForConditionalGeneration" in script
+    assert "audio_path = '/tmp/audio.wav'" in script
+    assert '{"type": "audio", "audio_url": audio_path}' in script
+    assert "librosa.load" in script
+    assert "max_new_tokens=96" in script
+    assert "[metrics] ttft=" in script
+    compile(script, "<whichvlm-audio>", "exec")
+
+
+def test_qwen2_audio_runtime_requires_audio_path():
+    model = qwen2_audio_model()
+
+    with pytest.raises(RuntimeUnsupportedError, match="--audio"):
+        generate_run_script(model, None, 4096, False)
 
 
 def test_transformers_vlm_script_uses_processor_and_image_path():
@@ -287,6 +391,20 @@ def test_generated_scripts_compile():
             image_path="/tmp/image.png",
             backend_name="sglang",
             hardware=linux_cuda_hardware(),
+        ),
+        generate_run_script(
+            qwen25_video_model(),
+            None,
+            4096,
+            False,
+            video_path="/tmp/video.mp4",
+        ),
+        generate_run_script(
+            qwen2_audio_model(),
+            None,
+            4096,
+            False,
+            audio_path="/tmp/audio.wav",
         ),
     ]
 
