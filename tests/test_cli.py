@@ -255,15 +255,18 @@ def test_list_command_runs_ranking_with_options(monkeypatch):
         captured["task_profile"] = kwargs.get("task_profile")
         return []
 
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli_mod, "load_benchmark_index", lambda refresh: {})
     monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(8))
-    monkeypatch.setattr("models.cache.load_cache", lambda: [])
-    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
     monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
-    monkeypatch.setattr("output.display.display_hardware", lambda hardware: None)
-    monkeypatch.setattr("output.display.display_ranking", lambda results, **kwargs: None)
+    monkeypatch.setattr(
+        "output.display.display_json",
+        lambda results, hardware, details=False: None,
+    )
 
     result = CliRunner().invoke(
-        app, ["list", "--profile", "vision", "--top", "3", "--min-params", "1"]
+        app,
+        ["list", "--profile", "vision", "--top", "3", "--min-params", "1", "--json"],
     )
 
     assert result.exit_code == 0
