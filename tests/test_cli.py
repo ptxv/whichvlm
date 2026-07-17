@@ -247,6 +247,30 @@ def test_main_help_groups_options_by_task():
     assert "Plan memory, quantization, and GPU fit for a model." in result.stdout
 
 
+def test_list_command_runs_ranking_with_options(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_rank_models(models, hardware, **kwargs):
+        captured["top_n"] = kwargs.get("top_n")
+        captured["task_profile"] = kwargs.get("task_profile")
+        return []
+
+    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(8))
+    monkeypatch.setattr("models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("output.display.display_hardware", lambda hardware: None)
+    monkeypatch.setattr("output.display.display_ranking", lambda results, **kwargs: None)
+
+    result = CliRunner().invoke(
+        app, ["list", "--profile", "vision", "--top", "3", "--min-params", "1"]
+    )
+
+    assert result.exit_code == 0
+    assert captured["top_n"] == 3
+    assert captured["task_profile"] == "vision"
+
+
 def test_hardware_plan_help_lists_all_profiles():
     result = CliRunner().invoke(app, ["hardware-plan", "--help"])
 

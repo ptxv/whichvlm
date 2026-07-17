@@ -414,6 +414,7 @@ def fill_missing_published_at(
     return updated
 
 
+@app.command("list", help="List and rank models for the current hardware.")
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,

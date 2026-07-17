@@ -29,6 +29,8 @@ Rank VLMs for the current machine:
 
 ```bash
 uv run whichvlm
+uv run whichvlm list
+uv run whichvlm list --refresh --profile vision --top 20
 ```
 
 Simulate Apple Silicon or a discrete GPU:
