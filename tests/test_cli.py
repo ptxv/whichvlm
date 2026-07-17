@@ -1,8 +1,10 @@
 import inspect
 import importlib
 import json
+import os
 import subprocess
 import sys
+import time
 from io import StringIO
 
 import httpx
@@ -247,31 +249,63 @@ def test_main_help_groups_options_by_task():
     assert "Plan memory, quantization, and GPU fit for a model." in result.stdout
 
 
-def test_list_command_runs_ranking_with_options(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_rank_models(models, hardware, **kwargs):
-        captured["top_n"] = kwargs.get("top_n")
-        captured["task_profile"] = kwargs.get("task_profile")
-        return []
-
-    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda *args, **kwargs: [])
-    monkeypatch.setattr(cli_mod, "load_benchmark_index", lambda refresh: {})
-    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(8))
-    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
-    monkeypatch.setattr(
-        "output.display.display_json",
-        lambda results, hardware, details=False: None,
+def test_list_command_runs_ranking_from_cache(tmp_path):
+    cache_path = tmp_path / "whichvlm"
+    cache_path.mkdir()
+    cached_at = time.time()
+    (cache_path / "models.json").write_text(
+        json.dumps(
+            {
+                "cached_at": cached_at,
+                "models": [
+                    {
+                        "id": "test-org/Test-Vision-7B",
+                        "family_id": "test-vision-7b",
+                        "name": "Test Vision 7B",
+                        "parameter_count": 7_000_000_000,
+                        "architecture": "qwen2_vl",
+                        "hf_pipeline_tag": "image-text-to-text",
+                        "downloads": 10,
+                        "published_at": "2026-01-01T00:00:00.000Z",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cache_path / "benchmark.json").write_text(
+        json.dumps({"cached_at": cached_at, "scores": {}}),
+        encoding="utf-8",
     )
 
-    result = CliRunner().invoke(
-        app,
-        ["list", "--profile", "vision", "--top", "3", "--min-params", "1", "--json"],
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "whichvlm.cli",
+            "list",
+            "--gpu",
+            "RTX 4090",
+            "--profile",
+            "vision",
+            "--top",
+            "1",
+            "--min-params",
+            "1",
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "XDG_CACHE_HOME": str(tmp_path)},
     )
 
-    assert result.exit_code == 0
-    assert captured["top_n"] == 3
-    assert captured["task_profile"] == "vision"
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["hardware"]["gpus"][0]["name"] == "RTX 4090 (simulated)"
+    assert [model["model_id"] for model in data["models"]] == [
+        "test-org/Test-Vision-7B"
+    ]
 
 
 def test_hardware_plan_help_lists_all_profiles():
