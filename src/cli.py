@@ -1293,7 +1293,7 @@ def lookup_gguf_variant(model: ModelInfo, quant_type: str) -> GGUFVariant | None
     return None
 
 
-def has_runnable_gguf_vlm(model: ModelInfo) -> bool:
+def has_required_gguf_artifacts(model: ModelInfo) -> bool:
     return not requires_image(model) or find_projector_artifact(model) is not None
 
 
@@ -1330,16 +1330,16 @@ def resolve_ranked_gguf_for_run(
 
     if selected_model.gguf_variants:
         variant = lookup_gguf_variant(selected_model, desired_quant)
-        if variant and has_runnable_gguf_vlm(selected_model):
-            return selected_model, variant
         if variant is None:
             return None
+        if has_required_gguf_artifacts(selected_model):
+            return selected_model, variant
 
     candidates: list[tuple[bool, int, int, ModelInfo, GGUFVariant]] = []
     for model in models:
         if not model.gguf_variants or not same_model_family(model, selected_model):
             continue
-        if not has_runnable_gguf_vlm(model):
+        if not has_required_gguf_artifacts(model):
             continue
         if not parameter_counts_compatible(model, selected_model):
             continue
