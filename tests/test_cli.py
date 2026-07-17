@@ -247,6 +247,15 @@ def test_main_help_groups_options_by_task():
     assert "Plan memory, quantization, and GPU fit for a model." in result.stdout
 
 
+def test_list_command_error_suggests_root_ranking_command():
+    result = CliRunner().invoke(app, ["list", "--refresh", "--profile", "vision"])
+
+    assert result.exit_code == 2
+    assert "No such command 'list'." in result.stderr
+    assert "To list ranked models, remove 'list': whichvlm" in result.stderr
+    assert "--refresh --profile vision" in result.stderr
+
+
 def test_hardware_plan_help_lists_all_profiles():
     result = CliRunner().invoke(app, ["hardware-plan", "--help"])
 

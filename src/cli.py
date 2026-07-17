@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import shlex
 from typing import Optional
 
+import click
 import httpx
 import typer
 from rich.console import Console
@@ -31,8 +33,23 @@ from runtime import (
 )
 from utils import current_version, CONTEXT_LENGTH
 
+
+class WhichVLMGroup(typer.core.TyperGroup):
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        if args and args[0] == "list" and self.get_command(ctx, "list") is None:
+            command = shlex.join([ctx.command_path, *args[1:]])
+            ctx.fail(
+                "No such command 'list'. "
+                f"To list ranked models, remove 'list': {command}"
+            )
+        return super().resolve_command(ctx, args)
+
+
 app = typer.Typer(
     name="whichvlm",
+    cls=WhichVLMGroup,
     help="Find local vision-language models that fit your hardware.",
     no_args_is_help=False,
     invoke_without_command=True,
