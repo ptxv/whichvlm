@@ -1076,19 +1076,6 @@ RECOMMENDED_BACKENDS: tuple[Backend, ...] = (
 )
 
 
-def compatible_backend_names(
-    backends: tuple[Backend, ...],
-    model: ModelInfo,
-    artifact: GGUFVariant | None,
-    hardware: HardwareInfo | None,
-) -> list[str]:
-    return [
-        backend.name
-        for backend in backends
-        if backend.supports(model, artifact, hardware)
-    ]
-
-
 def backend_try_command(model: ModelInfo, action: str, backend: str) -> str:
     media_arg = ""
     if action == "run":
@@ -1113,7 +1100,11 @@ def incompatible_backend_message(
         f"Backend '{backend_name}' cannot {action} the "
         f"{artifact_format(model, artifact)} package for {model.id} on this hardware."
     )
-    available = compatible_backend_names(backends, model, artifact, hardware)
+    available = [
+        backend.name
+        for backend in backends
+        if backend.supports(model, artifact, hardware)
+    ]
     if not available:
         return message + "\n\nNo compatible backend is available on this hardware."
     choices = "\n".join(f"  {backend}" for backend in available)
