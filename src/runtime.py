@@ -1920,7 +1920,7 @@ model_id = "{model.id}"
 image_path = {image_path!r}
 {metrics}
 
-def main():
+if __name__ == "__main__":
     print(f"Loading {{model_id}} with SGLang...")
     load_started_at = time.perf_counter()
     engine = Engine(
@@ -1963,8 +1963,4 @@ def main():
         print("\\nBye!")
     finally:
         engine.shutdown()
-
-
-if __name__ == "__main__":
-    main()
 '''
