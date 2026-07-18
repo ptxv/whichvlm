@@ -1011,6 +1011,58 @@ def test_resolve_ranked_synthetic_gguf_to_real_repo():
     assert variant.filename == "Qwen3.6-27B-Q4_K_M.gguf"
 
 
+def test_resolve_ranked_gguf_skips_vlm_without_projector():
+    broken_gguf = ModelInfo(
+        id="converter/Test-VL-7B-GGUF",
+        family_id="test-vl",
+        name="Test-VL-7B-GGUF",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        downloads=100_000,
+        gguf_variants=[
+            GGUFVariant(
+                filename="broken-q4.gguf",
+                quant_type="Q4_K_M",
+                file_size_bytes=4_000_000_000,
+            )
+        ],
+    )
+    runnable_gguf = ModelInfo(
+        id="second-state/Test-VL-7B-GGUF",
+        family_id="test-vl",
+        name="Test-VL-7B-GGUF",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        downloads=10_000,
+        gguf_variants=[
+            GGUFVariant(
+                filename="test-q4.gguf",
+                quant_type="Q4_K_M",
+                file_size_bytes=4_000_000_000,
+            )
+        ],
+        artifacts=[
+            ModelArtifact(
+                repo_id="second-state/Test-VL-7B-GGUF",
+                format="adapter",
+                filename="mmproj-test-f16.gguf",
+                source_kind="mmproj",
+            )
+        ],
+    )
+
+    resolved = resolve_ranked_gguf_for_run(
+        broken_gguf,
+        broken_gguf.gguf_variants[0],
+        [broken_gguf, runnable_gguf],
+    )
+
+    assert resolved is not None
+    model, variant = resolved
+    assert model.id == "second-state/Test-VL-7B-GGUF"
+    assert variant.filename == "test-q4.gguf"
+
+
 def test_resolve_ranked_synthetic_gguf_prefers_exact_quant():
     selected = ModelInfo(
         id="Qwen/Qwen3.6-27B",
