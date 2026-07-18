@@ -247,13 +247,34 @@ def test_main_help_groups_options_by_task():
     assert "Plan memory, quantization, and GPU fit for a model." in result.stdout
 
 
-def test_list_command_error_suggests_root_ranking_command():
-    result = CliRunner().invoke(app, ["list", "--refresh", "--profile", "vision"])
+@pytest.mark.parametrize(
+    ("args", "suggested_parts"),
+    [
+        (
+            ["list", "--refresh", "--profile", "vision"],
+            ["whichvlm", "--refresh", "--profile", "vision"],
+        ),
+        (["rank", "--top", "3"], ["whichvlm", "--top", "3"]),
+        (["models"], ["whichvlm"]),
+    ],
+)
+def test_unknown_ranking_words_suggest_root_command(args, suggested_parts):
+    result = CliRunner().invoke(app, args)
 
     assert result.exit_code == 2
-    assert "No such command 'list'." in result.stderr
-    assert "To list ranked models, remove 'list': whichvlm" in result.stderr
-    assert "--refresh --profile vision" in result.stderr
+    assert f"No such command '{args[0]}'." in result.stderr
+    assert f"To rank models, remove '{args[0]}' and use:" in result.stderr
+    for part in suggested_parts:
+        assert part in result.stderr
+
+
+def test_unknown_command_typo_uses_typer_suggestion():
+    result = CliRunner().invoke(app, ["hardwar"])
+
+    assert result.exit_code == 2
+    assert "Did you mean" in result.stderr
+    assert "'hardware'" in result.stderr
+    assert "To rank models" not in result.stderr
 
 
 def test_hardware_plan_help_lists_all_profiles():

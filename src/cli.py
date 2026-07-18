@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from difflib import get_close_matches
 import shlex
 from typing import Optional
 
@@ -33,18 +34,45 @@ from runtime import (
 )
 from utils import current_version, CONTEXT_LENGTH
 
+ROOT_RANKING_WORDS = {
+    "find",
+    "list",
+    "model",
+    "models",
+    "rank",
+    "ranking",
+    "recommend",
+    "recommendations",
+    "search",
+    "show",
+    "vlm",
+    "vlms",
+}
+
 
 class WhichVLMGroup(typer.core.TyperGroup):
     def resolve_command(
         self, ctx: click.Context, args: list[str]
     ) -> tuple[str | None, click.Command | None, list[str]]:
-        if args and args[0] == "list" and self.get_command(ctx, "list") is None:
-            command = shlex.join([ctx.command_path, *args[1:]])
+        if args and self.should_suggest_root_ranking(ctx, args):
+            command_name = args[0]
+            suggested_command = shlex.join([ctx.command_path, *args[1:]])
             ctx.fail(
-                "No such command 'list'. "
-                f"To list ranked models, remove 'list': {command}"
+                f"No such command {command_name!r}. "
+                f"To rank models, remove {command_name!r} and use: "
+                f"{suggested_command}"
             )
         return super().resolve_command(ctx, args)
+
+    def should_suggest_root_ranking(self, ctx: click.Context, args: list[str]) -> bool:
+        command_name = args[0]
+        if self.get_command(ctx, command_name) is not None:
+            return False
+        if get_close_matches(command_name, self.commands):
+            return False
+        return command_name in ROOT_RANKING_WORDS or any(
+            arg.startswith("-") for arg in args[1:]
+        )
 
 
 app = typer.Typer(
