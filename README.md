@@ -25,10 +25,11 @@ uv run pytest -q
 
 ![whichvlm CLI demo](assets/whichvlm-demo.gif)
 
-Rank VLMs for the current machine:
+Rank VLMs directly with `whichvlm`:
 
 ```bash
 uv run whichvlm
+uv run whichvlm --refresh --profile vision
 ```
 
 Simulate Apple Silicon or a discrete GPU:
