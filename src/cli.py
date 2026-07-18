@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from difflib import get_close_matches
+import shlex
 from typing import Optional
 
+import click
 import httpx
 import typer
 from rich.console import Console
@@ -18,6 +21,7 @@ from runtime import (
     RuntimeUnsupportedError,
     ServeRequest,
     auto_gpu_memory_utilization,
+    find_projector_artifact,
     generate_run_script,
     normalize_backend_name,
     requires_audio,
@@ -31,8 +35,50 @@ from runtime import (
 )
 from utils import current_version, CONTEXT_LENGTH
 
+ROOT_RANKING_WORDS = {
+    "find",
+    "list",
+    "model",
+    "models",
+    "rank",
+    "ranking",
+    "recommend",
+    "recommendations",
+    "search",
+    "show",
+    "vlm",
+    "vlms",
+}
+
+
+class WhichVLMGroup(typer.core.TyperGroup):
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        if args and self.should_suggest_root_ranking(ctx, args):
+            command_name = args[0]
+            suggested_command = shlex.join([ctx.command_path, *args[1:]])
+            ctx.fail(
+                f"No such command {command_name!r}. "
+                f"To rank models, remove {command_name!r} and use: "
+                f"{suggested_command}"
+            )
+        return super().resolve_command(ctx, args)
+
+    def should_suggest_root_ranking(self, ctx: click.Context, args: list[str]) -> bool:
+        command_name = args[0]
+        if self.get_command(ctx, command_name) is not None:
+            return False
+        if get_close_matches(command_name, self.commands):
+            return False
+        return command_name in ROOT_RANKING_WORDS or any(
+            arg.startswith("-") for arg in args[1:]
+        )
+
+
 app = typer.Typer(
     name="whichvlm",
+    cls=WhichVLMGroup,
     help="Find local vision-language models that fit your hardware.",
     no_args_is_help=False,
     invoke_without_command=True,
@@ -1293,6 +1339,10 @@ def lookup_gguf_variant(model: ModelInfo, quant_type: str) -> GGUFVariant | None
     return None
 
 
+def has_required_gguf_artifacts(model: ModelInfo) -> bool:
+    return not requires_image(model) or find_projector_artifact(model) is not None
+
+
 def same_model_family(candidate: ModelInfo, selected: ModelInfo) -> bool:
     if candidate.id == selected.id:
         return True
@@ -1326,11 +1376,16 @@ def resolve_ranked_gguf_for_run(
 
     if selected_model.gguf_variants:
         variant = lookup_gguf_variant(selected_model, desired_quant)
-        return (selected_model, variant) if variant else None
+        if variant is None:
+            return None
+        if has_required_gguf_artifacts(selected_model):
+            return selected_model, variant
 
     candidates: list[tuple[bool, int, int, ModelInfo, GGUFVariant]] = []
     for model in models:
         if not model.gguf_variants or not same_model_family(model, selected_model):
+            continue
+        if not has_required_gguf_artifacts(model):
             continue
         if not parameter_counts_compatible(model, selected_model):
             continue

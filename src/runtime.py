@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
+from difflib import get_close_matches
 
 from data.vlm_inventory import canonical_vlm_family_id
 from engine.quantization import infer_non_gguf_quant_type
@@ -1075,6 +1076,52 @@ RECOMMENDED_BACKENDS: tuple[Backend, ...] = (
 )
 
 
+def backend_try_command(model: ModelInfo, action: str, backend: str) -> str:
+    media_arg = ""
+    if action == "run":
+        if requires_audio(model):
+            media_arg = " --audio AUDIO"
+        elif requires_image(model):
+            media_arg = " --image IMAGE"
+        elif requires_video(model):
+            media_arg = " --video VIDEO"
+    return f"whichvlm {action} '{model.id}' --backend {backend}{media_arg}"
+
+
+def incompatible_backend_message(
+    backend_name: str,
+    action: str,
+    backends: tuple[Backend, ...],
+    model: ModelInfo,
+    artifact: GGUFVariant | None,
+    hardware: HardwareInfo | None,
+) -> str:
+    message = (
+        f"Backend '{backend_name}' cannot {action} the "
+        f"{artifact_format(model, artifact)} package for {model.id} on this hardware."
+    )
+    available = [
+        backend.name
+        for backend in backends
+        if backend.supports(model, artifact, hardware)
+    ]
+    if not available:
+        return message + "\n\nNo compatible backend is available on this hardware."
+    choices = "\n".join(f"  {backend}" for backend in available)
+    command = backend_try_command(model, action, available[0])
+    return f"{message}\n\nAvailable backends:\n{choices}\n\nTry:\n  {command}"
+
+
+def unknown_backend_message(backend_name: str) -> str:
+    available = [backend.name for backend in EXPLICIT_BACKENDS]
+    choices = "\n".join(f"  {backend}" for backend in available)
+    message = f"Unknown backend '{backend_name}'.\n\nAvailable backends:\n{choices}"
+    suggestion = get_close_matches(normalize_backend_name(backend_name), available, n=1)
+    if suggestion:
+        message += f"\n\nDid you mean:\n  --backend {suggestion[0]}"
+    return message
+
+
 def normalize_backend_name(name: str) -> str:
     value = name.lower().replace("_", "-")
     if value in {"llama-cpp", "llamacpp", "gguf"}:
@@ -1095,17 +1142,25 @@ def select_backend(
                 if backend.supports(model, artifact, hardware):
                     return backend
                 raise RuntimeUnsupportedError(
-                    f"{backend_name} does not support {model.id} on this hardware."
+                    incompatible_backend_message(
+                        backend_name,
+                        "run",
+                        EXPLICIT_BACKENDS,
+                        model,
+                        artifact,
+                        hardware,
+                    )
                 )
-        raise RuntimeUnsupportedError(f"Unknown backend: {backend_name}")
+        raise RuntimeUnsupportedError(unknown_backend_message(backend_name))
 
     for backend in AUTO_BACKENDS:
         if backend.supports(model, artifact, hardware):
             return backend
 
     raise RuntimeUnsupportedError(
-        f"No supported run backend for {model.id}. "
-        "Try --backend vllm or --backend sglang on Linux/CUDA for supported VLMs."
+        f"No supported run backend for {model.id} on this hardware.\n\n"
+        "Try a GGUF package with llama.cpp, or use Linux/CUDA with "
+        "--backend vllm or --backend sglang."
     )
 
 
@@ -1133,22 +1188,31 @@ def select_serve_backend(
                 continue
             if not backend.can_serve:
                 raise RuntimeUnsupportedError(
-                    f"{backend_name} does not support serve; use run instead."
+                    f"{backend_name} does not support serve; use run instead.\n\n"
+                    f"Try:\n  {backend_try_command(model, 'run', target)}"
                 )
             if backend.supports(model, artifact, hardware):
                 return backend
             raise RuntimeUnsupportedError(
-                f"{backend_name} cannot serve {model.id} on this hardware."
+                incompatible_backend_message(
+                    backend_name,
+                    "serve",
+                    SERVE_AUTO_BACKENDS,
+                    model,
+                    artifact,
+                    hardware,
+                )
             )
-        raise RuntimeUnsupportedError(f"Unknown backend: {backend_name}")
+        raise RuntimeUnsupportedError(unknown_backend_message(backend_name))
 
     for backend in SERVE_AUTO_BACKENDS:
         if backend.supports(model, artifact, hardware):
             return backend
 
     raise RuntimeUnsupportedError(
-        f"No supported serve backend for {model.id}. "
-        "Use a GGUF artifact for llama.cpp or --backend vllm/sglang on Linux/CUDA."
+        f"No supported serve backend for {model.id} on this hardware.\n\n"
+        "Try a GGUF package with llama.cpp, or use Linux/CUDA with "
+        "--backend vllm or --backend sglang."
     )
 
 
@@ -1920,46 +1984,47 @@ model_id = "{model.id}"
 image_path = {image_path!r}
 {metrics}
 
-print(f"Loading {{model_id}} with SGLang...")
-load_started_at = time.perf_counter()
-engine = Engine(
-    model_path=model_id,
-    trust_remote_code=True,
-    context_length={context_length},
-    mem_fraction_static={utilization},
-    log_level="error",
-)
-print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
-try:
-    print("Ready! Type 'exit' to quit.\\n")
-    while True:
-        try:
-            text = input("> ")
-        except (KeyboardInterrupt, EOFError):
-            break
-        if text.strip().lower() in ("exit", "quit", "q"):
-            break
-        if not text.strip():
-            continue
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
-        started_at = time.perf_counter()
-        first_token_at = None
-        token_count = 0
-        response = engine.generate(
-            prompt=text,
-            image_data=image_path,
-            sampling_params={{"max_new_tokens": {max_tokens}}},
-            stream=True,
-        )
-        for chunk in response:
-            if first_token_at is None:
-                first_token_at = time.perf_counter()
-            print(chunk["text"], end="", flush=True)
-            token_count += 1
-        print()
-        print_decode_metrics(started_at, first_token_at, token_count)
-    print("\\nBye!")
-finally:
-    engine.shutdown()
+if __name__ == "__main__":
+    print(f"Loading {{model_id}} with SGLang...")
+    load_started_at = time.perf_counter()
+    engine = Engine(
+        model_path=model_id,
+        trust_remote_code=True,
+        context_length={context_length},
+        mem_fraction_static={utilization},
+        log_level="error",
+    )
+    print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
+    try:
+        print("Ready! Type 'exit' to quit.\\n")
+        while True:
+            try:
+                text = input("> ")
+            except (KeyboardInterrupt, EOFError):
+                break
+            if text.strip().lower() in ("exit", "quit", "q"):
+                break
+            if not text.strip():
+                continue
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+            started_at = time.perf_counter()
+            first_token_at = None
+            token_count = 0
+            response = engine.generate(
+                prompt=text,
+                image_data=image_path,
+                sampling_params={{"max_new_tokens": {max_tokens}}},
+                stream=True,
+            )
+            for chunk in response:
+                if first_token_at is None:
+                    first_token_at = time.perf_counter()
+                print(chunk["text"], end="", flush=True)
+                token_count += 1
+            print()
+            print_decode_metrics(started_at, first_token_at, token_count)
+        print("\\nBye!")
+    finally:
+        engine.shutdown()
 '''

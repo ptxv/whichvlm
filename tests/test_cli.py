@@ -307,6 +307,35 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
         "test-org/Test-Vision-7B"
     ]
 
+@pytest.mark.parametrize(
+    ("args", "suggested_parts"),
+    [
+        (
+            ["list", "--refresh", "--profile", "vision"],
+            ["whichvlm", "--refresh", "--profile", "vision"],
+        ),
+        (["rank", "--top", "3"], ["whichvlm", "--top", "3"]),
+        (["models"], ["whichvlm"]),
+    ],
+)
+def test_unknown_ranking_words_suggest_root_command(args, suggested_parts):
+    result = CliRunner().invoke(app, args)
+
+    assert result.exit_code == 2
+    assert f"No such command '{args[0]}'." in result.stderr
+    assert f"To rank models, remove '{args[0]}' and use:" in result.stderr
+    for part in suggested_parts:
+        assert part in result.stderr
+
+
+def test_unknown_command_typo_uses_typer_suggestion():
+    result = CliRunner().invoke(app, ["hardwar"])
+
+    assert result.exit_code == 2
+    assert "Did you mean" in result.stderr
+    assert "'hardware'" in result.stderr
+    assert "To rank models" not in result.stderr
+
 
 def test_hardware_plan_help_lists_all_profiles():
     result = CliRunner().invoke(app, ["hardware-plan", "--help"])
@@ -1042,6 +1071,58 @@ def test_resolve_ranked_synthetic_gguf_to_real_repo():
     assert variant.filename == "Qwen3.6-27B-Q4_K_M.gguf"
 
 
+def test_resolve_ranked_gguf_skips_vlm_without_projector():
+    broken_gguf = ModelInfo(
+        id="converter/Test-VL-7B-GGUF",
+        family_id="test-vl",
+        name="Test-VL-7B-GGUF",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        downloads=100_000,
+        gguf_variants=[
+            GGUFVariant(
+                filename="broken-q4.gguf",
+                quant_type="Q4_K_M",
+                file_size_bytes=4_000_000_000,
+            )
+        ],
+    )
+    runnable_gguf = ModelInfo(
+        id="second-state/Test-VL-7B-GGUF",
+        family_id="test-vl",
+        name="Test-VL-7B-GGUF",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="image-text-to-text",
+        downloads=10_000,
+        gguf_variants=[
+            GGUFVariant(
+                filename="test-q4.gguf",
+                quant_type="Q4_K_M",
+                file_size_bytes=4_000_000_000,
+            )
+        ],
+        artifacts=[
+            ModelArtifact(
+                repo_id="second-state/Test-VL-7B-GGUF",
+                format="adapter",
+                filename="mmproj-test-f16.gguf",
+                source_kind="mmproj",
+            )
+        ],
+    )
+
+    resolved = resolve_ranked_gguf_for_run(
+        broken_gguf,
+        broken_gguf.gguf_variants[0],
+        [broken_gguf, runnable_gguf],
+    )
+
+    assert resolved is not None
+    model, variant = resolved
+    assert model.id == "second-state/Test-VL-7B-GGUF"
+    assert variant.filename == "test-q4.gguf"
+
+
 def test_resolve_ranked_synthetic_gguf_prefers_exact_quant():
     selected = ModelInfo(
         id="Qwen/Qwen3.6-27B",
@@ -1353,6 +1434,31 @@ def test_run_vlm_requires_image(monkeypatch):
     assert result.exit_code == 1
     assert "VLM models require --image PATH" in result.stdout
     assert "--video PATH" not in result.stdout
+
+
+def test_run_incompatible_backend_shows_alternatives(monkeypatch):
+    model = make_vlm_model()
+
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
+    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(24))
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "run",
+            model.id,
+            "--backend",
+            "llama.cpp",
+            "--image",
+            "/tmp/image.png",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Available backends:" in result.stdout
+    assert "transformers" in result.stdout
+    assert "whichvlm run 'Qwen/Qwen2.5-VL-7B-Instruct'" in result.stdout
 
 
 def test_run_qwen25_video_passes_video_path(monkeypatch):

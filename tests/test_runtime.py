@@ -19,6 +19,7 @@ from runtime import (
     requires_image,
     requires_video,
     resolve_model_deps,
+    select_backend,
     select_serve_backend,
     serve_request,
 )
@@ -615,6 +616,38 @@ def test_recommended_runtime_backend_infers_missing_gpu_capabilities():
     assert recommended_runtime_backend(vlm_model(), None, hardware) == "vllm"
 
 
+def test_incompatible_backend_lists_supported_run_backends():
+    model = vlm_model()
+
+    with pytest.raises(RuntimeUnsupportedError) as error:
+        select_backend(model, None, linux_cuda_hardware(), backend_name="llama.cpp")
+
+    assert str(error.value) == (
+        "Backend 'llama.cpp' cannot run the transformers package for "
+        "Qwen/Qwen2.5-VL-7B-Instruct on this hardware.\n\n"
+        "Available backends:\n"
+        "  transformers\n"
+        "  vllm\n"
+        "  sglang\n\n"
+        "Try:\n"
+        "  whichvlm run 'Qwen/Qwen2.5-VL-7B-Instruct' "
+        "--backend transformers --image IMAGE"
+    )
+
+
+def test_unknown_backend_suggests_close_match():
+    with pytest.raises(RuntimeUnsupportedError) as error:
+        select_backend(
+            vlm_model(),
+            None,
+            linux_cuda_hardware(),
+            backend_name="transfomers",
+        )
+
+    assert "Available backends:" in str(error.value)
+    assert "Did you mean:\n  --backend transformers" in str(error.value)
+
+
 def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
     model = vlm_model(quantization_type="AWQ")
 
@@ -684,6 +717,8 @@ def test_sglang_vlm_backend_uses_offline_engine():
     assert deps == ["sglang", "psutil"]
     assert script_type == "sglang"
     assert "from sglang import Engine" in script
+    assert 'if __name__ == "__main__":' in script
+    assert script.index('if __name__ == "__main__":') < script.index("engine = Engine(")
     assert "engine.generate" in script
     assert "stream=True" in script
     assert "image_data=image_path" in script
