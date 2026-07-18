@@ -1984,46 +1984,47 @@ model_id = "{model.id}"
 image_path = {image_path!r}
 {metrics}
 
-print(f"Loading {{model_id}} with SGLang...")
-load_started_at = time.perf_counter()
-engine = Engine(
-    model_path=model_id,
-    trust_remote_code=True,
-    context_length={context_length},
-    mem_fraction_static={utilization},
-    log_level="error",
-)
-print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
-try:
-    print("Ready! Type 'exit' to quit.\\n")
-    while True:
-        try:
-            text = input("> ")
-        except (KeyboardInterrupt, EOFError):
-            break
-        if text.strip().lower() in ("exit", "quit", "q"):
-            break
-        if not text.strip():
-            continue
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
-        started_at = time.perf_counter()
-        first_token_at = None
-        token_count = 0
-        response = engine.generate(
-            prompt=text,
-            image_data=image_path,
-            sampling_params={{"max_new_tokens": {max_tokens}}},
-            stream=True,
-        )
-        for chunk in response:
-            if first_token_at is None:
-                first_token_at = time.perf_counter()
-            print(chunk["text"], end="", flush=True)
-            token_count += 1
-        print()
-        print_decode_metrics(started_at, first_token_at, token_count)
-    print("\\nBye!")
-finally:
-    engine.shutdown()
+if __name__ == "__main__":
+    print(f"Loading {{model_id}} with SGLang...")
+    load_started_at = time.perf_counter()
+    engine = Engine(
+        model_path=model_id,
+        trust_remote_code=True,
+        context_length={context_length},
+        mem_fraction_static={utilization},
+        log_level="error",
+    )
+    print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
+    try:
+        print("Ready! Type 'exit' to quit.\\n")
+        while True:
+            try:
+                text = input("> ")
+            except (KeyboardInterrupt, EOFError):
+                break
+            if text.strip().lower() in ("exit", "quit", "q"):
+                break
+            if not text.strip():
+                continue
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+            started_at = time.perf_counter()
+            first_token_at = None
+            token_count = 0
+            response = engine.generate(
+                prompt=text,
+                image_data=image_path,
+                sampling_params={{"max_new_tokens": {max_tokens}}},
+                stream=True,
+            )
+            for chunk in response:
+                if first_token_at is None:
+                    first_token_at = time.perf_counter()
+                print(chunk["text"], end="", flush=True)
+                token_count += 1
+            print()
+            print_decode_metrics(started_at, first_token_at, token_count)
+        print("\\nBye!")
+    finally:
+        engine.shutdown()
 '''

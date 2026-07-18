@@ -717,6 +717,8 @@ def test_sglang_vlm_backend_uses_offline_engine():
     assert deps == ["sglang", "psutil"]
     assert script_type == "sglang"
     assert "from sglang import Engine" in script
+    assert 'if __name__ == "__main__":' in script
+    assert script.index('if __name__ == "__main__":') < script.index("engine = Engine(")
     assert "engine.generate" in script
     assert "stream=True" in script
     assert "image_data=image_path" in script
