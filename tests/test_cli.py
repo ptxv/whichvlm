@@ -1324,6 +1324,31 @@ def test_run_vlm_requires_image(monkeypatch):
     assert "--video PATH" not in result.stdout
 
 
+def test_run_incompatible_backend_shows_alternatives(monkeypatch):
+    model = make_vlm_model()
+
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
+    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(24))
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "run",
+            model.id,
+            "--backend",
+            "llama.cpp",
+            "--image",
+            "/tmp/image.png",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Available backends:" in result.stdout
+    assert "transformers" in result.stdout
+    assert "whichvlm run 'Qwen/Qwen2.5-VL-7B-Instruct'" in result.stdout
+
+
 def test_run_qwen25_video_passes_video_path(monkeypatch):
     model = make_video_model()
     captured: dict[str, object] = {}
