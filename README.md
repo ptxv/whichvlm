@@ -29,6 +29,7 @@ Rank VLMs directly with `whichvlm`:
 
 ```bash
 uv run whichvlm
+uv run whichvlm list
 uv run whichvlm --refresh --profile vision
 ```
 

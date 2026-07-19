@@ -1,8 +1,10 @@
 import inspect
 import importlib
 import json
+import os
 import subprocess
 import sys
+import time
 from io import StringIO
 
 import httpx
@@ -246,6 +248,64 @@ def test_main_help_groups_options_by_task():
     assert "Data" in result.stdout
     assert "Plan memory, quantization, and GPU fit for a model." in result.stdout
 
+
+def test_list_command_runs_ranking_from_cache(tmp_path):
+    cache_path = tmp_path / "whichvlm"
+    cache_path.mkdir()
+    cached_at = time.time()
+    (cache_path / "models.json").write_text(
+        json.dumps(
+            {
+                "cached_at": cached_at,
+                "models": [
+                    {
+                        "id": "test-org/Test-Vision-7B",
+                        "family_id": "test-vision-7b",
+                        "name": "Test Vision 7B",
+                        "parameter_count": 7_000_000_000,
+                        "architecture": "qwen2_vl",
+                        "hf_pipeline_tag": "image-text-to-text",
+                        "downloads": 10,
+                        "published_at": "2026-01-01T00:00:00.000Z",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cache_path / "benchmark.json").write_text(
+        json.dumps({"cached_at": cached_at, "scores": {}}),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "whichvlm.cli",
+            "list",
+            "--gpu",
+            "RTX 4090",
+            "--profile",
+            "vision",
+            "--top",
+            "1",
+            "--min-params",
+            "1",
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "XDG_CACHE_HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["hardware"]["gpus"][0]["name"] == "RTX 4090 (simulated)"
+    assert [model["model_id"] for model in data["models"]] == [
+        "test-org/Test-Vision-7B"
+    ]
 
 @pytest.mark.parametrize(
     ("args", "suggested_parts"),
