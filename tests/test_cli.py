@@ -1012,6 +1012,12 @@ def test_search_model_term_match():
     assert result.id == "org/Llama-3.1-8B-GGUF"
 
 
+def test_search_model_term_match_preserves_download_ties():
+    models = [make_model("z/Foo-Instruct"), make_model("a/Foo-Instruct")]
+
+    assert resolve_model_match(models, "Foo Instruct").id == "z/Foo-Instruct"
+
+
 def test_search_model_size_matches_total_parameters():
     models = [
         make_model("org/Foo-1.7B", downloads=1000, parameter_count=1_700_000_000),
@@ -1042,12 +1048,15 @@ def test_search_model_moe_sizes_match_total_and_active_parameters():
 
 
 @pytest.mark.parametrize(
-    ("query", "parameter_count"),
-    [("Foo 1.7B", 1_700_000_000), ("Foo 500M", 500_000_000)],
+    ("query", "parameter_count", "other_count"),
+    [
+        ("Foo 1.7B", 1_700_000_000, 1_800_000_000),
+        ("Foo 500M", 500_000_000, 550_000_000),
+    ],
 )
-def test_search_model_decimal_and_million_sizes(query, parameter_count):
+def test_search_model_decimal_and_million_sizes(query, parameter_count, other_count):
     models = [
-        make_model("org/Foo-small", downloads=1000, parameter_count=125_000_000),
+        make_model("org/Foo-other", downloads=1000, parameter_count=other_count),
         make_model("org/Foo-target", parameter_count=parameter_count),
     ]
 
@@ -1064,14 +1073,15 @@ def test_search_model_exact_id_precedes_size_metadata():
 
 
 def test_search_model_known_size_precedes_unknown_metadata():
-    models = [
+    unknown_models = [
+        make_model("org/Foo-1.7B", downloads=2000, parameter_count=0),
         make_model("z/Foo-7B", downloads=1000, parameter_count=0),
         make_model("a/Foo-7B", downloads=1000, parameter_count=0),
-        make_model("other/Foo", parameter_count=7_000_000_000),
     ]
+    models = [*unknown_models, make_model("other/Foo", parameter_count=7_000_000_000)]
 
     assert resolve_model_match(models, "Foo 7B").id == "other/Foo"
-    assert resolve_model_match(models[:2], "Foo 7B").id == "a/Foo-7B"
+    assert resolve_model_match(unknown_models, "Foo 7B").id == "a/Foo-7B"
 
 
 def test_search_model_not_found():

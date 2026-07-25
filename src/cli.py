@@ -1281,11 +1281,12 @@ def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[Model
 
 def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
     query_lower = model_name.lower()
+    query_terms = query_lower.split()
     requested_size = parse_parameter_size(query_lower)
     terms = (
         PARAMETER_SIZE_RE.sub(" ", query_lower, count=1).split()
         if requested_size
-        else query_lower.split()
+        else query_terms
     )
 
     matches = [m for m in models if m.id.lower() == query_lower]
@@ -1302,7 +1303,7 @@ def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
 
     if not matches:
         console.print(f"[red]No model found matching '{model_name}'.[/]")
-        suggestions = [m for m in models if any(t in m.id.lower() for t in terms)]
+        suggestions = [m for m in models if any(t in m.id.lower() for t in query_terms)]
         if suggestions:
             suggestions.sort(key=lambda m: m.downloads, reverse=True)
             console.print("\n[yellow]Did you mean:[/]")
@@ -1315,14 +1316,17 @@ def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
                 console.print(f"  • {m.id} ({p})")
         raise typer.Exit(code=1)
 
-    matches.sort(
-        key=lambda m: (
-            -parameter_size_match_quality(m, requested_size) if requested_size else 0,
-            -m.downloads,
-            m.id.lower(),
+    if requested_size:
+        model = min(
+            matches,
+            key=lambda m: (
+                -parameter_size_match_quality(m, requested_size),
+                -m.downloads,
+                m.id.lower(),
+            ),
         )
-    )
-    model = matches[0]
+    else:
+        model = max(matches, key=lambda m: m.downloads)
     if len(matches) > 1:
         console.print(f"[dim]Found {len(matches)} matches, using: {model.id}[/]")
     return model
@@ -1334,7 +1338,7 @@ def parse_parameter_size(value: str) -> tuple[int, int | None] | None:
         return None
 
     def to_count(amount: str, unit: str) -> int:
-        return int(float(amount) * (1e9 if unit.lower() == "b" else 1e6))
+        return round(float(amount) * (1e9 if unit.lower() == "b" else 1e6))
 
     total = to_count(match.group(1), match.group(2))
     active = to_count(match.group(3), match.group(4)) if match.group(3) else None
@@ -1344,32 +1348,21 @@ def parse_parameter_size(value: str) -> tuple[int, int | None] | None:
 def parameter_size_match_quality(
     model: ModelInfo, requested_size: tuple[int, int | None]
 ) -> int:
+    """Return -1 for mismatch, 0 for ID fallback, or 1 for metadata match."""
     total, active = requested_size
-    if model.parameter_count > 0 and not parameter_counts_match(
-        model.parameter_count, total
-    ):
+    if model.parameter_count > 0 and model.parameter_count != total:
         return -1
     if (
         active is not None
         and model.parameter_count_active
-        and not parameter_counts_match(model.parameter_count_active, active)
+        and model.parameter_count_active != active
     ):
         return -1
     if model.parameter_count > 0 and (active is None or model.parameter_count_active):
         return 1
 
     name_size = parse_parameter_size(model.id)
-    if not name_size or not parameter_counts_match(name_size[0], total):
-        return -1
-    if active is not None and (
-        name_size[1] is None or not parameter_counts_match(name_size[1], active)
-    ):
-        return -1
-    return 0
-
-
-def parameter_counts_match(actual: int, requested: int) -> bool:
-    return abs(actual - requested) <= requested * 0.1
+    return 0 if name_size == requested_size else -1
 
 
 def select_gguf_variant(
