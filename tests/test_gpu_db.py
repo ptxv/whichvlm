@@ -1,7 +1,7 @@
 from hardware.gpu_db import (
     normalize_detected_gpu_name,
-    static_bandwidth,
     resolve_detected_bandwidth,
+    static_bandwidth,
 )
 
 BYTES_PER_GIB = 1024**3
@@ -13,6 +13,9 @@ def test_normalize_strips_vendor_trademark_and_maps_laptop_to_mobile():
         == "GeForce RTX 5090 Mobile"
     )
     assert normalize_detected_gpu_name("Intel(R) Arc(TM) A770 Graphics") == "Arc A770"
+    assert (
+        normalize_detected_gpu_name("Battlemage G31 [Intel Graphics]") == "Arc Pro B70"
+    )
     assert normalize_detected_gpu_name("AMD Radeon RX 6750 XT") == "Radeon RX 6750 XT"
 
 
@@ -66,8 +69,9 @@ def test_resolve_variant_qualifier_is_preserved():
     assert 200 < bw < 400
 
 
-def test_resolve_unknown_gpu_returns_none_not_wrong_guess():
-    assert resolve_detected_bandwidth("Intel(R) Arc(TM) Pro B70 Graphics") is None
+def test_resolve_arc_pro_b70_aliases():
+    assert resolve_detected_bandwidth("Intel(R) Arc(TM) Pro B70 Graphics") == 608.0
+    assert resolve_detected_bandwidth("Battlemage G31 [Intel Graphics]") == 608.0
 
 
 def test_resolve_empty_name_returns_none():

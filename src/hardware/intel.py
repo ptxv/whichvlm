@@ -4,10 +4,14 @@ import logging
 import subprocess
 from pathlib import Path
 
+from data.gpu import BYTES_PER_GIB
+from hardware.gpu_db import normalize_detected_gpu_name, resolve_detected_bandwidth
 from hardware.types import GPUInfo
 
 logger = logging.getLogger(__name__)
 
+ARC_PRO_B70_KEY = "Arc Pro B70"
+ARC_PRO_B70_NAME = "Intel Arc Pro B70 Graphics"
 
 DISPLAY_CLASSES = (
     "vga compatible controller",
@@ -88,12 +92,20 @@ def detect_from_sysfs(drm_path: Path = Path("/sys/class/drm")) -> list[str]:
 def detect_intel_gpus() -> list[GPUInfo]:
     names = detect_from_lspci() or detect_from_sysfs()
 
-    return [
-        GPUInfo(
-            name=name,
-            vendor="intel",
-            vram_bytes=0,
-            shared_memory=True,
+    gpus: list[GPUInfo] = []
+    for detected_name in names:
+        is_arc_pro_b70 = normalize_detected_gpu_name(detected_name) == ARC_PRO_B70_KEY
+        name = ARC_PRO_B70_NAME if is_arc_pro_b70 else detected_name
+        vram_bytes = 32 * BYTES_PER_GIB if is_arc_pro_b70 else 0
+        gpus.append(
+            GPUInfo(
+                name=name,
+                vendor="intel",
+                vram_bytes=vram_bytes,
+                memory_bandwidth_gbps=(
+                    resolve_detected_bandwidth(name) if is_arc_pro_b70 else None
+                ),
+                shared_memory=not is_arc_pro_b70,
+            )
         )
-        for name in names
-    ]
+    return gpus

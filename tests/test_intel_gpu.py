@@ -3,10 +3,16 @@ from __future__ import annotations
 import subprocess
 from io import StringIO
 
+import pytest
 from rich.console import Console
 
 from hardware import intel
-from hardware.types import GPUInfo, HardwareInfo
+from hardware.types import (
+    GPUInfo,
+    HardwareInfo,
+    ensure_backend_capabilities,
+    has_backend,
+)
 
 
 def test_detect_intel_gpu_from_lspci(monkeypatch):
@@ -25,7 +31,28 @@ def test_detect_intel_gpu_from_lspci(monkeypatch):
     assert len(gpus) == 1
     assert gpus[0].vendor == "intel"
     assert gpus[0].vram_bytes == 0
+    assert gpus[0].shared_memory is True
     assert "UHD Graphics" in gpus[0].name
+
+
+@pytest.mark.parametrize(
+    "detected_name",
+    [
+        "Intel(R) Arc(TM) Pro B70 Graphics",
+        "Battlemage G31 [Intel Graphics]",
+    ],
+)
+def test_detect_arc_pro_b70_from_lspci_alias(monkeypatch, detected_name):
+    monkeypatch.setattr(intel, "detect_from_lspci", lambda: [detected_name])
+
+    gpu = intel.detect_intel_gpus()[0]
+    ensure_backend_capabilities(gpu, "linux")
+
+    assert gpu.name == "Intel Arc Pro B70 Graphics"
+    assert gpu.vram_bytes == 32 * 1024**3
+    assert gpu.memory_bandwidth_gbps == 608.0
+    assert gpu.shared_memory is False
+    assert has_backend(gpu, "vulkan")
 
 
 def test_detect_intel_gpu_ignores_non_display_lspci(monkeypatch):
@@ -56,6 +83,24 @@ def test_detect_intel_gpu_from_sysfs_when_lspci_missing(monkeypatch, tmp_path):
     assert gpus[0].vendor == "intel"
     assert gpus[0].vram_bytes == 0
     assert gpus[0].name == "Intel Integrated Graphics"
+
+
+def test_detect_arc_pro_b70_from_sysfs_alias(monkeypatch, tmp_path):
+    card = tmp_path / "card0" / "device"
+    card.mkdir(parents=True)
+    (card / "vendor").write_text("0x8086\n")
+    (card / "product_name").write_text("Battlemage G31 [Intel Graphics]\n")
+
+    monkeypatch.setattr(intel, "detect_from_lspci", lambda: [])
+    original_sysfs = intel.detect_from_sysfs
+    monkeypatch.setattr(intel, "detect_from_sysfs", lambda: original_sysfs(tmp_path))
+
+    gpu = intel.detect_intel_gpus()[0]
+
+    assert gpu.name == "Intel Arc Pro B70 Graphics"
+    assert gpu.vram_bytes == 32 * 1024**3
+    assert gpu.memory_bandwidth_gbps == 608.0
+    assert gpu.shared_memory is False
 
 
 def test_display_intel_shared_memory_without_zero_kb(monkeypatch):
