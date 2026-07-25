@@ -30,10 +30,7 @@ def normalize_detected_gpu_name(name: str) -> str:
     text = LAPTOP_GPU_RE.sub("Mobile", text)
     text = TRAILING_GRAPHICS_RE.sub("", text)
     text = VRAM_NOSPACE_RE.sub(r"\1 GB", text)
-    normalized = WHITESPACE_RE.sub(" ", text).strip()
-    if "battlemage g31" in normalized.lower():
-        return "Arc Pro B70"
-    return normalized
+    return WHITESPACE_RE.sub(" ", text).strip()
 
 
 SORTED_BW_KEYS = sorted(GPU_BANDWIDTH, key=len, reverse=True)
