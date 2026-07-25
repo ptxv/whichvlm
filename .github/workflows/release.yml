@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and verify package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9
+        with:
+          python-version: "3.11"
+      - name: Build distributions
+        run: uv build --no-sources
+      - name: Test installed wheel
+        working-directory: ${{ runner.temp }}
+        run: |
+          uv venv --seed --python 3.11 "$RUNNER_TEMP/whichvlm-release"
+          "$RUNNER_TEMP/whichvlm-release/bin/python" -m pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          "$RUNNER_TEMP/whichvlm-release/bin/whichvlm" --version
+          "$RUNNER_TEMP/whichvlm-release/bin/whichvlm" --help
+          "$RUNNER_TEMP/whichvlm-release/bin/whichvlm" --gpu "RTX 4090" --top 1
+          uvx --python 3.11 --isolated --from "$GITHUB_WORKSPACE"/dist/*.whl whichvlm --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/whichvlm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-package-distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    name: Create GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish release notes and artifacts
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag

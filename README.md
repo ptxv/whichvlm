@@ -8,65 +8,68 @@ Find local vision-language models that fit your machine.
 
 Use Python 3.11 or newer.
 
+Run without installing:
+
 ```bash
-cd ~/Downloads/Github/whichvlm
-uv sync
-uv run whichvlm --help
+uvx whichvlm --help
 ```
 
-For editable development with test dependencies:
+Or install with pip:
 
 ```bash
-uv sync --group dev
-uv run pytest -q
+python -m pip install whichvlm
+whichvlm --help
 ```
 
 ## Use
+
+The examples below use the installed command. Prefix them with `uvx` to run
+without installing.
 
 ![whichvlm CLI demo](assets/whichvlm-demo.gif)
 
 Rank VLMs directly with `whichvlm`:
 
 ```bash
-uv run whichvlm
-uv run whichvlm list
-uv run whichvlm --refresh --profile vision
+whichvlm
+whichvlm list
+whichvlm --refresh --profile vision
 ```
 
 Simulate Apple Silicon or a discrete GPU:
 
 ```bash
-uv run whichvlm --gpu "Apple M3 Max"
-uv run whichvlm --gpu "RTX 4090" --vram-headroom 10%
-uv run whichvlm --gpu "RTX 4090" --perf-vram 10%
+whichvlm --gpu "Apple M3 Max"
+whichvlm --gpu "RTX 4090" --vram-headroom 10%
+whichvlm --gpu "RTX 4090" --perf-vram 10%
 ```
 
 Return machine-readable output:
 
 ```bash
-uv run whichvlm --json --top 5
+whichvlm --json --top 5
 ```
 
 Change the VLM workload estimate:
 
 ```bash
-uv run whichvlm --image-count 2 --image-size 896 --context-length 8192
+whichvlm --image-count 2 --image-size 896 --context-length 8192
 ```
 
 Reserve memory for backend overhead or performance features:
 
 ```bash
-uv run whichvlm --gpu "RTX 4090" --vram-headroom auto --perf-vram 10%
-uv run whichvlm plan Qwen/Qwen2.5-VL-7B-Instruct --perf-vram 10%
-uv run whichvlm hardware-plan "RTX 4090" --perf-vram 10%
-uv run whichvlm upgrade "RTX 4090" "RTX 5090" --perf-vram 10%
+whichvlm --gpu "RTX 4090" --vram-headroom auto --perf-vram 10%
+whichvlm plan Qwen/Qwen2.5-VL-7B-Instruct --perf-vram 10%
+whichvlm hardware-plan "RTX 4090" --perf-vram 10%
+whichvlm upgrade "RTX 4090" "RTX 5090" --perf-vram 10%
 ```
 
 Only show full GPU fits:
 
 ```bash
-uv run whichvlm --gpu-only
-uv run whichvlm --fit full-gpu
+whichvlm --gpu-only
+whichvlm --fit full-gpu
 ```
 
 ## Run A Model
@@ -74,15 +77,15 @@ uv run whichvlm --fit full-gpu
 VLM runners require an image path.
 
 ```bash
-uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
-uv run whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
+whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
+whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
 ```
 
 For vLLM and SGLang, derive backend memory utilization from the same reserve:
 
 ```bash
-uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend vllm --perf-vram 10% --image ./image.jpg
-uv run whichvlm serve Qwen/Qwen2.5-VL-7B-Instruct --backend sglang --gpu-memory-utilization 0.82
+whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend vllm --perf-vram 10% --image ./image.jpg
+whichvlm serve Qwen/Qwen2.5-VL-7B-Instruct --backend sglang --gpu-memory-utilization 0.82
 ```
 
 Runtime support is intentionally guarded:
@@ -117,6 +120,12 @@ The fetcher prioritizes:
 Benchmark evidence is graded as direct, variant, base model, interpolated, self-reported, or absent. Vision scores lead the `vision` and `ocr` profiles. Text benchmarks are fallback evidence, and output labels show when ranking evidence is indirect or missing.
 
 ## Development
+
+Install the project and test dependencies from a clone:
+
+```bash
+uv sync --group dev
+```
 
 Run the full suite:
 
