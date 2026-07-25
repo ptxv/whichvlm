@@ -145,10 +145,10 @@ These use real hardware, downloads, and runtime dependencies.
 Peak-memory calibrations are loaded from
 `src/data/vram_calibrations.json`. A record affects estimates only when it
 includes the model ID and revision, artifact, GPU, runtime version, benchmark
-command, measurement method, and evidence source. The command should use this
-harness so another contributor can reproduce the measurement. Evidenced
-records may transfer to nearby models in the same architecture when backend,
-format, quantization, workload, and MoE state also match.
+command, measurement method, and evidence source. The command and source must
+be sufficient to reproduce the real-hardware measurement. Evidenced records
+may transfer to nearby models in the same architecture when backend, format,
+quantization, workload, and MoE state also match.
 
 Run the same detection benchmark on every target machine:
 

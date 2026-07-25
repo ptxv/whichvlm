@@ -24,7 +24,11 @@ CALIBRATION_PROVENANCE = {
     "artifact": "model-q4_k_m.gguf",
     "gpu": "NVIDIA RTX 4090",
     "runtime_version": "llama.cpp b1234",
-    "command": "python benchmarks/real_hardware.py gguf-mmproj ...",
+    "command": (
+        "python benchmarks/real_hardware.py gguf-mmproj "
+        "--repo owner/calibration-model --model-file model-q4_k_m.gguf "
+        "--mmproj-file mmproj-f16.gguf --image image.png"
+    ),
     "measurement_method": "nvidia-smi peak used memory",
     "source": "https://example.com/calibration-log",
 }
@@ -198,7 +202,12 @@ def test_estimate_kv_cache_uses_architecture_dimensions():
     assert estimate_kv_cache(grouped_query, 4096) == 536_870_912
 
 
-def test_unproven_calibration_uses_fallback_estimate():
+def test_incomplete_calibration_evidence_uses_fallback_estimate(monkeypatch):
+    calibration = replace(
+        replace(vram.VRAM_CALIBRATIONS[0], **CALIBRATION_PROVENANCE),
+        source=None,
+    )
+    monkeypatch.setattr(vram, "VRAM_CALIBRATIONS", (calibration,))
     model = make_model(
         7_000_000_000,
         architecture="llama",
@@ -215,7 +224,7 @@ def test_unproven_calibration_uses_fallback_estimate():
 
     estimate = estimate_vram_details(model, variant, context_length=4096)
 
-    assert not vram.VRAM_CALIBRATIONS[0].has_reproducible_evidence
+    assert not calibration.has_reproducible_evidence
     assert estimate.confidence == "medium"
     assert estimate.notes == [
         "no matching reproducible peak-memory calibration "
