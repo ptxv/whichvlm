@@ -239,7 +239,7 @@ def test_qwen2_audio_runtime_requires_audio_path():
         generate_run_script(model, None, 4096, False)
 
 
-def test_transformers_vlm_script_uses_processor_and_image_path():
+def test_transformers_vlm_script_uses_processor_and_image_paths():
     model = vlm_model()
 
     deps, script_type = resolve_model_deps(model, None)
@@ -309,9 +309,9 @@ def test_qwen3_vlm_script_uses_matching_model_class(is_moe, model_class):
 
 def test_multi_image_runtime_rejects_unvalidated_transformers_family():
     model = vlm_model(
-        id="meta-llama/Llama-3.2-11B-Vision-Instruct",
-        family_id="llama-vision",
-        architecture="mllama",
+        id="llava-hf/llava-onevision-qwen2-7b-si-hf",
+        family_id="llava",
+        architecture="llavaonevision",
     )
 
     with pytest.raises(RuntimeUnsupportedError, match="Multi-image runs"):

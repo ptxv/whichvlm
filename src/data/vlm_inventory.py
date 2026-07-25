@@ -132,8 +132,7 @@ def is_multi_image_family(model_id: str, architecture: str = "") -> bool:
     family_id = canonical_vlm_family_id(model_id) or canonical_vlm_family_id(
         architecture
     )
-    architecture_key = normalize_vlm_match_text(architecture).replace("-", "")
-    return family_id in MULTI_IMAGE_FAMILY_IDS or "llavaonevision" in architecture_key
+    return family_id in MULTI_IMAGE_FAMILY_IDS
 
 
 def known_vlm_model_ids() -> tuple[str, ...]:

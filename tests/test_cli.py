@@ -307,6 +307,7 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
         "test-org/Test-Vision-7B"
     ]
 
+
 @pytest.mark.parametrize(
     ("args", "suggested_parts"),
     [
@@ -1467,7 +1468,6 @@ def test_run_passes_repeatable_images_to_ranking_and_runtime(monkeypatch):
     captured: dict[str, object] = {}
 
     def fake_rank_models(models, hardware, **kwargs):
-        captured["vision_workload"] = kwargs["vision_workload"]
         captured["workload"] = kwargs["workload"]
         return [
             CompatibilityResult(
@@ -1506,7 +1506,6 @@ def test_run_passes_repeatable_images_to_ranking_and_runtime(monkeypatch):
     )
 
     assert result.exit_code == 0
-    assert captured["vision_workload"].image_count == 2
     assert captured["workload"].image_count == 2
     assert captured["image_paths"] == ("/tmp/before.png", "/tmp/after.png")
     assert captured["backend_name"] == "transformers"

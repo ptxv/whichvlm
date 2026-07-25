@@ -1493,7 +1493,8 @@ def run(
             all_models = [
                 model
                 for model in all_models
-                if not model.gguf_variants and supports_multi_image_run(model)
+                if not model.gguf_variants
+                and supports_multi_image_run(model, hardware=hardware)
             ]
 
         results = rank_models(
@@ -1504,11 +1505,6 @@ def run(
             quant_filter=quant,
             benchmark_scores=bench_scores,
             task_profile="vision",
-            vision_workload=Workload(
-                task="image_qa",
-                context_length=context_length,
-                image_count=len(image_paths),
-            ),
             workload=Workload(
                 task="image_qa",
                 context_length=context_length,

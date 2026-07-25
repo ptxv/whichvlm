@@ -120,8 +120,7 @@ COMPATIBILITY_MATRIX = (
         frozenset({"transformers"}),
         ALL_OSES,
         frozenset({"cpu", "cuda", "rocm", "mps"}),
-        multi_image_families=MULTI_IMAGE_FAMILY_IDS
-        | frozenset({"llava-onevision", "llavaonevision"}),
+        multi_image_families=MULTI_IMAGE_FAMILY_IDS,
     ),
     CompatibilityRule(
         "vllm",
@@ -572,8 +571,6 @@ def transformers_vlm_profile(model: ModelInfo) -> TransformersProfile:
         )
     if "llama-3.2" in family or "mllama" in family:
         return "MllamaForConditionalGeneration", "AutoProcessor", ()
-    if "llava-onevision" in family or "llava_onevision" in family:
-        return "LlavaOnevisionForConditionalGeneration", "AutoProcessor", ()
     if "llava" in family:
         return "LlavaForConditionalGeneration", "AutoProcessor", ()
     return "AutoModelForImageTextToText", "AutoProcessor", ()
