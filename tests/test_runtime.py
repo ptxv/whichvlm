@@ -33,6 +33,9 @@ def vlm_model(**kwargs) -> ModelInfo:
         parameter_count=kwargs.pop("parameter_count", 7_000_000_000),
         architecture=kwargs.pop("architecture", "qwen2"),
         hf_pipeline_tag=kwargs.pop("hf_pipeline_tag", "image-text-to-text"),
+        capabilities=kwargs.pop(
+            "capabilities", ModelCapabilities(image=True, multi_image=True)
+        ),
         **kwargs,
     )
 
@@ -155,7 +158,7 @@ def test_video_only_model_is_not_treated_as_image_vlm():
     assert not requires_image(model)
     assert recommended_runtime_backend(model, None, linux_cuda_hardware()) is None
     with pytest.raises(RuntimeUnsupportedError, match="No supported run backend"):
-        generate_run_script(model, None, 4096, False, image_path="/tmp/image.png")
+        generate_run_script(model, None, 4096, False, image_paths=("/tmp/image.png",))
 
 
 def test_qwen25_vl_video_runtime_uses_transformers_video_path():
@@ -241,14 +244,19 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
 
     deps, script_type = resolve_model_deps(model, None)
     script = generate_run_script(
-        model, None, 4096, False, image_path="/tmp/image.png", max_tokens=128
+        model,
+        None,
+        4096,
+        False,
+        image_paths=("/tmp/image.png",),
+        max_tokens=128,
     )
 
     assert "pillow" in deps
     assert script_type == "transformers_vlm"
     assert "AutoProcessor" in script
     assert "Qwen2_5_VLForConditionalGeneration" in script
-    assert "image_path = '/tmp/image.png'" in script
+    assert "image_paths = ('/tmp/image.png',)" in script
     assert '{"type": "image", "image": image}' in script
     assert "max_new_tokens=128" in script
     assert "min_pixels=256 * 28 * 28" in script
@@ -256,6 +264,55 @@ def test_transformers_vlm_script_uses_processor_and_image_path():
     assert "TextIteratorStreamer" in script
     assert "torch.inference_mode()" in script
     assert "[metrics] ttft=" in script
+
+
+def test_transformers_vlm_script_preserves_multiple_image_order():
+    script = generate_run_script(
+        vlm_model(),
+        None,
+        4096,
+        False,
+        image_paths=("/tmp/before.png", "/tmp/after.png"),
+        backend_name="transformers",
+    )
+
+    assert "image_paths = ('/tmp/before.png', '/tmp/after.png')" in script
+    assert "for image_path in image_paths" in script
+    assert '{"type": "image", "image": image}' in script
+    assert 'content.append({"type": "text", "text": text})' in script
+    compile(script, "<whichvlm-multi-image>", "exec")
+
+
+def test_multi_image_runtime_rejects_unvalidated_transformers_family():
+    model = vlm_model(
+        id="meta-llama/Llama-3.2-11B-Vision-Instruct",
+        family_id="llama-vision",
+        architecture="mllama",
+    )
+
+    with pytest.raises(RuntimeUnsupportedError, match="Multi-image runs"):
+        generate_run_script(
+            model,
+            None,
+            4096,
+            False,
+            image_paths=("/tmp/first.png", "/tmp/second.png"),
+            backend_name="transformers",
+        )
+
+
+def test_multi_image_runtime_requires_model_capability():
+    model = vlm_model(capabilities=ModelCapabilities(image=True))
+
+    with pytest.raises(RuntimeUnsupportedError, match="Multi-image runs"):
+        generate_run_script(
+            model,
+            None,
+            4096,
+            False,
+            image_paths=("/tmp/first.png", "/tmp/second.png"),
+            backend_name="transformers",
+        )
 
 
 def test_text_runtime_scripts_use_custom_max_tokens():
@@ -372,7 +429,7 @@ def test_generated_scripts_compile():
     scripts = [
         generate_run_script(text_model, None, 4096, False),
         generate_run_script(
-            vlm_model(), None, 4096, False, image_path="/tmp/image.png"
+            vlm_model(), None, 4096, False, image_paths=("/tmp/image.png",)
         ),
         generate_run_script(gguf_model, gguf_variant, 4096, False),
         generate_run_script(
@@ -380,14 +437,14 @@ def test_generated_scripts_compile():
             gguf_variant,
             4096,
             False,
-            image_path="/tmp/image.png",
+            image_paths=("/tmp/image.png",),
         ),
         generate_run_script(
             mlx_vlm,
             None,
             4096,
             False,
-            image_path="/tmp/image.png",
+            image_paths=("/tmp/image.png",),
             hardware=darwin_mlx_hardware(),
         ),
         generate_run_script(
@@ -395,7 +452,7 @@ def test_generated_scripts_compile():
             None,
             4096,
             False,
-            image_path="/tmp/image.png",
+            image_paths=("/tmp/image.png",),
             backend_name="vllm",
             hardware=linux_cuda_hardware(),
         ),
@@ -404,7 +461,7 @@ def test_generated_scripts_compile():
             None,
             4096,
             False,
-            image_path="/tmp/image.png",
+            image_paths=("/tmp/image.png",),
             backend_name="sglang",
             hardware=linux_cuda_hardware(),
         ),
@@ -460,7 +517,7 @@ def test_unknown_transformers_vlm_is_not_claimed_supported():
     )
 
     with pytest.raises(RuntimeUnsupportedError, match="No supported run backend"):
-        generate_run_script(model, None, 4096, False, image_path="/tmp/image.png")
+        generate_run_script(model, None, 4096, False, image_paths=("/tmp/image.png",))
 
 
 def test_gguf_vlm_runtime_requires_projector_artifact():
@@ -481,7 +538,7 @@ def test_gguf_vlm_runtime_requires_projector_artifact():
             model.gguf_variants[0],
             4096,
             False,
-            image_path="/tmp/image.png",
+            image_paths=("/tmp/image.png",),
         )
 
 
@@ -517,7 +574,7 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
         model.gguf_variants[0],
         4096,
         False,
-        image_path="/tmp/image.png",
+        image_paths=("/tmp/image.png",),
         max_tokens=128,
     )
 
@@ -549,7 +606,7 @@ def test_mlx_vlm_script_uses_mlx_vlm_runner():
         None,
         4096,
         False,
-        image_path="/tmp/image.png",
+        image_paths=("/tmp/image.png",),
         max_tokens=96,
         hardware=hardware,
     )
@@ -662,7 +719,7 @@ def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
         None,
         4096,
         False,
-        image_path="/tmp/image.png",
+        image_paths=("/tmp/image.png",),
         max_tokens=96,
         backend_name="vllm",
         hardware=linux_cuda_hardware(),
@@ -685,7 +742,7 @@ def test_vllm_vlm_script_uses_requested_gpu_memory_utilization():
         None,
         4096,
         False,
-        image_path="/tmp/image.png",
+        image_paths=("/tmp/image.png",),
         backend_name="vllm",
         hardware=linux_cuda_hardware(),
         gpu_memory_utilization=0.82,
@@ -708,7 +765,7 @@ def test_sglang_vlm_backend_uses_offline_engine():
         None,
         4096,
         False,
-        image_path="/tmp/image.png",
+        image_paths=("/tmp/image.png",),
         max_tokens=96,
         backend_name="sglang",
         hardware=linux_cuda_hardware(),
@@ -732,7 +789,7 @@ def test_sglang_vlm_script_uses_requested_gpu_memory_utilization():
         None,
         4096,
         False,
-        image_path="/tmp/image.png",
+        image_paths=("/tmp/image.png",),
         backend_name="sglang",
         hardware=linux_cuda_hardware(),
         gpu_memory_utilization=0.82,

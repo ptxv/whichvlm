@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Final
 
 
+MULTI_IMAGE_FAMILY_IDS: Final[frozenset[str]] = frozenset(
+    {"qwen-vl", "gemma-multimodal", "pixtral", "deepseek-vl"}
+)
+
+
 VLM_FAMILY_SEEDS: Final[dict[str, dict[str, tuple[str, ...]]]] = {
     "qwen-vl": {
         "canonical": (
@@ -121,6 +126,14 @@ def canonical_vlm_family_id(model_id: str) -> str | None:
         if any(alias in name for alias in data["aliases"]):
             return family_id
     return None
+
+
+def is_multi_image_family(model_id: str, architecture: str = "") -> bool:
+    family_id = canonical_vlm_family_id(model_id) or canonical_vlm_family_id(
+        architecture
+    )
+    architecture_key = normalize_vlm_match_text(architecture).replace("-", "")
+    return family_id in MULTI_IMAGE_FAMILY_IDS or "llavaonevision" in architecture_key
 
 
 def known_vlm_model_ids() -> tuple[str, ...]:

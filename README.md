@@ -75,6 +75,7 @@ VLM runners require an image path.
 
 ```bash
 uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
+uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend transformers --image ./before.jpg --image ./after.jpg
 uv run whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
 ```
 

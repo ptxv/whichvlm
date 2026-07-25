@@ -217,6 +217,7 @@ def test_dicts_to_models_restores_capability_components_from_architecture():
     )
 
     assert models[0].capabilities.image is True
+    assert models[0].capabilities.multi_image is True
     assert {component.role for component in models[0].components} >= {
         "vision_encoder",
         "projector",
