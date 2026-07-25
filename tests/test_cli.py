@@ -1021,10 +1021,42 @@ def test_search_model_term_match_preserves_download_ties():
 def test_search_model_size_matches_total_parameters():
     models = [
         make_model("org/Foo-1.7B", downloads=1000, parameter_count=1_700_000_000),
-        make_model("org/Foo-7B", parameter_count=7_000_000_000),
+        make_model(
+            "org/Foo-7B",
+            parameter_count=7_000_000_000,
+            parameter_count_active=3_000_000_000,
+        ),
     ]
 
     assert resolve_model_match(models, "Foo 7B").id == "org/Foo-7B"
+
+
+def test_search_model_prefers_size_label_with_approximate_metadata():
+    models = [
+        make_model(
+            "Qwen/Qwen2.5-VL-7B-Instruct",
+            parameter_count=8_292_166_656,
+        ),
+        make_model(
+            "other/Qwen2.5-VL-8B-Instruct",
+            downloads=1000,
+            parameter_count=8_000_000_000,
+        ),
+        make_model(
+            "other/Qwen2.5-VL-Instruct",
+            downloads=1000,
+            parameter_count=7_000_000_000,
+        ),
+        make_model(
+            "bad/Qwen2.5-VL-7B-Instruct",
+            downloads=2000,
+            parameter_count=70_000_000_000,
+        ),
+    ]
+
+    result = resolve_model_match(models, "Qwen 7B")
+
+    assert result.id == "Qwen/Qwen2.5-VL-7B-Instruct"
 
 
 def test_search_model_moe_sizes_match_total_and_active_parameters():
@@ -1037,6 +1069,12 @@ def test_search_model_moe_sizes_match_total_and_active_parameters():
         make_model(
             "org/Foo-30B-A5B",
             downloads=1000,
+            parameter_count=30_000_000_000,
+            parameter_count_active=5_000_000_000,
+        ),
+        make_model(
+            "bad/Foo-30B-A3B",
+            downloads=2000,
             parameter_count=30_000_000_000,
             parameter_count_active=5_000_000_000,
         ),
