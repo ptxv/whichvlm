@@ -21,6 +21,8 @@ def gpu_available_memory(
     vram_bytes = (
         gpu.usable_vram_bytes if gpu.usable_vram_bytes is not None else gpu.vram_bytes
     )
+    if gpu.shared_memory and "vram_bytes" in gpu.overrides:
+        return min(vram_bytes, usable_ram)
     if gpu.shared_memory and vram_bytes < 2 * BYTES_PER_GIB:
         return usable_ram
     if gpu.shared_memory and ram_budget_active:

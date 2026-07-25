@@ -76,6 +76,7 @@ def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
                         backend_capability_dict(c) for c in gpu.backend_capabilities
                     ],
                     "neural_engine_available": gpu.neural_engine_available,
+                    "overrides": gpu.overrides,
                 }
             )
         gpus.append(gpu_data)
