@@ -384,19 +384,17 @@ def auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float |
         return None
     if not hardware.gpus:
         return 2.0
+    from engine.compatibility import gpu_available_memory
     from hardware.memory import effective_usable_ram
 
     usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
     best_vram_gb = max(
-        (
-            usable_ram
-            if g.shared_memory
-            and (g.vram_bytes == 0 or hardware.ram_budget_bytes is not None)
-            else (
-                g.usable_vram_bytes if g.usable_vram_bytes is not None else g.vram_bytes
-            )
+        gpu_available_memory(
+            gpu,
+            usable_ram,
+            ram_budget_active=hardware.ram_budget_bytes is not None,
         )
-        for g in hardware.gpus
+        for gpu in hardware.gpus
     ) / (1024**3)
     if best_vram_gb >= 30:
         return 12.0
