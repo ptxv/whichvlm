@@ -24,8 +24,8 @@ makes human review easier.
 
 ## Release
 
-Before the first release, configure a PyPI trusted publisher for the `pypi`
-environment and `.github/workflows/release.yml`.
+Before the first release, configure a PyPI trusted publisher for
+`ptxv/whichvlm`, workflow `release.yml`, and environment `pypi`.
 
 To publish a release, update the version in `pyproject.toml`, merge the change,
 then push a matching `vX.Y.Z` tag. The release workflow builds and tests the

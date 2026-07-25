@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
       - name: Build distributions
         run: uv build --no-sources
-      - name: Test installed wheel
+      - name: Test pip and uvx installs
         working-directory: ${{ runner.temp }}
         run: |
           uv venv --seed --python 3.11 "$RUNNER_TEMP/whichvlm-release"

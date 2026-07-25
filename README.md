@@ -26,7 +26,7 @@ whichvlm --help
 The examples below use the installed command. Prefix them with `uvx` to run
 without installing.
 
-![whichvlm CLI demo](assets/whichvlm-demo.gif)
+![whichvlm CLI demo](https://raw.githubusercontent.com/ptxv/whichvlm/master/assets/whichvlm-demo.gif)
 
 Rank VLMs directly with `whichvlm`:
 
