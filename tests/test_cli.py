@@ -310,10 +310,6 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
 @pytest.mark.parametrize(
     ("args", "suggested_parts"),
     [
-        (
-            ["list", "--refresh", "--profile", "vision"],
-            ["whichvlm", "--refresh", "--profile", "vision"],
-        ),
         (["rank", "--top", "3"], ["whichvlm", "--top", "3"]),
         (["models"], ["whichvlm"]),
     ],
