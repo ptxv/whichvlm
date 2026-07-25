@@ -553,7 +553,11 @@ def transformers_vlm_profile(model: ModelInfo) -> TransformersProfile:
     family = model_family_text(model)
     if "qwen" in family and "vl" in family:
         if "qwen3" in family:
-            model_class = "Qwen3VLForConditionalGeneration"
+            model_class = (
+                "Qwen3VLMoeForConditionalGeneration"
+                if model.is_moe
+                else "Qwen3VLForConditionalGeneration"
+            )
         elif "2.5" in family or "2-5" in family:
             model_class = "Qwen2_5_VLForConditionalGeneration"
         else:

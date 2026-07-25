@@ -283,6 +283,30 @@ def test_transformers_vlm_script_preserves_multiple_image_order():
     compile(script, "<whichvlm-multi-image>", "exec")
 
 
+@pytest.mark.parametrize(
+    ("is_moe", "model_class"),
+    [
+        (False, "Qwen3VLForConditionalGeneration"),
+        (True, "Qwen3VLMoeForConditionalGeneration"),
+    ],
+)
+def test_qwen3_vlm_script_uses_matching_model_class(is_moe, model_class):
+    script = generate_run_script(
+        vlm_model(
+            id="Qwen/Qwen3-VL-30B-A3B-Instruct",
+            architecture="qwen3vl",
+            is_moe=is_moe,
+        ),
+        None,
+        4096,
+        False,
+        image_paths=("/tmp/first.png", "/tmp/second.png"),
+        backend_name="transformers",
+    )
+
+    assert model_class in script
+
+
 def test_multi_image_runtime_rejects_unvalidated_transformers_family():
     model = vlm_model(
         id="meta-llama/Llama-3.2-11B-Vision-Instruct",
