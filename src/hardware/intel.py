@@ -11,7 +11,6 @@ from hardware.types import GPUInfo
 logger = logging.getLogger(__name__)
 
 ARC_PRO_B70_KEY = "Arc Pro B70"
-ARC_PRO_B70_NAME = "Intel Arc Pro B70 Graphics"
 
 DISPLAY_CLASSES = (
     "vga compatible controller",
@@ -95,15 +94,16 @@ def detect_intel_gpus() -> list[GPUInfo]:
     gpus: list[GPUInfo] = []
     for detected_name in names:
         is_arc_pro_b70 = normalize_detected_gpu_name(detected_name) == ARC_PRO_B70_KEY
-        name = ARC_PRO_B70_NAME if is_arc_pro_b70 else detected_name
         vram_bytes = 32 * BYTES_PER_GIB if is_arc_pro_b70 else 0
         gpus.append(
             GPUInfo(
-                name=name,
+                name=detected_name,
                 vendor="intel",
                 vram_bytes=vram_bytes,
                 memory_bandwidth_gbps=(
-                    resolve_detected_bandwidth(name) if is_arc_pro_b70 else None
+                    resolve_detected_bandwidth(detected_name)
+                    if is_arc_pro_b70
+                    else None
                 ),
                 shared_memory=not is_arc_pro_b70,
             )

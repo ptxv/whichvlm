@@ -13,9 +13,6 @@ def test_normalize_strips_vendor_trademark_and_maps_laptop_to_mobile():
         == "GeForce RTX 5090 Mobile"
     )
     assert normalize_detected_gpu_name("Intel(R) Arc(TM) A770 Graphics") == "Arc A770"
-    assert (
-        normalize_detected_gpu_name("Battlemage G31 [Intel Graphics]") == "Arc Pro B70"
-    )
     assert normalize_detected_gpu_name("AMD Radeon RX 6750 XT") == "Radeon RX 6750 XT"
 
 

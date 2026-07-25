@@ -48,7 +48,7 @@ def test_detect_arc_pro_b70_from_lspci_alias(monkeypatch, detected_name):
     gpu = intel.detect_intel_gpus()[0]
     ensure_backend_capabilities(gpu, "linux")
 
-    assert gpu.name == "Intel Arc Pro B70 Graphics"
+    assert gpu.name == detected_name
     assert gpu.vram_bytes == 32 * 1024**3
     assert gpu.memory_bandwidth_gbps == 608.0
     assert gpu.shared_memory is False
@@ -97,7 +97,7 @@ def test_detect_arc_pro_b70_from_sysfs_alias(monkeypatch, tmp_path):
 
     gpu = intel.detect_intel_gpus()[0]
 
-    assert gpu.name == "Intel Arc Pro B70 Graphics"
+    assert gpu.name == "Battlemage G31 [Intel Graphics]"
     assert gpu.vram_bytes == 32 * 1024**3
     assert gpu.memory_bandwidth_gbps == 608.0
     assert gpu.shared_memory is False
