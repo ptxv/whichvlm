@@ -4,7 +4,7 @@ from typing import Final
 
 
 MULTI_IMAGE_FAMILY_IDS: Final[frozenset[str]] = frozenset(
-    {"qwen-vl", "gemma-multimodal", "pixtral", "deepseek-vl"}
+    {"qwen-vl", "gemma-multimodal", "pixtral"}
 )
 
 

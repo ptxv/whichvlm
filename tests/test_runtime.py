@@ -325,6 +325,31 @@ def test_multi_image_runtime_rejects_unvalidated_transformers_family():
         )
 
 
+@pytest.mark.parametrize(
+    ("model_id", "architecture"),
+    [
+        ("deepseek-ai/deepseek-vl-7b-chat", "multi_modality"),
+        ("deepseek-ai/deepseek-vl2", "deepseek_vl_v2"),
+    ],
+)
+def test_multi_image_runtime_rejects_deepseek_checkpoints(model_id, architecture):
+    model = vlm_model(
+        id=model_id,
+        family_id="deepseek_vl",
+        architecture=architecture,
+    )
+
+    with pytest.raises(RuntimeUnsupportedError, match="Multi-image runs"):
+        generate_run_script(
+            model,
+            None,
+            4096,
+            False,
+            image_paths=("/tmp/first.png", "/tmp/second.png"),
+            backend_name="transformers",
+        )
+
+
 def test_multi_image_runtime_requires_model_capability():
     model = vlm_model(capabilities=ModelCapabilities(image=True))
 
