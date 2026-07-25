@@ -14,9 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v9
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           python-version: "3.11"
+      - name: Verify tag version
+        run: test "$GITHUB_REF_NAME" = "v$(uv version --short)"
+      - name: Run CPU-safe tests
+        run: uv run pytest -q
       - name: Build distributions
         run: uv build --no-sources
       - name: Test pip and uvx installs
