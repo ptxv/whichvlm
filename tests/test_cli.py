@@ -940,12 +940,19 @@ def test_hardware_plan_scores_target_gpu(monkeypatch):
     assert captured["details"] is True
 
 
-def make_model(model_id="org/Test-7B-GGUF", downloads=100, gguf_variants=None):
+def make_model(
+    model_id="org/Test-7B-GGUF",
+    downloads=100,
+    gguf_variants=None,
+    parameter_count=7_000_000_000,
+    parameter_count_active=None,
+):
     return ModelInfo(
         id=model_id,
         family_id="test-7b",
         name="Test-7B",
-        parameter_count=7_000_000_000,
+        parameter_count=parameter_count,
+        parameter_count_active=parameter_count_active,
         downloads=downloads,
         likes=10,
         gguf_variants=gguf_variants or [],
@@ -997,9 +1004,74 @@ def test_search_model_endswith_match():
 
 
 def test_search_model_term_match():
-    models = [make_model("org/Llama-3.1-8B-GGUF"), make_model("org/Qwen-7B")]
+    models = [
+        make_model("org/Llama-3.1-8B-GGUF", parameter_count=8_000_000_000),
+        make_model("org/Qwen-7B"),
+    ]
     result = resolve_model_match(models, "llama 8b")
     assert result.id == "org/Llama-3.1-8B-GGUF"
+
+
+def test_search_model_size_matches_total_parameters():
+    models = [
+        make_model("org/Foo-1.7B", downloads=1000, parameter_count=1_700_000_000),
+        make_model("org/Foo-7B", parameter_count=7_000_000_000),
+    ]
+
+    assert resolve_model_match(models, "Foo 7B").id == "org/Foo-7B"
+
+
+def test_search_model_moe_sizes_match_total_and_active_parameters():
+    models = [
+        make_model(
+            "org/Foo-30B-A3B",
+            parameter_count=30_000_000_000,
+            parameter_count_active=3_000_000_000,
+        ),
+        make_model(
+            "org/Foo-30B-A5B",
+            downloads=1000,
+            parameter_count=30_000_000_000,
+            parameter_count_active=5_000_000_000,
+        ),
+        make_model("org/Foo-3B", parameter_count=3_000_000_000),
+    ]
+
+    assert resolve_model_match(models, "Foo 3B").id == "org/Foo-3B"
+    assert resolve_model_match(models, "Foo 30B-A3B").id == "org/Foo-30B-A3B"
+
+
+@pytest.mark.parametrize(
+    ("query", "parameter_count"),
+    [("Foo 1.7B", 1_700_000_000), ("Foo 500M", 500_000_000)],
+)
+def test_search_model_decimal_and_million_sizes(query, parameter_count):
+    models = [
+        make_model("org/Foo-small", downloads=1000, parameter_count=125_000_000),
+        make_model("org/Foo-target", parameter_count=parameter_count),
+    ]
+
+    assert resolve_model_match(models, query).id == "org/Foo-target"
+
+
+def test_search_model_exact_id_precedes_size_metadata():
+    models = [
+        make_model("org/Foo-7B", parameter_count=1_700_000_000),
+        make_model("other/Foo-7B", downloads=1000, parameter_count=7_000_000_000),
+    ]
+
+    assert resolve_model_match(models, "org/Foo-7B").id == "org/Foo-7B"
+
+
+def test_search_model_known_size_precedes_unknown_metadata():
+    models = [
+        make_model("z/Foo-7B", downloads=1000, parameter_count=0),
+        make_model("a/Foo-7B", downloads=1000, parameter_count=0),
+        make_model("other/Foo", parameter_count=7_000_000_000),
+    ]
+
+    assert resolve_model_match(models, "Foo 7B").id == "other/Foo"
+    assert resolve_model_match(models[:2], "Foo 7B").id == "a/Foo-7B"
 
 
 def test_search_model_not_found():

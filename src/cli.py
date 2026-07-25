@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from difflib import get_close_matches
+import re
 import shlex
+from difflib import get_close_matches
 from typing import Optional
 
 import click
@@ -33,7 +34,7 @@ from runtime import (
     select_serve_backend,
     serve_request,
 )
-from utils import current_version, CONTEXT_LENGTH
+from utils import CONTEXT_LENGTH, current_version
 
 ROOT_RANKING_WORDS = {
     "find",
@@ -49,6 +50,11 @@ ROOT_RANKING_WORDS = {
     "vlm",
     "vlms",
 }
+
+PARAMETER_SIZE_RE = re.compile(
+    r"(?<![\d.])(\d+(?:\.\d+)?)([bm])(?:[-_]?a(\d+(?:\.\d+)?)([bm]))?(?![a-z0-9])",
+    re.IGNORECASE,
+)
 
 
 class WhichVLMGroup(typer.core.TyperGroup):
@@ -1275,13 +1281,24 @@ def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[Model
 
 def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
     query_lower = model_name.lower()
-    terms = query_lower.split()
+    requested_size = parse_parameter_size(query_lower)
+    terms = (
+        PARAMETER_SIZE_RE.sub(" ", query_lower, count=1).split()
+        if requested_size
+        else query_lower.split()
+    )
 
     matches = [m for m in models if m.id.lower() == query_lower]
     if not matches:
         matches = [m for m in models if m.id.lower().endswith("/" + query_lower)]
     if not matches:
         matches = [m for m in models if all(t in m.id.lower() for t in terms)]
+        if requested_size:
+            matches = [
+                m
+                for m in matches
+                if parameter_size_match_quality(m, requested_size) >= 0
+            ]
 
     if not matches:
         console.print(f"[red]No model found matching '{model_name}'.[/]")
@@ -1298,11 +1315,61 @@ def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
                 console.print(f"  • {m.id} ({p})")
         raise typer.Exit(code=1)
 
-    matches.sort(key=lambda m: m.downloads, reverse=True)
+    matches.sort(
+        key=lambda m: (
+            -parameter_size_match_quality(m, requested_size) if requested_size else 0,
+            -m.downloads,
+            m.id.lower(),
+        )
+    )
     model = matches[0]
     if len(matches) > 1:
         console.print(f"[dim]Found {len(matches)} matches, using: {model.id}[/]")
     return model
+
+
+def parse_parameter_size(value: str) -> tuple[int, int | None] | None:
+    match = PARAMETER_SIZE_RE.search(value)
+    if not match:
+        return None
+
+    def to_count(amount: str, unit: str) -> int:
+        return int(float(amount) * (1e9 if unit.lower() == "b" else 1e6))
+
+    total = to_count(match.group(1), match.group(2))
+    active = to_count(match.group(3), match.group(4)) if match.group(3) else None
+    return total, active
+
+
+def parameter_size_match_quality(
+    model: ModelInfo, requested_size: tuple[int, int | None]
+) -> int:
+    total, active = requested_size
+    if model.parameter_count > 0 and not parameter_counts_match(
+        model.parameter_count, total
+    ):
+        return -1
+    if (
+        active is not None
+        and model.parameter_count_active
+        and not parameter_counts_match(model.parameter_count_active, active)
+    ):
+        return -1
+    if model.parameter_count > 0 and (active is None or model.parameter_count_active):
+        return 1
+
+    name_size = parse_parameter_size(model.id)
+    if not name_size or not parameter_counts_match(name_size[0], total):
+        return -1
+    if active is not None and (
+        name_size[1] is None or not parameter_counts_match(name_size[1], active)
+    ):
+        return -1
+    return 0
+
+
+def parameter_counts_match(actual: int, requested: int) -> bool:
+    return abs(actual - requested) <= requested * 0.1
 
 
 def select_gguf_variant(
