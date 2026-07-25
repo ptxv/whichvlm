@@ -1,4 +1,15 @@
-from engine.vram import estimate_kv_cache, estimate_vram, estimate_vram_details
+import json
+from dataclasses import asdict, replace
+
+import pytest
+
+import engine.vram as vram
+from engine.vram import (
+    estimate_kv_cache,
+    estimate_vram,
+    estimate_vram_details,
+    load_vram_calibrations,
+)
 from engine.workload import VisionWorkload
 from models.types import (
     GGUFVariant,
@@ -6,6 +17,33 @@ from models.types import (
     ModelComponent,
     ModelInfo,
 )
+
+CALIBRATION_PROVENANCE = {
+    "model_id": "owner/calibration-model",
+    "model_revision": "0123456789abcdef",
+    "artifact": "model-q4_k_m.gguf",
+    "gpu": "NVIDIA RTX 4090",
+    "runtime_version": "llama.cpp b1234",
+    "command": (
+        "python benchmarks/real_hardware.py gguf-mmproj "
+        "--repo owner/calibration-model --model-file model-q4_k_m.gguf "
+        "--mmproj-file mmproj-f16.gguf --image image.png"
+    ),
+    "measurement_method": "nvidia-smi peak used memory",
+    "source": "https://example.com/calibration-log",
+}
+
+
+@pytest.fixture
+def calibrations_with_evidence(monkeypatch):
+    monkeypatch.setattr(
+        vram,
+        "VRAM_CALIBRATIONS",
+        tuple(
+            replace(calibration, **CALIBRATION_PROVENANCE)
+            for calibration in vram.VRAM_CALIBRATIONS
+        ),
+    )
 
 
 def make_model(params: int, model_id: str = "test/model", **kwargs) -> ModelInfo:
@@ -94,6 +132,17 @@ def qwen3_dense_model() -> ModelInfo:
     )
 
 
+def test_calibration_loader_reads_provenance(tmp_path):
+    calibration = replace(vram.VRAM_CALIBRATIONS[0], **CALIBRATION_PROVENANCE)
+    path = tmp_path / "calibrations.json"
+    path.write_text(json.dumps([asdict(calibration)]), encoding="utf-8")
+
+    loaded = load_vram_calibrations(path)
+
+    assert loaded == (calibration,)
+    assert loaded[0].has_reproducible_evidence
+
+
 def test_estimate_vram_gguf_variant():
     model = make_model(7_000_000_000)
     variant = GGUFVariant(
@@ -153,7 +202,12 @@ def test_estimate_kv_cache_uses_architecture_dimensions():
     assert estimate_kv_cache(grouped_query, 4096) == 536_870_912
 
 
-def test_vram_details_returns_components_range_and_confidence():
+def test_incomplete_calibration_evidence_uses_fallback_estimate(monkeypatch):
+    calibration = replace(
+        replace(vram.VRAM_CALIBRATIONS[0], **CALIBRATION_PROVENANCE),
+        source=None,
+    )
+    monkeypatch.setattr(vram, "VRAM_CALIBRATIONS", (calibration,))
     model = make_model(
         7_000_000_000,
         architecture="llama",
@@ -170,11 +224,15 @@ def test_vram_details_returns_components_range_and_confidence():
 
     estimate = estimate_vram_details(model, variant, context_length=4096)
 
-    assert estimate.confidence == "high"
-    assert estimate.notes == []
+    assert not calibration.has_reproducible_evidence
+    assert estimate.confidence == "medium"
+    assert estimate.notes == [
+        "no matching reproducible peak-memory calibration "
+        "(llama.cpp, gguf, Q4_K_M, context=4096)"
+    ]
     assert estimate.components.weights == 4_000_000_000
     assert estimate.components.kv_cache == 536_870_912
-    assert estimate.components.runtime_overhead > 800_000_000
+    assert estimate.components.runtime_overhead == 500_000_000
     assert estimate.lower_bytes < estimate.required_bytes < estimate.upper_bytes
 
 
@@ -195,7 +253,7 @@ def test_full_metadata_without_calibration_returns_medium_confidence():
 
     assert estimate.confidence == "medium"
     assert estimate.notes == [
-        "no matching peak-memory calibration "
+        "no matching reproducible peak-memory calibration "
         "(transformers, safetensors, FP16, context=4096)"
     ]
 
@@ -280,11 +338,12 @@ def test_vision_architecture_metadata_changes_image_token_cost():
     small_patch = estimate_vram_details(patch_14, None, vision_workload=workload)
     large_patch = estimate_vram_details(patch_28, None, vision_workload=workload)
 
-    assert small_patch.confidence == "high"
     assert small_patch.components.vision > large_patch.components.vision
 
 
-def test_quantized_transformers_variant_uses_quantized_calibration():
+def test_quantized_transformers_variant_uses_quantized_calibration(
+    calibrations_with_evidence,
+):
     awq = vlm_calibration_model(
         model_id="Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
         quantization_type="AWQ",
@@ -300,7 +359,9 @@ def test_quantized_transformers_variant_uses_quantized_calibration():
     assert awq_estimate.required_bytes < fp16_estimate.required_bytes
 
 
-def test_gguf_vlm_calibration_raises_confidence_for_architecture_alias():
+def test_evidenced_calibration_transfers_to_architecture_alias(
+    calibrations_with_evidence,
+):
     variant = GGUFVariant(
         filename="qwen2.5-vl-7b-q4_k_m.gguf",
         quant_type="Q4_K_M",
@@ -321,13 +382,18 @@ def test_gguf_vlm_calibration_raises_confidence_for_architecture_alias():
     assert calibrated.confidence == "high"
     assert calibrated.notes == []
     assert fallback.confidence == "medium"
-    assert any("no matching peak-memory calibration" in note for note in fallback.notes)
+    assert any(
+        "no matching reproducible peak-memory calibration" in note
+        for note in fallback.notes
+    )
     assert calibrated.upper_bytes - calibrated.lower_bytes < (
         fallback.upper_bytes - fallback.lower_bytes
     )
 
 
-def test_transformers_vlm_calibration_covers_internvl_and_gptq():
+def test_transformers_vlm_calibration_covers_internvl_and_gptq(
+    calibrations_with_evidence,
+):
     workload = VisionWorkload(image_count=1, image_size=448)
     internvl = vlm_calibration_model(
         params=8_000_000_000,
@@ -350,7 +416,9 @@ def test_transformers_vlm_calibration_covers_internvl_and_gptq():
     assert all(estimate.notes == [] for estimate in estimates)
 
 
-def test_moe_calibration_is_specific_to_moe_architecture():
+def test_moe_calibration_is_specific_to_moe_architecture(
+    calibrations_with_evidence,
+):
     variant = GGUFVariant(
         filename="qwen3-30b-a3b-q4_k_m.gguf",
         quant_type="Q4_K_M",
@@ -364,12 +432,12 @@ def test_moe_calibration_is_specific_to_moe_architecture():
     assert moe_estimate.notes == []
     assert dense_family_estimate.confidence == "medium"
     assert any(
-        "no matching peak-memory calibration" in note
+        "no matching reproducible peak-memory calibration" in note
         for note in dense_family_estimate.notes
     )
 
 
-def test_calibration_requires_matching_vlm_workload():
+def test_calibration_requires_matching_vlm_workload(calibrations_with_evidence):
     variant = GGUFVariant(
         filename="qwen2.5-vl-7b-q4_k_m.gguf",
         quant_type="Q4_K_M",
@@ -392,7 +460,7 @@ def test_calibration_requires_matching_vlm_workload():
     assert any("images=2@448px" in note for note in fallback.notes)
 
 
-def test_calibration_requires_nearby_model_size():
+def test_calibration_requires_nearby_model_size(calibrations_with_evidence):
     variant = GGUFVariant(
         filename="qwen2.5-vl-120b-q4_k_m.gguf",
         quant_type="Q4_K_M",
@@ -407,7 +475,10 @@ def test_calibration_requires_nearby_model_size():
     )
 
     assert estimate.confidence == "medium"
-    assert any("no matching peak-memory calibration" in note for note in estimate.notes)
+    assert any(
+        "no matching reproducible peak-memory calibration" in note
+        for note in estimate.notes
+    )
 
 
 def test_spatial_merge_reduces_vision_tokens():
