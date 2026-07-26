@@ -342,7 +342,7 @@ def test_registered_integration_has_complete_path(
         None,
         workload.context_length,
         False,
-        image_path="/tmp/image.png",
+        image_paths=("/tmp/image.png",),
         backend_name="transformers",
         hardware=linux_cuda_hardware(),
     )
@@ -351,4 +351,4 @@ def test_registered_integration_has_complete_path(
     assert script_type == "transformers_vlm"
     assert "AutoProcessor" in script
     assert "TextIteratorStreamer" in script
-    assert "image_path = '/tmp/image.png'" in script
+    assert "image_paths = ('/tmp/image.png',)" in script

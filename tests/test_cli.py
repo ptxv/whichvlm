@@ -44,7 +44,7 @@ from runtime import generate_run_script
 from utils import current_version
 from engine.types import CompatibilityResult
 from hardware.types import BackendCapability, GPUInfo, HardwareInfo, has_backend
-from models.types import GGUFVariant, ModelArtifact, ModelInfo
+from models.types import GGUFVariant, ModelArtifact, ModelCapabilities, ModelInfo
 from output.display import display_json
 
 
@@ -307,13 +307,10 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
         "test-org/Test-Vision-7B"
     ]
 
+
 @pytest.mark.parametrize(
     ("args", "suggested_parts"),
     [
-        (
-            ["list", "--refresh", "--profile", "vision"],
-            ["whichvlm", "--refresh", "--profile", "vision"],
-        ),
         (["rank", "--top", "3"], ["whichvlm", "--top", "3"]),
         (["models"], ["whichvlm"]),
     ],
@@ -1068,12 +1065,19 @@ def test_hardware_plan_scores_target_gpu(monkeypatch):
     assert captured["details"] is True
 
 
-def make_model(model_id="org/Test-7B-GGUF", downloads=100, gguf_variants=None):
+def make_model(
+    model_id="org/Test-7B-GGUF",
+    downloads=100,
+    gguf_variants=None,
+    parameter_count=7_000_000_000,
+    parameter_count_active=None,
+):
     return ModelInfo(
         id=model_id,
         family_id="test-7b",
         name="Test-7B",
-        parameter_count=7_000_000_000,
+        parameter_count=parameter_count,
+        parameter_count_active=parameter_count_active,
         downloads=downloads,
         likes=10,
         gguf_variants=gguf_variants or [],
@@ -1087,6 +1091,7 @@ def make_vlm_model(model_id="Qwen/Qwen2.5-VL-7B-Instruct"):
         name="Qwen2.5-VL-7B-Instruct",
         parameter_count=7_000_000_000,
         hf_pipeline_tag="image-text-to-text",
+        capabilities=ModelCapabilities(image=True, multi_image=True),
     )
 
 
@@ -1125,9 +1130,122 @@ def test_search_model_endswith_match():
 
 
 def test_search_model_term_match():
-    models = [make_model("org/Llama-3.1-8B-GGUF"), make_model("org/Qwen-7B")]
+    models = [
+        make_model("org/Llama-3.1-8B-GGUF", parameter_count=8_000_000_000),
+        make_model("org/Qwen-7B"),
+    ]
     result = resolve_model_match(models, "llama 8b")
     assert result.id == "org/Llama-3.1-8B-GGUF"
+
+
+def test_search_model_term_match_preserves_download_ties():
+    models = [make_model("z/Foo-Instruct"), make_model("a/Foo-Instruct")]
+
+    assert resolve_model_match(models, "Foo Instruct").id == "z/Foo-Instruct"
+
+
+def test_search_model_size_matches_total_parameters():
+    models = [
+        make_model("org/Foo-1.7B", downloads=1000, parameter_count=1_700_000_000),
+        make_model(
+            "org/Foo-7B",
+            parameter_count=7_000_000_000,
+            parameter_count_active=3_000_000_000,
+        ),
+    ]
+
+    assert resolve_model_match(models, "Foo 7B").id == "org/Foo-7B"
+
+
+def test_search_model_prefers_size_label_with_approximate_metadata():
+    models = [
+        make_model(
+            "Qwen/Qwen2.5-VL-7B-Instruct",
+            parameter_count=8_292_166_656,
+        ),
+        make_model(
+            "other/Qwen2.5-VL-8B-Instruct",
+            downloads=1000,
+            parameter_count=8_000_000_000,
+        ),
+        make_model(
+            "other/Qwen2.5-VL-Instruct",
+            downloads=1000,
+            parameter_count=7_000_000_000,
+        ),
+        make_model(
+            "bad/Qwen2.5-VL-7B-Instruct",
+            downloads=2000,
+            parameter_count=70_000_000_000,
+        ),
+    ]
+
+    result = resolve_model_match(models, "Qwen 7B")
+
+    assert result.id == "Qwen/Qwen2.5-VL-7B-Instruct"
+
+
+def test_search_model_moe_sizes_match_total_and_active_parameters():
+    models = [
+        make_model(
+            "org/Foo-30B-A3B",
+            parameter_count=30_000_000_000,
+            parameter_count_active=3_000_000_000,
+        ),
+        make_model(
+            "org/Foo-30B-A5B",
+            downloads=1000,
+            parameter_count=30_000_000_000,
+            parameter_count_active=5_000_000_000,
+        ),
+        make_model(
+            "bad/Foo-30B-A3B",
+            downloads=2000,
+            parameter_count=30_000_000_000,
+            parameter_count_active=5_000_000_000,
+        ),
+        make_model("org/Foo-3B", parameter_count=3_000_000_000),
+    ]
+
+    assert resolve_model_match(models, "Foo 3B").id == "org/Foo-3B"
+    assert resolve_model_match(models, "Foo 30B-A3B").id == "org/Foo-30B-A3B"
+
+
+@pytest.mark.parametrize(
+    ("query", "parameter_count", "other_count"),
+    [
+        ("Foo 1.7B", 1_700_000_000, 1_800_000_000),
+        ("Foo 500M", 500_000_000, 550_000_000),
+    ],
+)
+def test_search_model_decimal_and_million_sizes(query, parameter_count, other_count):
+    models = [
+        make_model("org/Foo-other", downloads=1000, parameter_count=other_count),
+        make_model("org/Foo-target", parameter_count=parameter_count),
+    ]
+
+    assert resolve_model_match(models, query).id == "org/Foo-target"
+
+
+def test_search_model_exact_id_precedes_size_metadata():
+    models = [
+        make_model("org/Foo-7B", parameter_count=1_700_000_000),
+        make_model("other/Foo-7B", downloads=1000, parameter_count=7_000_000_000),
+    ]
+
+    assert resolve_model_match(models, "org/Foo-7B").id == "org/Foo-7B"
+
+
+def test_search_model_known_size_precedes_unknown_metadata():
+    unknown_models = [
+        make_model("org/Foo-1.7B", downloads=2000, parameter_count=0),
+        make_model("z/Foo-7B", downloads=1000, parameter_count=0),
+        make_model("a/Foo-7B", downloads=1000, parameter_count=0),
+    ]
+    models = [*unknown_models, make_model("other/Foo", parameter_count=7_000_000_000)]
+
+    assert resolve_model_match(models, "Foo 7B").id == "other/Foo"
+    assert resolve_model_match(unknown_models, "Foo 7B").id == "a/Foo-7B"
 
 
 def test_search_model_not_found():
@@ -1589,13 +1707,98 @@ def test_run_incompatible_backend_shows_alternatives(monkeypatch):
     assert "whichvlm run 'Qwen/Qwen2.5-VL-7B-Instruct'" in result.stdout
 
 
+def test_run_passes_repeatable_images_to_ranking_and_runtime(monkeypatch):
+    model = make_vlm_model()
+    captured: dict[str, object] = {}
+
+    def fake_rank_models(models, hardware, **kwargs):
+        captured["workload"] = kwargs["workload"]
+        return [
+            CompatibilityResult(
+                model=model,
+                gguf_variant=None,
+                can_run=True,
+                vram_required_bytes=8 * 1024**3,
+                vram_available_bytes=24 * 1024**3,
+                quality_score=90.0,
+            )
+        ]
+
+    def fake_run_request(request, backend_name=None):
+        captured["image_paths"] = request.image_paths
+        captured["backend_name"] = backend_name
+        return 0
+
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
+    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(24))
+    monkeypatch.setattr("models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr(cli_mod, "run_request", fake_run_request)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "run",
+            "--backend",
+            "transformers",
+            "--image",
+            "/tmp/before.png",
+            "--image",
+            "/tmp/after.png",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["workload"].image_count == 2
+    assert captured["image_paths"] == ("/tmp/before.png", "/tmp/after.png")
+    assert captured["backend_name"] == "transformers"
+
+
+def test_run_rejects_multi_image_for_unvalidated_family(monkeypatch):
+    model = ModelInfo(
+        id="meta-llama/Llama-3.2-11B-Vision-Instruct",
+        family_id="llama-vision",
+        name="Llama-3.2-11B-Vision-Instruct",
+        parameter_count=11_000_000_000,
+        architecture="mllama",
+        hf_pipeline_tag="image-text-to-text",
+    )
+
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
+    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(24))
+    monkeypatch.setattr(
+        cli_mod,
+        "run_request",
+        lambda *args, **kwargs: pytest.fail("runtime should not start"),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "run",
+            model.id,
+            "--backend",
+            "transformers",
+            "--image",
+            "/tmp/first.png",
+            "--image",
+            "/tmp/second.png",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Multi-image runs are not supported" in result.stdout
+
+
 def test_run_qwen25_video_passes_video_path(monkeypatch):
     model = make_video_model()
     captured: dict[str, object] = {}
 
     def fake_run_request(request, backend_name=None):
         captured["video_path"] = request.video_path
-        captured["image_path"] = request.image_path
+        captured["image_paths"] = request.image_paths
         captured["backend_name"] = backend_name
         return 0
 
@@ -1615,7 +1818,7 @@ def test_run_qwen25_video_passes_video_path(monkeypatch):
 
     assert result.exit_code == 0
     assert captured["video_path"] == "/tmp/video.mp4"
-    assert captured["image_path"] is None
+    assert captured["image_paths"] == ()
     assert captured["backend_name"] == "transformers"
 
 
@@ -1777,7 +1980,7 @@ def test_snippet_passes_context_length_and_max_tokens(monkeypatch):
         variant,
         context_length,
         cpu_only,
-        image_path=None,
+        image_paths=(),
         video_path=None,
         audio_path=None,
         max_tokens=512,

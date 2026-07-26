@@ -16,7 +16,6 @@ TRAILING_GRAPHICS_RE = re.compile(r"\bgraphics\s*$", re.IGNORECASE)
 WHITESPACE_RE = re.compile(r"\s+")
 MOBILE_MARKER_RE = re.compile(r"\b(?:laptop|mobile|max-?q)\b", re.IGNORECASE)
 
-
 VRAM_NOSPACE_RE = re.compile(r"\b(\d+)GB\b", re.IGNORECASE)
 BRACKET_RE = re.compile(r"\[(.+)]")
 
@@ -149,4 +148,8 @@ def resolve_detected_bandwidth(
     variant = memory_clock_variant_bandwidth(name, mem_clock_mhz)
     if variant is not None:
         return variant
-    return static_bandwidth(name) or dbgpu_bandwidth(name, vram_bytes)
+    return (
+        static_bandwidth(name)
+        or static_bandwidth(normalize_detected_gpu_name(name))
+        or dbgpu_bandwidth(name, vram_bytes)
+    )

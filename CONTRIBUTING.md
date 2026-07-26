@@ -21,3 +21,13 @@ command, and observed output.
 
 Write plainly. Keep sentences short. Prefer concrete details over filler. This
 makes human review easier.
+
+## Release
+
+Before the first release, configure a PyPI trusted publisher for
+`ptxv/whichvlm`, workflow `release.yml`, and environment `pypi`.
+
+To publish a release, update the version in `pyproject.toml`, merge the change,
+then push a matching `vX.Y.Z` tag. The release workflow builds and tests the
+wheel and source distribution, publishes them to PyPI, and creates a GitHub
+release with generated notes and both artifacts.
