@@ -1,17 +1,38 @@
 import asyncio
+import importlib
+
+import pytest
 
 import models.fetcher as fetcher_mod
 from models.fetcher import (
+    dicts_to_models,
     extract_hf_eval_score,
     extract_published_at,
-    normalize_param_count,
-    parse_model,
-    dicts_to_models,
     fetch_models,
     inventory_source_provenance,
     models_to_dicts,
+    normalize_param_count,
+    parse_model,
 )
 from models.types import ModelArtifact, ModelInfo
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "expected"),
+    [
+        (None, "https://huggingface.co/api"),
+        ("https://hf-mirror.example", "https://hf-mirror.example/api"),
+        ("https://hf-mirror.example/", "https://hf-mirror.example/api"),
+    ],
+)
+def test_hf_api_base_honors_hf_endpoint(monkeypatch, endpoint, expected):
+    with monkeypatch.context() as env:
+        if endpoint is None:
+            env.delenv("HF_ENDPOINT", raising=False)
+        else:
+            env.setenv("HF_ENDPOINT", endpoint)
+        assert importlib.reload(fetcher_mod).HF_API_BASE == expected
+    importlib.reload(fetcher_mod)
 
 
 def test_normalize_param_count_for_quantized_repo_uses_size_hint():
@@ -729,6 +750,7 @@ def test_deepseek_v4_flash_uses_model_card_counts_over_hf_tensor_metadata():
 
 def test_fetch_models_backfills_explicit_vlm_seed_details(monkeypatch):
     seed_id = "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    api_base = "https://hf-mirror.example/api"
     seen_urls: list[str] = []
 
     class Response:
@@ -763,10 +785,13 @@ def test_fetch_models_backfills_explicit_vlm_seed_details(monkeypatch):
             )
         return Response({}, status_code=404)
 
+    monkeypatch.setattr(fetcher_mod, "HF_API_BASE", api_base)
     monkeypatch.setattr(fetcher_mod, "get_with_retries", fake_get)
     monkeypatch.setattr(fetcher_mod, "known_vlm_model_ids", lambda: (seed_id,))
 
     models = asyncio.run(fetch_models(limit=1, include_vision=True))
 
     assert [model.id for model in models] == [seed_id]
-    assert any(url.endswith(f"/models/{seed_id}") for url in seen_urls)
+    assert all(url.startswith(f"{api_base}/models") for url in seen_urls)
+    assert f"{api_base}/models" in seen_urls
+    assert f"{api_base}/models/{seed_id}" in seen_urls

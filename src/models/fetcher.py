@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import statistics
 
@@ -34,7 +35,7 @@ from models.types import GGUFVariant, ModelCapabilities, ModelInfo
 
 logger = logging.getLogger(__name__)
 
-HF_API_BASE = "https://huggingface.co/api"
+HF_API_BASE = f"{os.getenv('HF_ENDPOINT', 'https://huggingface.co').rstrip('/')}/api"
 GGUF_SPLIT_RE = re.compile(r"-(\d{5})-of-(\d{5})\.gguf$", re.IGNORECASE)
 GENERAL_EVAL_KEYWORDS = (
     "mmlu",

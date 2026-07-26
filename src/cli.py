@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from difflib import get_close_matches
+import re
 import shlex
+from difflib import get_close_matches
 from typing import Optional
 
 import click
@@ -35,7 +36,7 @@ from runtime import (
     supports_multi_image_run,
     validate_multi_image_run,
 )
-from utils import current_version, CONTEXT_LENGTH
+from utils import CONTEXT_LENGTH, current_version
 
 ROOT_RANKING_WORDS = {
     "find",
@@ -51,6 +52,12 @@ ROOT_RANKING_WORDS = {
     "vlm",
     "vlms",
 }
+
+PARAMETER_SIZE_RE = re.compile(
+    r"(?<![\d.])(\d+(?:\.\d+)?)([bm])(?:[-_]?a(\d+(?:\.\d+)?)([bm]))?(?![a-z0-9])",
+    re.IGNORECASE,
+)
+PARAMETER_SIZE_TOLERANCE = 0.20
 
 
 class WhichVLMGroup(typer.core.TyperGroup):
@@ -1277,17 +1284,30 @@ def load_model_catalog(refresh: bool, include_vision: bool = True) -> list[Model
 
 def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
     query_lower = model_name.lower()
-    terms = query_lower.split()
+    query_terms = query_lower.split()
+    requested_size = parse_parameter_size(query_lower)
+    size_matches: list[tuple[ModelInfo, tuple[int, float]]] = []
+    terms = (
+        PARAMETER_SIZE_RE.sub(" ", query_lower, count=1).split()
+        if requested_size
+        else query_terms
+    )
 
     matches = [m for m in models if m.id.lower() == query_lower]
     if not matches:
         matches = [m for m in models if m.id.lower().endswith("/" + query_lower)]
     if not matches:
         matches = [m for m in models if all(t in m.id.lower() for t in terms)]
+        if requested_size:
+            for model in matches:
+                size_key = parameter_size_sort_key(model, requested_size)
+                if size_key is not None:
+                    size_matches.append((model, size_key))
+            matches = [model for model, _ in size_matches]
 
     if not matches:
         console.print(f"[red]No model found matching '{model_name}'.[/]")
-        suggestions = [m for m in models if any(t in m.id.lower() for t in terms)]
+        suggestions = [m for m in models if any(t in m.id.lower() for t in query_terms)]
         if suggestions:
             suggestions.sort(key=lambda m: m.downloads, reverse=True)
             console.print("\n[yellow]Did you mean:[/]")
@@ -1300,11 +1320,65 @@ def resolve_model_match(models: list[ModelInfo], model_name: str) -> ModelInfo:
                 console.print(f"  • {m.id} ({p})")
         raise typer.Exit(code=1)
 
-    matches.sort(key=lambda m: m.downloads, reverse=True)
-    model = matches[0]
+    if size_matches:
+        model = min(
+            size_matches,
+            key=lambda match: (
+                *match[1],
+                -match[0].downloads,
+                match[0].id.lower(),
+            ),
+        )[0]
+    else:
+        model = max(matches, key=lambda m: m.downloads)
     if len(matches) > 1:
         console.print(f"[dim]Found {len(matches)} matches, using: {model.id}[/]")
     return model
+
+
+def parse_parameter_size(value: str) -> tuple[int, int | None] | None:
+    match = PARAMETER_SIZE_RE.search(value)
+    if not match:
+        return None
+
+    def to_count(amount: str, unit: str) -> int:
+        return round(float(amount) * (1e9 if unit.lower() == "b" else 1e6))
+
+    total = to_count(match.group(1), match.group(2))
+    active = to_count(match.group(3), match.group(4)) if match.group(3) else None
+    return total, active
+
+
+def parameter_size_sort_key(
+    model: ModelInfo, requested_size: tuple[int, int | None]
+) -> tuple[int, float] | None:
+    """Return (match rank, metadata error), or None when sizes conflict."""
+    total, active = requested_size
+    label_size = parse_parameter_size(model.id)
+    label_matches = label_size == requested_size
+    if label_size is not None and not label_matches:
+        return None
+
+    parameter_counts = [(model.parameter_count, total)]
+    if active is not None:
+        parameter_counts.append((model.parameter_count_active or 0, active))
+    if any(
+        actual and abs(actual - expected) > expected * PARAMETER_SIZE_TOLERANCE
+        for actual, expected in parameter_counts
+    ):
+        return None
+
+    metadata_complete = all(actual for actual, _ in parameter_counts)
+    if not label_matches and not metadata_complete:
+        return None
+    if not metadata_complete:
+        return 2, 0
+    if label_matches:
+        return 0, 0
+    relative_error = sum(
+        abs(actual - expected) / expected for actual, expected in parameter_counts
+    )
+    return 1, relative_error
 
 
 def select_gguf_variant(

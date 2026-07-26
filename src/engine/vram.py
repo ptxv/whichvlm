@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from data.framework import FRAMEWORK_OVERHEAD_BYTES
@@ -54,6 +56,29 @@ class VramCalibration:
     estimate_bytes: int
     measured_peak_bytes: int
     is_moe: bool = False
+    model_id: str | None = None
+    model_revision: str | None = None
+    artifact: str | None = None
+    gpu: str | None = None
+    runtime_version: str | None = None
+    command: str | None = None
+    measurement_method: str | None = None
+    source: str | None = None
+
+    @property
+    def has_reproducible_evidence(self) -> bool:
+        return all(
+            (
+                self.model_id,
+                self.model_revision,
+                self.artifact,
+                self.gpu,
+                self.runtime_version,
+                self.command,
+                self.measurement_method,
+                self.source,
+            )
+        )
 
 
 VRAM_RANGE_FACTORS: dict[VramConfidence, tuple[float, float]] = {
@@ -62,107 +87,17 @@ VRAM_RANGE_FACTORS: dict[VramConfidence, tuple[float, float]] = {
     "low": (0.65, 1.60),
 }
 MAX_CALIBRATION_PARAM_RATIO = 2.0
+CALIBRATION_DATA_PATH = Path(__file__).parents[1] / "data" / "vram_calibrations.json"
 
-VRAM_CALIBRATIONS: tuple[VramCalibration, ...] = (
-    VramCalibration(
-        architecture="llama",
-        parameter_count=7_000_000_000,
-        backend="llama.cpp",
-        quant_type="Q4_K_M",
-        model_format="gguf",
-        context_length=4096,
-        image_count=0,
-        image_size=0,
-        estimate_bytes=7_245_493_760,
-        measured_peak_bytes=7_760_000_000,
-    ),
-    VramCalibration(
-        architecture="mixtral",
-        parameter_count=46_700_000_000,
-        backend="llama.cpp",
-        quant_type="Q4_K_M",
-        model_format="gguf",
-        context_length=4096,
-        image_count=0,
-        image_size=0,
-        estimate_bytes=29_074_327_193,
-        measured_peak_bytes=31_200_000_000,
-        is_moe=True,
-    ),
-    VramCalibration(
-        architecture="qwen2vl",
-        parameter_count=7_000_000_000,
-        backend="transformers",
-        quant_type="FP16",
-        model_format="safetensors",
-        context_length=4096,
-        image_count=1,
-        image_size=448,
-        estimate_bytes=16_769_715_744,
-        measured_peak_bytes=19_900_000_000,
-    ),
-    VramCalibration(
-        architecture="qwen2vl",
-        parameter_count=7_000_000_000,
-        backend="llama.cpp",
-        quant_type="Q4_K_M",
-        model_format="gguf",
-        context_length=4096,
-        image_count=1,
-        image_size=448,
-        estimate_bytes=7_269_715_744,
-        measured_peak_bytes=8_100_000_000,
-    ),
-    VramCalibration(
-        architecture="qwen2vl",
-        parameter_count=7_000_000_000,
-        backend="transformers",
-        quant_type="AWQ",
-        model_format="safetensors",
-        context_length=4096,
-        image_count=1,
-        image_size=448,
-        estimate_bytes=6_794_715_744,
-        measured_peak_bytes=8_200_000_000,
-    ),
-    VramCalibration(
-        architecture="internvl",
-        parameter_count=8_000_000_000,
-        backend="transformers",
-        quant_type="FP16",
-        model_format="safetensors",
-        context_length=4096,
-        image_count=1,
-        image_size=448,
-        estimate_bytes=19_425_694_720,
-        measured_peak_bytes=21_800_000_000,
-    ),
-    VramCalibration(
-        architecture="gemma",
-        parameter_count=27_000_000_000,
-        backend="transformers",
-        quant_type="GPTQ",
-        model_format="safetensors",
-        context_length=4096,
-        image_count=1,
-        image_size=448,
-        estimate_bytes=23_774_270_912,
-        measured_peak_bytes=27_100_000_000,
-    ),
-    VramCalibration(
-        architecture="qwen3",
-        parameter_count=30_000_000_000,
-        backend="llama.cpp",
-        quant_type="Q4_K_M",
-        model_format="gguf",
-        context_length=4096,
-        image_count=0,
-        image_size=0,
-        estimate_bytes=19_779_537_766,
-        measured_peak_bytes=21_300_000_000,
-        is_moe=True,
-    ),
-)
+
+def load_vram_calibrations(
+    path: Path = CALIBRATION_DATA_PATH,
+) -> tuple[VramCalibration, ...]:
+    records = json.loads(path.read_text(encoding="utf-8"))
+    return tuple(VramCalibration(**record) for record in records)
+
+
+VRAM_CALIBRATIONS = load_vram_calibrations()
 
 
 def dtype_bytes(dtype: str | None) -> float:
@@ -300,6 +235,8 @@ def calibration_match(
     quant = quant_type(model, variant)
     architecture = calibration_architecture_key(model.architecture)
     for sample in VRAM_CALIBRATIONS:
+        if not sample.has_reproducible_evidence:
+            continue
         sample_architecture = calibration_architecture_key(sample.architecture)
         if not architecture.startswith(sample_architecture):
             continue
@@ -481,7 +418,7 @@ def vram_notes(
             notes.append("vision activations use image-size fallback")
     if calibration is None:
         note = (
-            "no matching peak-memory calibration "
+            "no matching reproducible peak-memory calibration "
             f"({backend_name(model, variant)}, {model_format(model, variant)}, "
             f"{quant_type(model, variant)}, context={context_length}"
         )
