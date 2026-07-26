@@ -8,37 +8,40 @@ Find local vision-language models that fit your machine.
 
 Use Python 3.11 or newer.
 
+Run without installing:
+
 ```bash
-cd ~/Downloads/Github/whichvlm
-uv sync
-uv run whichvlm --help
+uvx whichvlm --help
 ```
 
-For editable development with test dependencies:
+Or install with pip:
 
 ```bash
-uv sync --group dev
-uv run pytest -q
+python -m pip install whichvlm
+whichvlm --help
 ```
 
 ## Use
 
-![whichvlm CLI demo](assets/whichvlm-demo.gif)
+The examples below use the installed command. Prefix them with `uvx` to run
+without installing.
+
+![whichvlm CLI demo](https://raw.githubusercontent.com/ptxv/whichvlm/master/assets/whichvlm-demo.gif)
 
 Rank VLMs directly with `whichvlm`:
 
 ```bash
-uv run whichvlm
-uv run whichvlm list
-uv run whichvlm --refresh --profile vision
+whichvlm
+whichvlm list
+whichvlm --refresh --profile vision
 ```
 
 Simulate Apple Silicon or a discrete GPU:
 
 ```bash
-uv run whichvlm --gpu "Apple M3 Max"
-uv run whichvlm --gpu "RTX 4090" --vram-headroom 10%
-uv run whichvlm --gpu "RTX 4090" --perf-vram 10%
+whichvlm --gpu "Apple M3 Max"
+whichvlm --gpu "RTX 4090" --vram-headroom 10%
+whichvlm --gpu "RTX 4090" --perf-vram 10%
 ```
 
 Override incomplete detected GPU metadata:
@@ -50,29 +53,29 @@ uv run whichvlm --vram 12 --memory-bandwidth 288
 Return machine-readable output:
 
 ```bash
-uv run whichvlm --json --top 5
+whichvlm --json --top 5
 ```
 
 Change the VLM workload estimate:
 
 ```bash
-uv run whichvlm --image-count 2 --image-size 896 --context-length 8192
+whichvlm --image-count 2 --image-size 896 --context-length 8192
 ```
 
 Reserve memory for backend overhead or performance features:
 
 ```bash
-uv run whichvlm --gpu "RTX 4090" --vram-headroom auto --perf-vram 10%
-uv run whichvlm plan Qwen/Qwen2.5-VL-7B-Instruct --perf-vram 10%
-uv run whichvlm hardware-plan "RTX 4090" --perf-vram 10%
-uv run whichvlm upgrade "RTX 4090" "RTX 5090" --perf-vram 10%
+whichvlm --gpu "RTX 4090" --vram-headroom auto --perf-vram 10%
+whichvlm plan Qwen/Qwen2.5-VL-7B-Instruct --perf-vram 10%
+whichvlm hardware-plan "RTX 4090" --perf-vram 10%
+whichvlm upgrade "RTX 4090" "RTX 5090" --perf-vram 10%
 ```
 
 Only show full GPU fits:
 
 ```bash
-uv run whichvlm --gpu-only
-uv run whichvlm --fit full-gpu
+whichvlm --gpu-only
+whichvlm --fit full-gpu
 ```
 
 ## Run A Model
@@ -80,15 +83,15 @@ uv run whichvlm --fit full-gpu
 VLM runners require an image path.
 
 ```bash
-uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
-uv run whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
+whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
+whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
 ```
 
 For vLLM and SGLang, derive backend memory utilization from the same reserve:
 
 ```bash
-uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend vllm --perf-vram 10% --image ./image.jpg
-uv run whichvlm serve Qwen/Qwen2.5-VL-7B-Instruct --backend sglang --gpu-memory-utilization 0.82
+whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend vllm --perf-vram 10% --image ./image.jpg
+whichvlm serve Qwen/Qwen2.5-VL-7B-Instruct --backend sglang --gpu-memory-utilization 0.82
 ```
 
 Runtime support is intentionally guarded:
@@ -124,6 +127,12 @@ Benchmark evidence is graded as direct, variant, base model, interpolated, self-
 
 ## Development
 
+Install the project and test dependencies from a clone:
+
+```bash
+uv sync --group dev
+```
+
 Run the full suite:
 
 ```bash
@@ -147,6 +156,14 @@ The source layout is under `src`. Tests live under `tests`. Avoid importing priv
 ## Real Hardware Benchmarks
 
 These use real hardware, downloads, and runtime dependencies.
+
+Peak-memory calibrations are loaded from
+`src/data/vram_calibrations.json`. A record affects estimates only when it
+includes the model ID and revision, artifact, GPU, runtime version, benchmark
+command, measurement method, and evidence source. The command and source must
+be sufficient to reproduce the real-hardware measurement. Evidenced records
+may transfer to nearby models in the same architecture when backend, format,
+quantization, workload, and MoE state also match.
 
 Run the same detection benchmark on every target machine:
 
