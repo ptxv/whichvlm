@@ -33,6 +33,8 @@ from runtime import (
     select_backend,
     select_serve_backend,
     serve_request,
+    supports_multi_image_run,
+    validate_multi_image_run,
 )
 from utils import CONTEXT_LENGTH, current_version
 
@@ -1504,8 +1506,8 @@ def run(
     max_tokens: int = typer.Option(
         512, "--max-tokens", help="Maximum generated tokens per response"
     ),
-    image: Optional[str] = typer.Option(
-        None, "--image", "-i", help="Image path for VLM runners"
+    image: Optional[list[str]] = typer.Option(
+        None, "--image", "-i", help="Image path for VLM runners; repeat for comparisons"
     ),
     video: Optional[str] = typer.Option(
         None, "--video", help="Video path for supported video-language runners"
@@ -1544,6 +1546,7 @@ def run(
         models = load_model_catalog(refresh)
         progress.remove_task(task)
 
+    image_paths = tuple(image or ())
     variant = None
     hardware = None
     if model_name:
@@ -1560,6 +1563,13 @@ def run(
         for family in families:
             all_models.append(family.base_model)
             all_models.extend(family.variants)
+        if len(image_paths) > 1:
+            all_models = [
+                model
+                for model in all_models
+                if not model.gguf_variants
+                and supports_multi_image_run(model, hardware=hardware)
+            ]
 
         results = rank_models(
             all_models,
@@ -1569,15 +1579,10 @@ def run(
             quant_filter=quant,
             benchmark_scores=bench_scores,
             task_profile="vision",
-            vision_workload=Workload(
-                task="image_qa",
-                context_length=context_length,
-                image_count=1,
-            ),
             workload=Workload(
                 task="image_qa",
                 context_length=context_length,
-                image_count=1,
+                image_count=len(image_paths),
             ),
         )
         if not results:
@@ -1629,12 +1634,12 @@ def run(
             raise typer.Exit(code=1)
 
     assert model is not None
-    if variant is None and should_select_gguf(backend_name):
+    if variant is None and len(image_paths) <= 1 and should_select_gguf(backend_name):
         variant = select_gguf_variant(model, quant)
     if requires_audio(model) and audio is None:
         console.print("[red]Error:[/] Audio models require --audio PATH.")
         raise typer.Exit(code=1)
-    if requires_image(model) and image is None and video is None:
+    if requires_image(model) and not image_paths and video is None:
         if requires_video(model):
             console.print(
                 "[red]Error:[/] VLM models require --image PATH or --video PATH."
@@ -1654,6 +1659,7 @@ def run(
                 cpu_only, gpu_memory_utilization, perf_vram
             )
         backend = select_backend(model, variant, hardware, backend_name)
+        validate_multi_image_run(model, variant, image_paths, backend.name, hardware)
         if (
             hardware is None
             and backend.name in RUNTIME_MEMORY_BUDGET_BACKENDS
@@ -1681,7 +1687,7 @@ def run(
             artifact=variant,
             context_length=context_length,
             cpu_only=cpu_only,
-            image_path=image,
+            image_paths=image_paths,
             video_path=video,
             audio_path=audio,
             max_tokens=max_tokens,
@@ -1799,8 +1805,11 @@ def snippet(
         512, "--max-tokens", help="Maximum generated tokens per response"
     ),
     refresh: bool = typer.Option(False, "--refresh", help="Refresh model metadata"),
-    image: Optional[str] = typer.Option(
-        None, "--image", "-i", help="Image path for VLM snippets"
+    image: Optional[list[str]] = typer.Option(
+        None,
+        "--image",
+        "-i",
+        help="Image path for VLM snippets; repeat for comparisons",
     ),
     video: Optional[str] = typer.Option(
         None, "--video", help="Video path for supported video-language snippets"
@@ -1832,6 +1841,7 @@ def snippet(
         models = load_model_catalog(refresh)
         progress.remove_task(task)
 
+    image_paths = tuple(image or ())
     if model_name:
         model = resolve_model_match(models, model_name)
     else:
@@ -1843,12 +1853,14 @@ def snippet(
         model = gguf_models[0]
 
     variant = (
-        select_gguf_variant(model, quant) if should_select_gguf(backend_name) else None
+        select_gguf_variant(model, quant)
+        if len(image_paths) <= 1 and should_select_gguf(backend_name)
+        else None
     )
     if requires_audio(model) and audio is None:
         console.print("[red]Error:[/] Audio models require --audio PATH.")
         raise typer.Exit(code=1)
-    if requires_image(model) and image is None and video is None:
+    if requires_image(model) and not image_paths and video is None:
         if requires_video(model):
             console.print(
                 "[red]Error:[/] VLM models require --image PATH or --video PATH."
@@ -1866,6 +1878,7 @@ def snippet(
         ):
             hardware = detect_runtime_hardware(False, gpu_memory_utilization, perf_vram)
         backend = select_backend(model, variant, hardware, backend_name)
+        validate_multi_image_run(model, variant, image_paths, backend.name, hardware)
         if (
             hardware is None
             and backend.name in RUNTIME_MEMORY_BUDGET_BACKENDS
@@ -1881,7 +1894,7 @@ def snippet(
             variant,
             context_length,
             False,
-            image_path=image,
+            image_paths=image_paths,
             video_path=video,
             audio_path=audio,
             max_tokens=max_tokens,

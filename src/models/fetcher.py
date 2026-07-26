@@ -9,7 +9,7 @@ import statistics
 import httpx
 
 from data.quantization import QUANT_BYTES_PER_WEIGHT
-from data.vlm_inventory import known_vlm_model_ids
+from data.vlm_inventory import is_multi_image_family, known_vlm_model_ids
 from models.http import get_with_retries
 from models.integrations import (
     capabilities_for_data,
@@ -311,7 +311,9 @@ def infer_model_capabilities(
     ocr = metadata_or_name(r"\bocr\b|text recognition|scene text")
     document = metadata_or_name(r"document|docvqa|pdf|invoice|receipt|layout")
     chart = metadata_or_name(r"chart|plotqa|figureqa|table")
-    multi_image = metadata_or_name(r"multi[-_ ]?image|interleaved|onevision")
+    multi_image = metadata_or_name(
+        r"multi[-_ ]?image|interleaved|onevision"
+    ) or is_multi_image_family(model_id, architecture)
     tool_use = metadata_or_name(r"tool[-_ ]?use|function[-_ ]?calling|agent")
 
     if ocr or document or chart:
@@ -1268,6 +1270,8 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 tags=tags,
                 architecture=architecture,
             )
+        elif is_multi_image_family(d["id"], architecture):
+            capabilities.multi_image = True
         if not artifacts:
             artifacts = build_artifacts(
                 d["id"],
