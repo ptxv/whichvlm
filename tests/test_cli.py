@@ -783,15 +783,19 @@ def test_main_caps_mocked_detected_shared_gpu(monkeypatch):
             "--profile",
             "general",
             "--json",
+            "--details",
         ],
     )
 
     assert result.exit_code == 0
+    gpu_json = json.loads(result.stdout)["hardware"]["gpus"][0]
     assert hardware.ram_bytes == 16 * 1024**3
     assert hardware.gpus[0] is gpu
     assert gpu.vram_bytes == 32 * 1024**3
     assert gpu.shared_memory is True
     assert has_backend(gpu, "vulkan")
+    assert gpu_json["usable_vram_bytes"] == 32 * 1024**3
+    assert gpu_json["effective_vram_bytes"] == 12 * 1024**3
     assert min_params == [8.0, None]
 
 
