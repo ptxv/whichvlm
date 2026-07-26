@@ -22,6 +22,7 @@ AMD_SHARED_MEMORY_APU_MARKERS: tuple[str, ...] = (
 
 
 GPU_BANDWIDTH: dict[str, float] = {
+    "Arc Pro B70": 608.0,
     "RTX 5090": 1792.0,
     "RTX 5080": 960.0,
     "RTX 5070 Ti": 896.0,
