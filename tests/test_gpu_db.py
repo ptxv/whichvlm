@@ -1,7 +1,7 @@
 from hardware.gpu_db import (
     normalize_detected_gpu_name,
-    static_bandwidth,
     resolve_detected_bandwidth,
+    static_bandwidth,
 )
 
 BYTES_PER_GIB = 1024**3
@@ -66,8 +66,10 @@ def test_resolve_variant_qualifier_is_preserved():
     assert 200 < bw < 400
 
 
-def test_resolve_unknown_gpu_returns_none_not_wrong_guess():
-    assert resolve_detected_bandwidth("Intel(R) Arc(TM) Pro B70 Graphics") is None
+def test_resolve_arc_pro_b70_marketing_name_only():
+    assert resolve_detected_bandwidth("Intel(R) Arc(TM) Pro B70 Graphics") == 608.0
+    assert resolve_detected_bandwidth("Battlemage G31 [Intel Graphics]") is None
+    assert resolve_detected_bandwidth("Battlemage G31 [Arc Pro B65]") is None
 
 
 def test_resolve_empty_name_returns_none():

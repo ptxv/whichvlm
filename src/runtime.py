@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from difflib import get_close_matches
 
-from data.vlm_inventory import canonical_vlm_family_id
+from data.vlm_inventory import MULTI_IMAGE_FAMILY_IDS, canonical_vlm_family_id
 from engine.quantization import infer_non_gguf_quant_type
 from hardware.types import HardwareInfo, infer_backend_capabilities
 from models.integrations import (
@@ -34,7 +34,7 @@ class RuntimeRequest:
     artifact: GGUFVariant | None
     context_length: int
     cpu_only: bool
-    image_path: str | None = None
+    image_paths: tuple[str, ...] = ()
     video_path: str | None = None
     audio_path: str | None = None
     max_tokens: int = 512
@@ -62,6 +62,7 @@ class CompatibilityRule:
     artifact_formats: frozenset[str]
     operating_systems: frozenset[str]
     accelerators: frozenset[str]
+    multi_image_families: frozenset[str] = frozenset()
 
 
 TRANSFORMERS_VLM_FAMILIES = frozenset(
@@ -119,6 +120,7 @@ COMPATIBILITY_MATRIX = (
         frozenset({"transformers"}),
         ALL_OSES,
         frozenset({"cpu", "cuda", "rocm", "mps"}),
+        multi_image_families=MULTI_IMAGE_FAMILY_IDS,
     ),
     CompatibilityRule(
         "vllm",
@@ -254,6 +256,7 @@ def matrix_supports(
     model: ModelInfo,
     artifact: GGUFVariant | None,
     hardware: HardwareInfo | None,
+    multi_image: bool = False,
 ) -> bool:
     families = model_family_keys(model)
     fmt = artifact_format(model, artifact)
@@ -265,8 +268,37 @@ def matrix_supports(
         and os_name in rule.operating_systems
         and bool(accelerators & rule.accelerators)
         and (not rule.families or bool(families & rule.families))
+        and (not multi_image or bool(families & rule.multi_image_families))
         for rule in COMPATIBILITY_MATRIX
     )
+
+
+def supports_multi_image_run(
+    model: ModelInfo,
+    artifact: GGUFVariant | None = None,
+    hardware: HardwareInfo | None = None,
+) -> bool:
+    return (
+        model.model_format != "gguf"
+        and model.capabilities.multi_image
+        and matrix_supports("transformers", model, artifact, hardware, multi_image=True)
+    )
+
+
+def validate_multi_image_run(
+    model: ModelInfo,
+    artifact: GGUFVariant | None,
+    image_paths: tuple[str, ...],
+    backend_name: str,
+    hardware: HardwareInfo | None,
+) -> None:
+    if len(image_paths) > 1 and (
+        backend_name != "transformers"
+        or not supports_multi_image_run(model, artifact, hardware)
+    ):
+        raise RuntimeUnsupportedError(
+            f"Multi-image runs are not supported for {model.id} with {backend_name}."
+        )
 
 
 def is_vlm_model(model: ModelInfo) -> bool:
@@ -405,7 +437,7 @@ def generate_run_script(
     variant: GGUFVariant | None,
     context_length: int,
     cpu_only: bool,
-    image_path: str | None = None,
+    image_paths: tuple[str, ...] = (),
     video_path: str | None = None,
     audio_path: str | None = None,
     max_tokens: int = 512,
@@ -414,12 +446,13 @@ def generate_run_script(
     gpu_memory_utilization: float | None = None,
 ) -> str:
     backend = select_backend(model, variant, hardware, backend_name)
+    validate_multi_image_run(model, variant, image_paths, backend.name, hardware)
     request = RuntimeRequest(
         model=model,
         artifact=variant,
         context_length=context_length,
         cpu_only=cpu_only,
-        image_path=image_path,
+        image_paths=image_paths,
         video_path=video_path,
         audio_path=audio_path,
         max_tokens=max_tokens,
@@ -450,6 +483,13 @@ def run_request(request: RuntimeRequest, backend_name: str | None = None) -> int
         request.artifact,
         request.hardware,
         backend_name,
+    )
+    validate_multi_image_run(
+        request.model,
+        request.artifact,
+        request.image_paths,
+        backend.name,
+        request.hardware,
     )
     return backend.run(request)
 
@@ -511,11 +551,16 @@ def transformers_quant_deps(model: ModelInfo) -> list[str]:
 def transformers_vlm_profile(model: ModelInfo) -> TransformersProfile:
     family = model_family_text(model)
     if "qwen" in family and "vl" in family:
-        model_class = (
-            "Qwen2_5_VLForConditionalGeneration"
-            if "2.5" in family or "2-5" in family
-            else "Qwen2VLForConditionalGeneration"
-        )
+        if "qwen3" in family:
+            model_class = (
+                "Qwen3VLMoeForConditionalGeneration"
+                if model.is_moe
+                else "Qwen3VLForConditionalGeneration"
+            )
+        elif "2.5" in family or "2-5" in family:
+            model_class = "Qwen2_5_VLForConditionalGeneration"
+        else:
+            model_class = "Qwen2VLForConditionalGeneration"
         return (
             model_class,
             "AutoProcessor",
@@ -704,7 +749,7 @@ class LlamaCppBackend(Backend):
     def generate_script(self, request: RuntimeRequest) -> str:
         assert request.artifact is not None
         if is_vlm_model(request.model):
-            if request.image_path is None:
+            if not request.image_paths:
                 raise RuntimeUnsupportedError("VLM runners require --image PATH.")
             projector = find_projector_artifact(request.model)
             if projector is None or projector.filename is None:
@@ -718,7 +763,7 @@ class LlamaCppBackend(Backend):
                 projector,
                 request.context_length,
                 request.cpu_only,
-                request.image_path,
+                request.image_paths[0],
                 request.max_tokens,
             )
         return generate_llama_cpp_text_script(
@@ -793,10 +838,10 @@ class MLXBackend(Backend):
         return ["mlx-vlm", "pillow"]
 
     def generate_script(self, request: RuntimeRequest) -> str:
-        if request.image_path is None:
+        if not request.image_paths:
             raise RuntimeUnsupportedError("VLM runners require --image PATH.")
         return generate_mlx_vlm_script(
-            request.model, request.image_path, request.max_tokens
+            request.model, request.image_paths[0], request.max_tokens
         )
 
 
@@ -883,7 +928,7 @@ class TransformersBackend(Backend):
                 request.gpu_memory_utilization,
             )
         if is_vlm_model(request.model):
-            if request.image_path is None:
+            if not request.image_paths:
                 if is_transformers_video_model(request.model):
                     raise RuntimeUnsupportedError(
                         "VLM runners require --image PATH or --video PATH."
@@ -891,7 +936,7 @@ class TransformersBackend(Backend):
                 raise RuntimeUnsupportedError("VLM runners require --image PATH.")
             return generate_transformers_vlm_script(
                 request.model,
-                request.image_path,
+                request.image_paths,
                 request.cpu_only,
                 request.max_tokens,
                 request.gpu_memory_utilization,
@@ -939,12 +984,12 @@ class VLLMBackend(Backend):
         return ["vllm"]
 
     def generate_script(self, request: RuntimeRequest) -> str:
-        if request.image_path is None:
+        if not request.image_paths:
             raise RuntimeUnsupportedError("VLM runners require --image PATH.")
         return generate_vllm_vlm_script(
             request.model,
             request.context_length,
-            request.image_path,
+            request.image_paths[0],
             request.max_tokens,
             request.gpu_memory_utilization,
         )
@@ -1011,12 +1056,12 @@ class SGLangBackend(Backend):
         return ["sglang"]
 
     def generate_script(self, request: RuntimeRequest) -> str:
-        if request.image_path is None:
+        if not request.image_paths:
             raise RuntimeUnsupportedError("VLM runners require --image PATH.")
         return generate_sglang_vlm_script(
             request.model,
             request.context_length,
-            request.image_path,
+            request.image_paths[0],
             request.max_tokens,
             request.gpu_memory_utilization,
         )
@@ -1546,7 +1591,7 @@ finally:
 
 def generate_transformers_vlm_script(
     model: ModelInfo,
-    image_path: str,
+    image_paths: tuple[str, ...],
     cpu_only: bool,
     max_tokens: int,
     gpu_memory_utilization: float | None = None,
@@ -1575,7 +1620,7 @@ from threading import Thread
 from transformers import {imports}
 
 model_id = "{model.id}"
-image_path = {image_path!r}
+image_paths = {image_paths!r}
 device_map = {device_map}
 {runtime_setup}
 try:
@@ -1588,7 +1633,10 @@ try:
     tokenizer = processor.tokenizer
     model = {model_class}.from_pretrained(model_id, **model_kwargs)
     model.eval()
-    image = ImageOps.exif_transpose(Image.open(image_path)).convert("RGB")
+    images = [
+        ImageOps.exif_transpose(Image.open(image_path)).convert("RGB")
+        for image_path in image_paths
+    ]
     print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
     print("Ready! Type 'exit' to quit.\\n")
     while True:
@@ -1600,13 +1648,15 @@ try:
             break
         if not text.strip():
             continue
+        content = [
+            {{"type": "image", "image": image}}
+            for image in images
+        ]
+        content.append({{"type": "text", "text": text}})
         messages = [
             {{
                 "role": "user",
-                "content": [
-                    {{"type": "image", "image": image}},
-                    {{"type": "text", "text": text}},
-                ],
+                "content": content,
             }}
         ]
         inputs = processor.apply_chat_template(
