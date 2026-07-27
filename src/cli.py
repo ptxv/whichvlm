@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import re
 import shlex
 from difflib import get_close_matches
@@ -181,13 +182,21 @@ def validate_gpu_flags(
     cpu_only: bool,
     gpu: list[str] | None,
     vram: float | None,
+    memory_bandwidth: float | None = None,
 ) -> None:
     if cpu_only and gpu:
         console.print("[red]Error:[/] --cpu-only and --gpu are mutually exclusive.")
         raise typer.Exit(code=1)
-    if vram is not None and not gpu:
-        console.print("[red]Error:[/] --vram requires --gpu.")
+    if cpu_only and (vram is not None or memory_bandwidth is not None):
+        console.print("[red]Error:[/] GPU overrides cannot be used with --cpu-only.")
         raise typer.Exit(code=1)
+    for option, value in (
+        ("--vram", vram),
+        ("--memory-bandwidth", memory_bandwidth),
+    ):
+        if value is not None and (not math.isfinite(value) or value <= 0):
+            console.print(f"[red]Error:[/] {option} must be greater than 0.")
+            raise typer.Exit(code=1)
 
 
 def validate_output_flags(json_output: bool, markdown_output: bool) -> None:
@@ -258,6 +267,7 @@ def apply_gpu_overrides(
     cpu_only: bool,
     gpu: list[str] | None,
     vram: float | None,
+    memory_bandwidth: float | None = None,
 ) -> HardwareInfo:
     if cpu_only:
         hardware.gpus = []
@@ -271,6 +281,21 @@ def apply_gpu_overrides(
         except ValueError as e:
             console.print(f"[red]Error:[/] {e}")
             raise typer.Exit(code=1)
+    if vram is None and memory_bandwidth is None:
+        return hardware
+    if len(hardware.gpus) != 1:
+        console.print(
+            "[red]Error:[/] GPU overrides require exactly one detected or simulated GPU."
+        )
+        raise typer.Exit(code=1)
+
+    gpu_info = hardware.gpus[0]
+    if vram is not None:
+        gpu_info.vram_bytes = int(vram * BYTES_PER_GIB)
+        gpu_info.overrides["vram_bytes"] = gpu_info.vram_bytes
+    if memory_bandwidth is not None:
+        gpu_info.memory_bandwidth_gbps = memory_bandwidth
+        gpu_info.overrides["memory_bandwidth_gbps"] = memory_bandwidth
     return hardware
 
 
@@ -368,19 +393,17 @@ def auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float |
         return None
     if not hardware.gpus:
         return 2.0
+    from engine.compatibility import gpu_available_memory
     from hardware.memory import effective_usable_ram
 
     usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
     best_vram_gb = max(
-        (
-            usable_ram
-            if g.shared_memory
-            and (g.vram_bytes == 0 or hardware.ram_budget_bytes is not None)
-            else (
-                g.usable_vram_bytes if g.usable_vram_bytes is not None else g.vram_bytes
-            )
+        gpu_available_memory(
+            gpu,
+            usable_ram,
+            ram_budget_active=hardware.ram_budget_bytes is not None,
         )
-        for g in hardware.gpus
+        for gpu in hardware.gpus
     ) / (1024**3)
     if best_vram_gb >= 30:
         return 12.0
@@ -626,7 +649,13 @@ def main(
     vram: Optional[float] = typer.Option(
         None,
         "--vram",
-        help="Override simulated VRAM in GB; requires --gpu",
+        help="Override VRAM or shared-memory cap in GB; requires exactly one GPU",
+        rich_help_panel=HARDWARE_PANEL,
+    ),
+    memory_bandwidth: Optional[float] = typer.Option(
+        None,
+        "--memory-bandwidth",
+        help="Override GPU memory bandwidth in GB/s; requires exactly one GPU",
         rich_help_panel=HARDWARE_PANEL,
     ),
     vram_headroom: str = typer.Option(
@@ -657,7 +686,7 @@ def main(
     if ctx.invoked_subcommand is not None:
         return
 
-    validate_gpu_flags(cpu_only, gpu, vram)
+    validate_gpu_flags(cpu_only, gpu, vram, memory_bandwidth)
     validate_output_flags(json_output, markdown_output)
     profile = validate_profile(profile)
     evidence_mode = resolve_evidence_mode(evidence, direct)
@@ -684,7 +713,7 @@ def main(
     with vlm_progress() as progress:
         task = progress.add_task("scanning silicon...", total=None)
         hardware = detect_hardware()
-        apply_gpu_overrides(hardware, cpu_only, gpu, vram)
+        apply_gpu_overrides(hardware, cpu_only, gpu, vram, memory_bandwidth)
         apply_memory_budgets(
             hardware,
             vram_headroom=vram_headroom,
@@ -1924,10 +1953,13 @@ def hardware(
         help="Simulate GPU(s), e.g. 'RTX 4090', '2x RTX 4090', or repeat --gpu",
     ),
     vram: Optional[float] = typer.Option(
-        None, "--vram", help="Override VRAM in GB (requires --gpu)"
+        None, "--vram", help="Override VRAM or shared-memory cap in GB"
+    ),
+    memory_bandwidth: Optional[float] = typer.Option(
+        None, "--memory-bandwidth", help="Override GPU memory bandwidth in GB/s"
     ),
 ):
-    validate_gpu_flags(cpu_only, gpu, vram)
+    validate_gpu_flags(cpu_only, gpu, vram, memory_bandwidth)
 
     from hardware.detector import detect_hardware
     from output.display import display_hardware
@@ -1935,7 +1967,7 @@ def hardware(
     with vlm_progress() as progress:
         task = progress.add_task("scanning silicon...", total=None)
         hw = detect_hardware()
-        apply_gpu_overrides(hw, cpu_only, gpu, vram)
+        apply_gpu_overrides(hw, cpu_only, gpu, vram, memory_bandwidth)
         progress.remove_task(task)
 
     console.print()

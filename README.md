@@ -44,6 +44,12 @@ whichvlm --gpu "RTX 4090" --vram-headroom 10%
 whichvlm --gpu "RTX 4090" --perf-vram 10%
 ```
 
+Override incomplete detected GPU metadata:
+
+```bash
+whichvlm --vram 12 --memory-bandwidth 288
+```
+
 Return machine-readable output:
 
 ```bash

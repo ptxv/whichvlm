@@ -24,6 +24,7 @@ class GPUInfo:
     shared_memory: bool = False
     backend_capabilities: list[BackendCapability] = field(default_factory=list)
     neural_engine_available: bool = False
+    overrides: dict[str, int | float] = field(default_factory=dict)
 
 
 @dataclass

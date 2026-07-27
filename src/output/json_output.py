@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 
+from engine.compatibility import gpu_available_memory
 from engine.quantization import effective_quant_type, estimate_weight_bytes
 from engine.types import CompatibilityResult
+from hardware.memory import effective_usable_ram
 from hardware.types import BackendCapability, HardwareInfo
 from models.types import (
     ModelArtifact,
@@ -60,6 +62,7 @@ def lineage_dict(lineage: ModelLineage) -> dict:
 
 def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
     gpus = []
+    usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
     for gpu in hardware.gpus:
         gpu_data = {
             "name": gpu.name,
@@ -72,10 +75,16 @@ def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
                     "vendor": gpu.vendor,
                     "memory_bandwidth_gbps": gpu.memory_bandwidth_gbps,
                     "shared_memory": gpu.shared_memory,
+                    "effective_vram_bytes": gpu_available_memory(
+                        gpu,
+                        usable_ram,
+                        ram_budget_active=hardware.ram_budget_bytes is not None,
+                    ),
                     "backend_capabilities": [
                         backend_capability_dict(c) for c in gpu.backend_capabilities
                     ],
                     "neural_engine_available": gpu.neural_engine_available,
+                    "overrides": gpu.overrides,
                 }
             )
         gpus.append(gpu_data)

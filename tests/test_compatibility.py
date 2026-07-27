@@ -136,6 +136,32 @@ def test_ram_budget_caps_shared_memory_gpu_fit_pool():
     assert result.vram_available_bytes == 8 * BYTES_PER_GIB
 
 
+def test_vram_override_caps_shared_memory_gpu_fit_pool():
+    model = make_model()
+    variant = make_variant(12_000_000_000)
+    hw = HardwareInfo(
+        gpus=[
+            GPUInfo(
+                name="Apple M2",
+                vendor="apple",
+                vram_bytes=32 * BYTES_PER_GIB,
+                usable_vram_bytes=32 * BYTES_PER_GIB,
+                memory_bandwidth_gbps=100.0,
+                shared_memory=True,
+                overrides={"vram_bytes": 32 * BYTES_PER_GIB},
+            )
+        ],
+        ram_bytes=16 * BYTES_PER_GIB,
+        disk_free_bytes=100 * BYTES_PER_GIB,
+        os="darwin",
+    )
+
+    result = check_compatibility(model, variant, hw)
+
+    assert result.vram_available_bytes == estimate_usable_ram(hw.ram_bytes)
+    assert result.fit_type == "cpu_only"
+
+
 def test_shared_memory_amd_apu_uses_system_memory_pool():
     model = make_model(120_000_000_000)
     variant = make_variant(55_000_000_000)
