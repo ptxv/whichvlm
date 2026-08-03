@@ -5,6 +5,7 @@ import time
 
 from models.cache_format import (
     cache_expired,
+    cache_schema_supported,
     cache_snapshot_metadata,
     read_cache_payload,
 )
@@ -23,7 +24,7 @@ def ensure_cache_dir() -> None:
 
 def load_cache(*, allow_stale: bool = False) -> list[dict] | None:
     payload = read_cache_payload(CACHE_FILE)
-    if payload is None:
+    if payload is None or not cache_schema_supported(payload, CACHE_SCHEMA_VERSION):
         return None
 
     try:

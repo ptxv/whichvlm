@@ -13,6 +13,7 @@ import httpx
 
 from models.cache_format import (
     cache_expired,
+    cache_schema_supported,
     cache_snapshot_metadata,
     read_cache_payload,
 )
@@ -70,7 +71,9 @@ def benchmark_confidence(model_id: str, source: str, default: float) -> float:
 
 def load_benchmark_cache(*, allow_stale: bool = False) -> dict[str, float] | None:
     payload = read_cache_payload(BENCHMARK_CACHE)
-    if payload is None:
+    if payload is None or not cache_schema_supported(
+        payload, BENCHMARK_CACHE_SCHEMA_VERSION
+    ):
         return None
     try:
         if cache_expired(

@@ -15,6 +15,20 @@ def read_cache_payload(cache_file: Any) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+def cache_schema_supported(payload: dict, supported_version: int) -> bool:
+    try:
+        schema_version = int(payload.get("schema_version", 1))
+    except (TypeError, ValueError):
+        return False
+
+    if schema_version > supported_version:
+        raise ValueError(
+            f"Cache schema version {schema_version} is newer than supported version "
+            f"{supported_version}; update whichvlm or run with --refresh."
+        )
+    return schema_version == supported_version
+
+
 def cache_expired(cached_at: float, ttl_seconds: int, *, allow_stale: bool) -> bool:
     return not allow_stale and time.time() - cached_at > ttl_seconds
 
