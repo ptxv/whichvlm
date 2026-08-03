@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import math
 import re
@@ -15,6 +14,7 @@ from models.cache_format import (
     cache_expired,
     cache_snapshot_metadata,
     read_cache_payload,
+    write_cache_payload,
 )
 from utils import cache_dir, current_version
 
@@ -109,9 +109,7 @@ def save_benchmark_cache(scores: dict[str, float]) -> None:
         "source": BENCHMARK_SOURCE_PROVENANCE,
         "scores": scores,
     }
-    BENCHMARK_CACHE.write_text(
-        json.dumps(payload, ensure_ascii=False), encoding="utf-8"
-    )
+    write_cache_payload(BENCHMARK_CACHE, payload)
     logger.debug(f"Saved {len(scores)} benchmark scores to cache")
 
 

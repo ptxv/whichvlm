@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from typing import Any
+
+
+def cache_checksum(payload: dict) -> str:
+    content = {key: value for key, value in payload.items() if key != "checksum"}
+    encoded = json.dumps(
+        content, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def read_cache_payload(cache_file: Any) -> dict | None:
@@ -12,7 +21,17 @@ def read_cache_payload(cache_file: Any) -> dict | None:
         payload = json.loads(cache_file.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return None
-    return payload if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        return None
+    checksum = payload.get("checksum")
+    if checksum is not None and checksum != cache_checksum(payload):
+        return None
+    return payload
+
+
+def write_cache_payload(cache_file: Any, payload: dict) -> None:
+    payload["checksum"] = cache_checksum(payload)
+    cache_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
 def cache_expired(cached_at: float, ttl_seconds: int, *, allow_stale: bool) -> bool:

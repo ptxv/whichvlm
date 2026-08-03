@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import time
 
 from models.cache_format import (
     cache_expired,
     cache_snapshot_metadata,
     read_cache_payload,
+    write_cache_payload,
 )
 from utils import cache_dir
 
@@ -59,4 +59,4 @@ def save_cache(models: list[dict], *, source: dict | None = None) -> None:
         "source": source or DEFAULT_SOURCE,
         "models": models,
     }
-    CACHE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    write_cache_payload(CACHE_FILE, payload)
