@@ -87,7 +87,9 @@ def run_fetch(html: str) -> dict[str, float]:
     "live_index", [44.27, 52.0, 56.0], ids=["lower", "equal", "higher"]
 )
 def test_fetch_live_score_replaces_fallback(live_index: float):
-    page = rsc_page([{"name": "DeepSeek V4 Pro", "index": live_index}])
+    page = rsc_page(
+        [{"name": "DeepSeek V4 Pro (Reasoning, Max Effort)", "index": live_index}]
+    )
     scores = run_fetch(page)
 
     fallback = get_aa_curated_fallback()
