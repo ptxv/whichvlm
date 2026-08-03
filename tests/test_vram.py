@@ -263,7 +263,16 @@ def test_estimate_kv_cache_uses_architecture_dimensions():
 
 
 def test_incomplete_calibration_evidence_uses_fallback_estimate(monkeypatch):
-    calibration = replace(EVIDENCED_CALIBRATION, source=None)
+    calibration = replace(
+        EVIDENCED_CALIBRATION,
+        architecture="llama",
+        backend="llama.cpp",
+        quant_type="Q4_K_M",
+        model_format="gguf",
+        image_count=0,
+        image_size=0,
+        source=None,
+    )
     monkeypatch.setattr(vram, "VRAM_CALIBRATIONS", (calibration,))
     model = make_model(
         7_000_000_000,
