@@ -829,6 +829,12 @@ def parse_model(data: dict) -> ModelInfo | None:
     vision_config = config.get("vision_config", {})
     if not isinstance(vision_config, dict):
         vision_config = {}
+    text_config = config.get("text_config", {})
+    if not isinstance(text_config, dict):
+        text_config = {}
+    layer_types = text_config.get("layer_types") or config.get("layer_types", [])
+    if not isinstance(layer_types, list):
+        layer_types = []
 
     benchmark_scores: dict[str, float] = {}
     eval_score = extract_hf_eval_score(data)
@@ -879,6 +885,10 @@ def parse_model(data: dict) -> ModelInfo | None:
         ),
         dtype=str_config(config, "torch_dtype", "dtype"),
         kv_cache_dtype=str_config(config, "kv_cache_dtype"),
+        sliding_window=int_config(text_config, "sliding_window")
+        or int_config(config, "sliding_window")
+        or int_config(gguf_meta, "sliding_window"),
+        layer_types=[value for value in layer_types if isinstance(value, str)],
         vision_layer_count=int_config(
             vision_config,
             "num_hidden_layers",
@@ -1171,6 +1181,8 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
             "head_dim": model.head_dim,
             "dtype": model.dtype,
             "kv_cache_dtype": model.kv_cache_dtype,
+            "sliding_window": model.sliding_window,
+            "layer_types": model.layer_types,
             "vision_layer_count": model.vision_layer_count,
             "vision_hidden_size": model.vision_hidden_size,
             "vision_intermediate_size": model.vision_intermediate_size,
@@ -1311,6 +1323,8 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 head_dim=d.get("head_dim"),
                 dtype=d.get("dtype"),
                 kv_cache_dtype=d.get("kv_cache_dtype"),
+                sliding_window=d.get("sliding_window"),
+                layer_types=d.get("layer_types", []),
                 vision_layer_count=d.get("vision_layer_count"),
                 vision_hidden_size=d.get("vision_hidden_size"),
                 vision_intermediate_size=d.get("vision_intermediate_size"),

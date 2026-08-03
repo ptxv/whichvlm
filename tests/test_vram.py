@@ -202,6 +202,47 @@ def test_estimate_kv_cache_uses_architecture_dimensions():
     assert estimate_kv_cache(grouped_query, 4096) == 536_870_912
 
 
+def test_estimate_kv_cache_accounts_for_sliding_attention_layers():
+    full = make_model(
+        7_000_000_000,
+        layer_count=4,
+        hidden_size=1024,
+        attention_heads=8,
+        kv_heads=2,
+        dtype="bfloat16",
+    )
+    sliding = replace(full, architecture="mistral", sliding_window=2048)
+    mixed = replace(
+        full,
+        sliding_window=2048,
+        layer_types=[
+            "sliding_attention",
+            "full_attention",
+            "sliding_attention",
+            "full_attention",
+        ],
+    )
+
+    assert estimate_kv_cache(full, 8192) == 33_554_432
+    assert estimate_kv_cache(sliding, 8192) == 8_388_608
+    assert estimate_kv_cache(mixed, 8192) == 20_971_520
+
+
+def test_estimate_kv_cache_keeps_full_context_for_unknown_window_coverage():
+    model = make_model(
+        7_000_000_000,
+        architecture="unknown",
+        layer_count=4,
+        hidden_size=1024,
+        attention_heads=8,
+        kv_heads=2,
+        dtype="bfloat16",
+        sliding_window=2048,
+    )
+
+    assert estimate_kv_cache(model, 8192) == 33_554_432
+
+
 def test_incomplete_calibration_evidence_uses_fallback_estimate(monkeypatch):
     calibration = replace(
         replace(vram.VRAM_CALIBRATIONS[0], **CALIBRATION_PROVENANCE),
