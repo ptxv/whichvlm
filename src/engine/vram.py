@@ -21,7 +21,7 @@ from models.types import GGUFVariant, ModelInfo
 
 KV_BYTES_PER_BPARAM_PER_KCTX = 3.5 * 1024 * 1024
 MOE_ATTENTION_PARAM_MULTIPLIER = 4.0
-SLIDING_WINDOW_ARCHITECTURES = frozenset({"mistral", "mixtral"})
+ALL_SLIDING_WINDOW_ARCHITECTURES = frozenset({"mistral", "mixtral"})
 VramConfidence = Literal["high", "medium", "low"]
 
 
@@ -167,15 +167,14 @@ def estimate_kv_cache(
         bytes_per_value = dtype_bytes(model.kv_cache_dtype or model.dtype)
         layer_tokens = model.layer_count * context_length
         if model.sliding_window and model.sliding_window < context_length:
-            if model.layer_types:
-                sliding_layers = sum(
-                    layer_type == "sliding_attention"
-                    for layer_type in model.layer_types[: model.layer_count]
+            sliding_layers = model.sliding_window_layers
+            if sliding_layers is None:
+                sliding_layers = (
+                    model.layer_count
+                    if model.architecture in ALL_SLIDING_WINDOW_ARCHITECTURES
+                    else 0
                 )
-            elif model.architecture in SLIDING_WINDOW_ARCHITECTURES:
-                sliding_layers = model.layer_count
-            else:
-                sliding_layers = 0
+            sliding_layers = min(sliding_layers, model.layer_count)
             layer_tokens -= sliding_layers * (context_length - model.sliding_window)
         return int(
             layer_tokens * kv_heads * head_dim * 2 * batch_size * bytes_per_value

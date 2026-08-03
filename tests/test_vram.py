@@ -215,12 +215,7 @@ def test_estimate_kv_cache_accounts_for_sliding_attention_layers():
     mixed = replace(
         full,
         sliding_window=2048,
-        layer_types=[
-            "sliding_attention",
-            "full_attention",
-            "sliding_attention",
-            "full_attention",
-        ],
+        sliding_window_layers=2,
     )
 
     assert estimate_kv_cache(full, 8192) == 33_554_432

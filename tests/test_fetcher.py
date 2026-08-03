@@ -325,7 +325,7 @@ def test_models_cache_roundtrip_keeps_architecture_metadata():
         head_dim=128,
         dtype="bfloat16",
         sliding_window=4096,
-        layer_types=["sliding_attention", "full_attention"],
+        sliding_window_layers=1,
         vision_layer_count=32,
         vision_hidden_size=1280,
         vision_intermediate_size=3420,
@@ -342,7 +342,7 @@ def test_models_cache_roundtrip_keeps_architecture_metadata():
     assert restored[0].intermediate_size == 18944
     assert restored[0].kv_heads == 4
     assert restored[0].sliding_window == 4096
-    assert restored[0].layer_types == ["sliding_attention", "full_attention"]
+    assert restored[0].sliding_window_layers == 1
     assert restored[0].vision_hidden_size == 1280
     assert restored[0].vision_intermediate_size == 3420
     assert restored[0].vision_attention_heads == 16
@@ -592,14 +592,14 @@ def test_parse_model_extracts_architecture_metadata():
             "tags": ["vision-language", "safetensors"],
             "config": {
                 "architectures": ["Qwen2VLForConditionalGeneration"],
-                "num_hidden_layers": 28,
-                "hidden_size": 3584,
-                "intermediate_size": 18944,
-                "num_attention_heads": 28,
-                "num_key_value_heads": 4,
-                "head_dim": 128,
-                "torch_dtype": "bfloat16",
                 "text_config": {
+                    "num_hidden_layers": 28,
+                    "hidden_size": 3584,
+                    "intermediate_size": 18944,
+                    "num_attention_heads": 28,
+                    "num_key_value_heads": 4,
+                    "head_dim": 128,
+                    "torch_dtype": "bfloat16",
                     "sliding_window": 4096,
                     "layer_types": ["sliding_attention", "full_attention"],
                 },
@@ -628,7 +628,7 @@ def test_parse_model_extracts_architecture_metadata():
     assert parsed.head_dim == 128
     assert parsed.dtype == "bfloat16"
     assert parsed.sliding_window == 4096
-    assert parsed.layer_types == ["sliding_attention", "full_attention"]
+    assert parsed.sliding_window_layers == 1
     assert parsed.vision_layer_count == 32
     assert parsed.vision_hidden_size == 1280
     assert parsed.vision_intermediate_size == 3420

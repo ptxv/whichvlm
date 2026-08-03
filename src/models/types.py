@@ -71,7 +71,7 @@ class ModelInfo:
     dtype: str | None = None
     kv_cache_dtype: str | None = None
     sliding_window: int | None = None
-    layer_types: list[str] = field(default_factory=list)
+    sliding_window_layers: int | None = None
     vision_layer_count: int | None = None
     vision_hidden_size: int | None = None
     vision_intermediate_size: int | None = None
