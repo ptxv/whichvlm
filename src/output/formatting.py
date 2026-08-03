@@ -5,8 +5,8 @@ from math import log10
 
 from engine.quantization import effective_quant_type
 from engine.types import CompatibilityResult
-from models.types import GGUFVariant, ModelInfo
-from runtime import gguf_artifact_status
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus, GGUFVariant, ModelInfo
 
 
 def format_bytes(num_bytes: int) -> str:
@@ -46,9 +46,9 @@ def format_published_at(value: str | None) -> str:
 def format_artifact_label(model: ModelInfo, variant: GGUFVariant | None) -> str:
     label = effective_quant_type(model, variant)
     status = gguf_artifact_status(model, variant)
-    if status == "hypothetical":
+    if status is GGUFArtifactStatus.HYPOTHETICAL:
         return f"{label} (hypothetical)"
-    if status == "missing_projector":
+    if status is GGUFArtifactStatus.MISSING_PROJECTOR:
         return f"{label} (missing projector)"
     return label
 

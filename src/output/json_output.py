@@ -7,16 +7,17 @@ from engine.quantization import effective_quant_type, estimate_weight_bytes
 from engine.types import CompatibilityResult
 from hardware.memory import effective_usable_ram
 from hardware.types import BackendCapability, HardwareInfo
+from models.package_graph import capabilities_to_dict, gguf_artifact_status
 from models.types import (
+    GGUFArtifactStatus,
     ModelArtifact,
     ModelComponent,
     ModelInfo,
     ModelLineage,
 )
-from models.package_graph import capabilities_to_dict
 from output import console
 from output.upgrade import summarize_upgrade_row
-from runtime import gguf_artifact_status, recommended_runtime_backend
+from runtime import recommended_runtime_backend
 
 
 def backend_capability_dict(capability: BackendCapability) -> dict:
@@ -127,12 +128,15 @@ def model_dict(
 ) -> dict:
     model = result.model
     artifact_status = gguf_artifact_status(model, result.gguf_variant)
-    artifact_ready = artifact_status in {None, "available"}
+    runnable = result.can_run and artifact_status in {
+        None,
+        GGUFArtifactStatus.AVAILABLE,
+    }
     file_size_bytes: int | None = estimate_weight_bytes(model, None)
     if result.gguf_variant:
         file_size_bytes = (
             None
-            if artifact_status == "hypothetical"
+            if artifact_status is GGUFArtifactStatus.HYPOTHETICAL
             else result.gguf_variant.file_size_bytes
         )
     data = {
@@ -147,11 +151,17 @@ def model_dict(
         "file_size_bytes": file_size_bytes,
         "estimated_file_size_bytes": (
             result.gguf_variant.file_size_bytes
-            if result.gguf_variant and artifact_status == "hypothetical"
+            if result.gguf_variant
+            and artifact_status is GGUFArtifactStatus.HYPOTHETICAL
             else None
         ),
         "artifact_status": artifact_status,
-        "downloadable": artifact_status == "available" if result.gguf_variant else None,
+        "downloadable": (
+            artifact_status is not GGUFArtifactStatus.HYPOTHETICAL
+            if result.gguf_variant
+            else None
+        ),
+        "runnable": runnable,
         "vram_required_bytes": result.vram_required_bytes,
         "vram_required_range_bytes": (
             list(result.vram_required_range_bytes)
@@ -165,8 +175,7 @@ def model_dict(
         "benchmark_source": result.benchmark_source,
         "ranking_evidence": result.ranking_evidence,
         "fit_type": result.fit_type,
-        "can_run": result.can_run and artifact_ready,
-        "hardware_compatible": result.can_run,
+        "can_run": result.can_run,
         "context_fits": result.context_fits,
         "offload_ratio": result.offload_ratio,
         "binding_constraint": result_binding_constraint(result),
@@ -306,7 +315,8 @@ def display_plan_json(
         },
         "target_quant": target_quant,
         "artifact_status": artifact_status,
-        "downloadable": artifact_status == "available",
+        "downloadable": artifact_status is not GGUFArtifactStatus.HYPOTHETICAL,
+        "runnable": artifact_status is GGUFArtifactStatus.AVAILABLE,
         "context_length": context_length,
         "workload": {
             "image_count": image_count,

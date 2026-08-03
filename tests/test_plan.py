@@ -14,7 +14,8 @@ from hardware.catalog import (
 )
 from hardware.gpu_simulator import create_synthetic_gpu
 from hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from models.types import GGUFVariant, ModelArtifact, ModelInfo
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus, GGUFVariant, ModelArtifact, ModelInfo
 from output.display import display_plan, display_plan_json
 from output.plan import (
     plan_row_for_hardware,
@@ -26,7 +27,6 @@ from output.plan import (
     plan_vision_workload,
     plan_vram_by_quant,
 )
-from runtime import gguf_artifact_status
 
 
 def planning_model(
@@ -47,14 +47,11 @@ def test_plan_without_gguf_file_is_hypothetical():
     model = planning_model(params=7_000_000_000)
 
     variant = plan_variant_for_quant(model, "Q4_K_M")
-    rows = plan_gpu_compatibility(model, "Q4_K_M")
 
     assert variant.hypothetical is True
     assert variant.filename == ""
     assert looks_synthetic_gguf(model, variant) is True
-    assert gguf_artifact_status(model, variant) == "hypothetical"
-    assert any(row["hardware_compatible"] for row in rows)
-    assert not any(row["can_run"] for row in rows)
+    assert gguf_artifact_status(model, variant) is GGUFArtifactStatus.HYPOTHETICAL
 
 
 def test_plan_gguf_vlm_requires_projector():
@@ -62,16 +59,8 @@ def test_plan_gguf_vlm_requires_projector():
     variant = GGUFVariant("test-q4.gguf", "Q4_K_M", 4_000_000_000)
     model.gguf_variants = [variant]
 
-    missing_projector = next(
-        row
-        for row in plan_gpu_compatibility(model, "Q4_K_M")
-        if row["fit_type"] == "full_gpu"
-    )
-
     assert plan_variant_for_quant(model, "Q4_K_M") is variant
-    assert missing_projector["artifact_status"] == "missing_projector"
-    assert missing_projector["hardware_compatible"] is True
-    assert missing_projector["can_run"] is False
+    assert gguf_artifact_status(model, variant) is GGUFArtifactStatus.MISSING_PROJECTOR
 
     model.artifacts = [
         ModelArtifact(
@@ -81,14 +70,8 @@ def test_plan_gguf_vlm_requires_projector():
             source_kind="mmproj",
         )
     ]
-    complete = next(
-        row
-        for row in plan_gpu_compatibility(model, "Q4_K_M")
-        if row["fit_type"] == "full_gpu"
-    )
 
-    assert complete["artifact_status"] == "available"
-    assert complete["can_run"] is True
+    assert gguf_artifact_status(model, variant) is GGUFArtifactStatus.AVAILABLE
 
 
 def test_plan_terminal_labels_hypothetical_artifact():
@@ -214,8 +197,8 @@ def test_plan_json_includes_workload_and_reverse_lookup():
     assert data["workload"]["perf_vram"] == "10%"
     assert data["artifact_status"] == "hypothetical"
     assert data["downloadable"] is False
-    assert any(row["hardware_compatible"] for row in data["gpu_compatibility"])
-    assert not any(row["can_run"] for row in data["gpu_compatibility"])
+    assert data["runnable"] is False
+    assert any(row["can_run"] for row in data["gpu_compatibility"])
 
 
 def test_hardware_catalog_carries_normalized_metadata():

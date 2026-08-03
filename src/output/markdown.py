@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from engine.types import CompatibilityResult
 from hardware.types import HardwareInfo
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus
 from output import console
 from output.formatting import (
     format_artifact_label,
@@ -10,7 +12,6 @@ from output.formatting import (
     format_published_at,
     format_vram,
 )
-from runtime import gguf_artifact_status
 
 
 def escape_markdown_cell(value: object) -> str:
@@ -43,9 +44,9 @@ def format_markdown_score(result: CompatibilityResult) -> str:
 
 def format_markdown_fit(result: CompatibilityResult) -> str:
     status = gguf_artifact_status(result.model, result.gguf_variant)
-    if status == "hypothetical":
+    if status is GGUFArtifactStatus.HYPOTHETICAL:
         return "Hypothetical"
-    if status == "missing_projector":
+    if status is GGUFArtifactStatus.MISSING_PROJECTOR:
         return "Missing projector"
     labels = {
         "full_gpu": "Full GPU",
@@ -53,12 +54,6 @@ def format_markdown_fit(result: CompatibilityResult) -> str:
         "cpu_only": "CPU only",
     }
     return labels.get(result.fit_type, result.fit_type)
-
-
-def format_markdown_downloads(result: CompatibilityResult) -> str:
-    if gguf_artifact_status(result.model, result.gguf_variant) == "hypothetical":
-        return "-"
-    return format_downloads(result.model.downloads)
 
 
 def format_markdown_params(result: CompatibilityResult) -> str:
@@ -149,7 +144,12 @@ def display_markdown(
                 format_markdown_params(result),
                 format_artifact_label(result.model, result.gguf_variant),
                 format_published_at(result.model.published_at),
-                format_markdown_downloads(result),
+                (
+                    "-"
+                    if gguf_artifact_status(result.model, result.gguf_variant)
+                    is GGUFArtifactStatus.HYPOTHETICAL
+                    else format_downloads(result.model.downloads)
+                ),
                 format_markdown_score(result),
                 result.ranking_evidence,
                 result.model.license or "-",

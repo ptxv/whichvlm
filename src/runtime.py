@@ -20,8 +20,8 @@ from models.integrations import (
     pipeline_tag_has_visual_input,
     runtime_backends_for_data,
 )
-from models.package_graph import is_projector_filename
-from models.types import GGUFVariant, ModelArtifact, ModelInfo
+from models.package_graph import find_projector_artifact, gguf_artifact_status
+from models.types import GGUFArtifactStatus, GGUFVariant, ModelArtifact, ModelInfo
 
 
 class RuntimeUnsupportedError(ValueError):
@@ -510,26 +510,6 @@ def is_mlx_model(model: ModelInfo) -> bool:
     if (model.quantization_type or "").upper() == "MLX":
         return True
     return any(artifact.format == "mlx" for artifact in model.artifacts)
-
-
-def find_projector_artifact(model: ModelInfo) -> ModelArtifact | None:
-    for artifact in model.artifacts:
-        if artifact.source_kind == "mmproj" and artifact.filename:
-            return artifact
-    for artifact in model.artifacts:
-        if artifact.filename and is_projector_filename(artifact.filename):
-            return artifact
-    return None
-
-
-def gguf_artifact_status(model: ModelInfo, artifact: GGUFVariant | None) -> str | None:
-    if artifact is None:
-        return None
-    if artifact.hypothetical or not artifact.filename:
-        return "hypothetical"
-    if is_vlm_model(model) and find_projector_artifact(model) is None:
-        return "missing_projector"
-    return "available"
 
 
 TransformersProfile = tuple[str, str, tuple[str, ...]]
@@ -1224,7 +1204,10 @@ def recommended_runtime_backend(
     artifact: GGUFVariant | None,
     hardware: HardwareInfo | None = None,
 ) -> str | None:
-    if gguf_artifact_status(model, artifact) not in {None, "available"}:
+    if gguf_artifact_status(model, artifact) not in {
+        None,
+        GGUFArtifactStatus.AVAILABLE,
+    }:
         return None
     for backend in RECOMMENDED_BACKENDS:
         if backend.supports(model, artifact, hardware):

@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
+
+
+class GGUFArtifactStatus(StrEnum):
+    AVAILABLE = "available"
+    HYPOTHETICAL = "hypothetical"
+    MISSING_PROJECTOR = "missing_projector"
 
 
 @dataclass

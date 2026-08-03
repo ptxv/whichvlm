@@ -21,10 +21,10 @@ from hardware.catalog import (
     HardwareCatalogEntry,
 )
 from hardware.types import GPUInfo, HardwareInfo
-from models.types import GGUFVariant, ModelInfo
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus, GGUFVariant, ModelInfo
 from output import console
 from output.formatting import format_bytes, format_params
-from runtime import gguf_artifact_status
 
 PLAN_QUANTS = ("Q2_K", "Q3_K_M", "Q4_K_M", "Q5_K_M", "Q6_K", "Q8_0", "F16")
 PRACTICAL_PARTIAL_MAX_OFFLOAD_RATIO = 0.65
@@ -95,7 +95,6 @@ def plan_vram_by_quant(
             "vram_confidence": vram.confidence,
             "quality_loss": QUANT_QUALITY_PENALTY.get(quant, 0.0),
             "artifact_status": artifact_status,
-            "downloadable": artifact_status == "available",
         }
     return rows
 
@@ -129,7 +128,7 @@ def plan_target_vram(
 def plan_binding_constraint(row: dict, min_speed: float | None) -> str:
     if not row["context_fits"]:
         return "context length"
-    if not row["hardware_compatible"]:
+    if not row["can_run"]:
         return "memory"
     if not row["os_supported"]:
         return "OS support"
@@ -143,10 +142,6 @@ def plan_binding_constraint(row: dict, min_speed: float | None) -> str:
         return "VRAM"
     if row["uses_multi_gpu"]:
         return "multi-GPU split"
-    if row["artifact_status"] == "hypothetical":
-        return "GGUF artifact"
-    if row["artifact_status"] == "missing_projector":
-        return "projector"
     return "none"
 
 
@@ -195,7 +190,6 @@ def plan_row_for_hardware(
     catalog_entry: HardwareCatalogEntry | None = None,
 ) -> dict:
     variant = plan_variant_for_quant(model, target_quant)
-    artifact_status = gguf_artifact_status(model, variant)
     result = check_compatibility(
         model, variant, hardware, context_length, vision_workload
     )
@@ -207,15 +201,6 @@ def plan_row_for_hardware(
         if result.uses_multi_gpu:
             speed *= MULTI_GPU_SPEED_FACTOR
         speed = round(speed, 1)
-    artifact_warnings = []
-    if artifact_status == "hypothetical":
-        artifact_warnings.append(
-            f"No concrete {target_quant} GGUF file was found; this result is hypothetical"
-        )
-    elif artifact_status == "missing_projector":
-        artifact_warnings.append(
-            "GGUF VLM package is missing an mmproj/projector artifact"
-        )
     row = {
         "name": label,
         "vram_gb": round(sum(gpu.vram_bytes for gpu in hardware.gpus) / BYTES_PER_GIB),
@@ -229,10 +214,7 @@ def plan_row_for_hardware(
         "system_ram_bytes": hardware.ram_bytes,
         "required_memory_bytes": result.vram_required_bytes,
         "fit_type": fit_type,
-        "can_run": result.can_run and artifact_status == "available",
-        "hardware_compatible": result.can_run,
-        "artifact_status": artifact_status,
-        "downloadable": artifact_status == "available",
+        "can_run": result.can_run,
         "context_fits": result.context_fits,
         "offload_ratio": result.offload_ratio,
         "uses_multi_gpu": result.uses_multi_gpu,
@@ -256,7 +238,7 @@ def plan_row_for_hardware(
         "price_usd": catalog_entry.price_usd if catalog_entry else None,
         "availability": catalog_entry.availability if catalog_entry else None,
         "interconnect": catalog_entry.interconnect if catalog_entry else None,
-        "warnings": result.warnings + plan_metadata_warnings(gpu) + artifact_warnings,
+        "warnings": result.warnings + plan_metadata_warnings(gpu),
     }
     row["metadata_complete"] = not row["warnings"]
     row["binding_constraint"] = plan_binding_constraint(row, min_speed)
@@ -374,11 +356,11 @@ def plan_multi_gpu_compatibility(
     return sorted(rows, key=hardware_size_key)
 
 
-def first_hardware_fit(rows: list[dict], fit_type: str) -> dict | None:
+def first_runnable(rows: list[dict], fit_type: str) -> dict | None:
     for row in rows:
         if (
             row["fit_type"] == fit_type
-            and row["hardware_compatible"]
+            and row["can_run"]
             and row["context_fits"]
             and row["meets_speed"]
             and row["os_supported"]
@@ -392,7 +374,7 @@ def plan_recommendations(
     single_gpu_rows: list[dict],
     multi_gpu_rows: list[dict],
 ) -> dict:
-    full_gpu = first_hardware_fit(single_gpu_rows, "full_gpu")
+    full_gpu = first_runnable(single_gpu_rows, "full_gpu")
     partial_offload_rows = [
         row for row in single_gpu_rows if row["practical_partial_offload"]
     ]
@@ -409,7 +391,7 @@ def plan_recommendations(
             for row in multi_gpu_rows
             if show_multi_gpu
             and row["fit_type"] == "full_gpu"
-            and row["hardware_compatible"]
+            and row["can_run"]
             and row["context_fits"]
             and row["meets_speed"]
             and row["os_supported"]
@@ -448,12 +430,12 @@ def display_plan(
 
     target_variant = plan_variant_for_quant(model, target_quant)
     target_artifact_status = gguf_artifact_status(model, target_variant)
-    if target_artifact_status == "hypothetical":
+    if target_artifact_status is GGUFArtifactStatus.HYPOTHETICAL:
         console.console.print(
             f"[yellow]Artifact:[/] No concrete {target_quant} GGUF file found; "
             "results are hypothetical and not downloadable or runnable."
         )
-    elif target_artifact_status == "missing_projector":
+    elif target_artifact_status is GGUFArtifactStatus.MISSING_PROJECTOR:
         console.console.print(
             "[yellow]Artifact:[/] GGUF file found, but the VLM package has no "
             "mmproj/projector and is not runnable."
@@ -544,9 +526,9 @@ def display_plan(
         fit_type = row["fit_type"]
         if fit_type == "too_small":
             fit = "[red]✗ Too small[/]"
-        elif row["artifact_status"] == "hypothetical":
+        elif target_artifact_status is GGUFArtifactStatus.HYPOTHETICAL:
             fit = "[yellow]? Hypothetical[/]"
-        elif row["artifact_status"] == "missing_projector":
+        elif target_artifact_status is GGUFArtifactStatus.MISSING_PROJECTOR:
             fit = "[red]✗ No projector[/]"
         elif fit_type == "full_gpu":
             fit = "[green]✓ Full GPU[/]"
@@ -585,7 +567,6 @@ def recommendation_line(title: str, row: dict | None) -> str:
     uncertainty = "" if row["metadata_complete"] else ", uncertainty noted"
     return (
         f"[bold]{title}:[/] {row['name']} | {row['fit_type']} | "
-        f"artifact {row['artifact_status'].replace('_', ' ')}, "
         f"required {format_bytes(row['required_memory_bytes'])}, "
         f"usable VRAM {format_bytes(row['usable_vram_bytes'])}, "
         f"reserved {format_bytes(row['reserved_headroom_bytes'])}, "

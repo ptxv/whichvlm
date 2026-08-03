@@ -11,6 +11,8 @@ from rich.text import Text
 
 from engine.types import CompatibilityResult
 from hardware.types import HardwareInfo
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus
 from output import console
 from output.formatting import (
     downloads_style,
@@ -24,7 +26,6 @@ from output.formatting import (
     parse_published_at,
     published_style,
 )
-from runtime import gguf_artifact_status
 
 ACCENT = "#f472b6"
 CYAN = "#67e8f9"
@@ -240,9 +241,9 @@ def display_ranking(
             "partial_offload": f"[{AMBER}]Partial[/]",
             "cpu_only": "[red]CPU only[/]",
         }
-        if artifact_status == "hypothetical":
+        if artifact_status is GGUFArtifactStatus.HYPOTHETICAL:
             fit_str = f"[{AMBER}]Hypothetical[/]"
-        elif artifact_status == "missing_projector":
+        elif artifact_status is GGUFArtifactStatus.MISSING_PROJECTOR:
             fit_str = "[red]No projector[/]"
         else:
             fit_str = fit_style.get(r.fit_type, r.fit_type)
@@ -254,7 +255,7 @@ def display_ranking(
         downloads_str = Text(
             (
                 "—"
-                if artifact_status == "hypothetical"
+                if artifact_status is GGUFArtifactStatus.HYPOTHETICAL
                 else format_downloads(r.model.downloads)
             ),
             style=downloads_style(

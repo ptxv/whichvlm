@@ -2155,32 +2155,20 @@ def test_json_output_defaults_to_compact():
 
 
 def test_json_output_marks_hypothetical_gguf_unavailable():
-    model = ModelInfo(
-        id="Qwen/Test-7B",
-        family_id="test-7b",
-        name="Test-7B",
-        parameter_count=7_000_000_000,
+    result, hardware = json_output_case()
+    result.gguf_variant = GGUFVariant(
+        filename="Test-7B.Q4_K_M.gguf",
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+        hypothetical=True,
     )
-    result = CompatibilityResult(
-        model=model,
-        gguf_variant=GGUFVariant(
-            filename="Test-7B.Q4_K_M.gguf",
-            quant_type="Q4_K_M",
-            file_size_bytes=4_000_000_000,
-            hypothetical=True,
-        ),
-        can_run=True,
-        vram_required_bytes=6_000_000_000,
-        vram_available_bytes=24_000_000_000,
-    )
-    _, hardware = json_output_case()
 
     entry = render_json_output(result, hardware)["models"][0]
 
     assert entry["artifact_status"] == "hypothetical"
     assert entry["downloadable"] is False
-    assert entry["can_run"] is False
-    assert entry["hardware_compatible"] is True
+    assert entry["can_run"] is True
+    assert entry["runnable"] is False
     assert entry["file_size_bytes"] is None
     assert entry["estimated_file_size_bytes"] == 4_000_000_000
     assert entry["recommended_runtime_backend"] is None
