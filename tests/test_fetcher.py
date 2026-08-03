@@ -508,6 +508,7 @@ def test_parse_model_builds_vlm_package_metadata():
     assert parsed.artifacts[0].format == "safetensors"
     assert parsed.artifacts[0].access == "ungated"
     assert parsed.components[0].role == "language"
+    assert all(component.parameter_count is None for component in parsed.components)
     assert {c.role for c in parsed.components} >= {
         "vision_encoder",
         "projector",

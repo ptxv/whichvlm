@@ -563,6 +563,19 @@ def test_vision_workload_increases_vram_predictably():
     assert two_large_images > one_image
 
 
+def test_vision_overhead_does_not_repeat_checkpoint_weights():
+    model = make_model(10_000_000_000, hf_pipeline_tag="image-text-to-text")
+
+    estimate = estimate_vram_details(
+        model,
+        None,
+        vision_workload=VisionWorkload(image_count=1, image_size=448),
+    )
+
+    assert estimate.components.weights == 20_000_000_000
+    assert estimate.components.vision == 769_430_400
+
+
 def test_vision_architecture_without_pipeline_tag_increases_vram():
     model = make_model(3_000_000_000, architecture="paligemma")
     workload = VisionWorkload(image_count=1, image_size=448)

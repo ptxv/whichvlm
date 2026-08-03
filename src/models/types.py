@@ -26,6 +26,7 @@ class ModelArtifact:
 class ModelComponent:
     role: str
     repo_id: str
+    # Parameters owned by this component. Checkpoint totals belong on ModelInfo.
     parameter_count: int | None = None
     quantization: str | None = None
 
@@ -57,6 +58,7 @@ class ModelInfo:
     id: str
     family_id: str
     name: str
+    # Total parameters in the checkpoint, including multimodal components.
     parameter_count: int
     parameter_count_active: int | None = None
     architecture: str = ""

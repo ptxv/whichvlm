@@ -357,7 +357,6 @@ def estimate_vision_overhead(model: ModelInfo, workload: Workload | None) -> int
         )
 
     image_scale = (wl.image_size / 448) ** 2
-    vision_weights = int(vision_params * 2)
     projector_scratch = int(128 * 1024**2 + vision_params * 0.15)
     tokens = image_tokens(model, wl)
     language_hidden = model.hidden_size or int(max(effective_p / 1e9, 1.0) * 1024)
@@ -382,9 +381,7 @@ def estimate_vision_overhead(model: ModelInfo, workload: Workload | None) -> int
         prefill = int(
             (192 * 1024**2 + effective_p * 0.008) * image_scale * visual_inputs
         )
-    return (
-        vision_weights + projector_scratch + image_token_scratch + prefill
-    ) * wl.batch_size
+    return (projector_scratch + image_token_scratch + prefill) * wl.batch_size
 
 
 def estimate_audio_overhead(model: ModelInfo, workload: Workload | None) -> int:

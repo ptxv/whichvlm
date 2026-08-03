@@ -197,7 +197,6 @@ def build_components(
         ModelComponent(
             role=role,
             repo_id=model_id,
-            parameter_count=parameter_count if role == "language" else None,
             quantization=quantization_type if role == "language" else None,
         )
         for role in roles
