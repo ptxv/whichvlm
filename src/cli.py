@@ -26,6 +26,7 @@ from runtime import (
     find_projector_artifact,
     generate_run_script,
     normalize_backend_name,
+    quote_shell_argument,
     requires_audio,
     requires_image,
     requires_video,
@@ -1936,7 +1937,7 @@ def snippet(
         raise typer.Exit(code=1)
 
     dep_str = " ".join(f"--with {d}" for d in deps)
-    run_command = shlex.join(["whichvlm", "run", model.id])
+    run_command = f"whichvlm run {quote_shell_argument(model.id)}"
     console.print(f"\n[bold]{model.id}[/]")
     console.print(f"[dim]# Run directly:[/]  {run_command}")
     console.print(f"[dim]# Or manually:[/]   uv run --no-project {dep_str} script.py\n")

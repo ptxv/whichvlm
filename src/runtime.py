@@ -200,6 +200,11 @@ def uv_command(deps: list[str], command: list[str]) -> list[str]:
     return [*cmd, *command]
 
 
+def quote_shell_argument(value: str) -> str:
+    quoted = shlex.quote(value)
+    return quoted if quoted != value else f"'{value}'"
+
+
 def model_family_keys(model: ModelInfo) -> set[str]:
     keys = {model.family_id, model.architecture}
     for value in [
@@ -1131,8 +1136,8 @@ def backend_try_command(model: ModelInfo, action: str, backend: str) -> str:
             media_arg = " --image IMAGE"
         elif requires_video(model):
             media_arg = " --video VIDEO"
-    command = shlex.join(["whichvlm", action, model.id, "--backend", backend])
-    return command + media_arg
+    model_id = quote_shell_argument(model.id)
+    return f"whichvlm {action} {model_id} --backend {backend}{media_arg}"
 
 
 def incompatible_backend_message(
@@ -1280,8 +1285,12 @@ from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 
 {metrics}
-print({f"Downloading {model.id} ({variant.quant_type})..."!r})
-model_path = hf_hub_download(repo_id={model.id!r}, filename={variant.filename!r})
+model_id = {model.id!r}
+model_filename = {variant.filename!r}
+quant_type = {variant.quant_type!r}
+
+print(f"Downloading {{model_id}} ({{quant_type}})...")
+model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
 load_started_at = time.perf_counter()
 print("Loading model...")
 llm = Llama(
