@@ -1704,7 +1704,7 @@ def test_run_incompatible_backend_shows_alternatives(monkeypatch):
     assert result.exit_code == 1
     assert "Available backends:" in result.stdout
     assert "transformers" in result.stdout
-    assert "whichvlm run 'Qwen/Qwen2.5-VL-7B-Instruct'" in result.stdout
+    assert "whichvlm run Qwen/Qwen2.5-VL-7B-Instruct" in result.stdout
 
 
 def test_run_passes_repeatable_images_to_ranking_and_runtime(monkeypatch):
@@ -1972,7 +1972,8 @@ def test_snippet_no_model_found(monkeypatch):
 
 
 def test_snippet_passes_context_length_and_max_tokens(monkeypatch):
-    model = make_model(model_id="org/Test-7B")
+    model_id = "org/Test-7B'\"; injected = true\n# \\\\ 雪"
+    model = make_model(model_id=model_id)
     captured = {}
 
     def fake_generate_run_script(
@@ -1999,7 +2000,7 @@ def test_snippet_passes_context_length_and_max_tokens(monkeypatch):
         app,
         [
             "snippet",
-            "org/Test-7B",
+            model_id,
             "--context-length",
             "8192",
             "--max-tokens",
@@ -2010,6 +2011,7 @@ def test_snippet_passes_context_length_and_max_tokens(monkeypatch):
     assert result.exit_code == 0
     assert captured["context_length"] == 8192
     assert captured["max_tokens"] == 128
+    assert cli_mod.shlex.join(["whichvlm", "run", model_id]) in result.stdout
 
 
 @pytest.mark.parametrize(

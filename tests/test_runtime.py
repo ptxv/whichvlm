@@ -1,5 +1,9 @@
+import ast
+import shlex
+
 import pytest
 
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from models.fetcher import parse_model
 from models.types import (
     GGUFVariant,
@@ -8,11 +12,12 @@ from models.types import (
     ModelComponent,
     ModelInfo,
 )
-from hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from runtime import (
-    ServeRequest,
     RuntimeUnsupportedError,
+    ServeRequest,
     auto_gpu_memory_utilization,
+    backend_try_command,
+    generate_llama_cpp_serve_script,
     generate_run_script,
     recommended_runtime_backend,
     requires_audio,
@@ -534,6 +539,128 @@ def test_generated_scripts_compile():
         compile(script, "<whichvlm-generated>", "exec")
 
 
+def test_runtime_scripts_escape_external_values():
+    def unsafe_value(name):
+        return f"{name}\"; injected_{name} = True\n# \\\\ ' 雪"
+
+    model_id = unsafe_value("model")
+    model_filename = unsafe_value("filename")
+    projector_filename = unsafe_value("projector")
+    image_path = unsafe_value("image")
+    video_path = unsafe_value("video")
+    audio_path = unsafe_value("audio")
+    host = unsafe_value("host")
+    variant = GGUFVariant(
+        filename=model_filename,
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+    )
+    text_model = ModelInfo(
+        id=model_id,
+        family_id="test-7b",
+        name="Test-7B",
+        parameter_count=7_000_000_000,
+    )
+    gguf_model = ModelInfo(
+        id=model_id,
+        family_id="test-7b",
+        name="Test-7B-GGUF",
+        parameter_count=7_000_000_000,
+    )
+    projector = ModelArtifact(
+        repo_id=model_id,
+        format="adapter",
+        filename=projector_filename,
+        source_kind="mmproj",
+    )
+    gguf_vlm = vlm_model(
+        id=model_id,
+        artifacts=[projector],
+    )
+
+    def run(model, artifact=None, **kwargs):
+        return generate_run_script(model, artifact, 4096, False, **kwargs)
+
+    scripts = [
+        (run(text_model), (model_id,)),
+        (
+            run(vlm_model(id=model_id), image_paths=(image_path,)),
+            (model_id, image_path),
+        ),
+        (run(gguf_model, variant), (model_id, model_filename)),
+        (
+            run(gguf_vlm, variant, image_paths=(image_path,)),
+            (model_id, model_filename, projector_filename, image_path),
+        ),
+        (
+            run(
+                vlm_model(id=model_id, model_format="mlx"),
+                image_paths=(image_path,),
+                hardware=darwin_mlx_hardware(),
+            ),
+            (model_id, image_path),
+        ),
+        (
+            run(
+                vlm_model(id=model_id),
+                image_paths=(image_path,),
+                backend_name="vllm",
+                hardware=linux_cuda_hardware(),
+            ),
+            (model_id, image_path),
+        ),
+        (
+            run(
+                vlm_model(id=model_id),
+                image_paths=(image_path,),
+                backend_name="sglang",
+                hardware=linux_cuda_hardware(),
+            ),
+            (model_id, image_path),
+        ),
+        (
+            run(
+                qwen25_video_model(id=model_id),
+                video_path=video_path,
+            ),
+            (model_id, video_path),
+        ),
+        (
+            run(
+                qwen2_audio_model(id=model_id),
+                audio_path=audio_path,
+            ),
+            (model_id, audio_path),
+        ),
+        (
+            generate_llama_cpp_serve_script(
+                gguf_vlm,
+                variant,
+                projector,
+                4096,
+                False,
+                host,
+                9000,
+            ),
+            (model_id, model_filename, projector_filename, host),
+        ),
+    ]
+
+    for script, values in scripts:
+        tree = ast.parse(script)
+        literals = {
+            node.value for node in ast.walk(tree) if isinstance(node, ast.Constant)
+        }
+        assert set(values) <= literals
+        assert not any(
+            isinstance(node, ast.Name) and node.id.startswith("injected_")
+            for node in ast.walk(tree)
+        )
+
+    command = backend_try_command(text_model, "run", "transformers")
+    assert shlex.split(command)[2] == model_id
+
+
 def test_runtime_detects_vlm_from_architecture():
     model = parse_model(
         {
@@ -631,7 +758,7 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
     assert script_type == "gguf_vlm"
     assert "Llava15ChatHandler" in script
     assert "clip_model_path=mmproj_path" in script
-    assert 'projector_filename = "mmproj-test-f16.gguf"' in script
+    assert "projector_filename = 'mmproj-test-f16.gguf'" in script
     assert "image_data_url" in script
     assert "max_tokens=128" in script
 
@@ -736,7 +863,7 @@ def test_incompatible_backend_lists_supported_run_backends():
         "  vllm\n"
         "  sglang\n\n"
         "Try:\n"
-        "  whichvlm run 'Qwen/Qwen2.5-VL-7B-Instruct' "
+        "  whichvlm run Qwen/Qwen2.5-VL-7B-Instruct "
         "--backend transformers --image IMAGE"
     )
 

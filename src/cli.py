@@ -1936,8 +1936,9 @@ def snippet(
         raise typer.Exit(code=1)
 
     dep_str = " ".join(f"--with {d}" for d in deps)
+    run_command = shlex.join(["whichvlm", "run", model.id])
     console.print(f"\n[bold]{model.id}[/]")
-    console.print(f"[dim]# Run directly:[/]  whichvlm run '{model.id}'")
+    console.print(f"[dim]# Run directly:[/]  {run_command}")
     console.print(f"[dim]# Or manually:[/]   uv run --no-project {dep_str} script.py\n")
     console.print(Syntax(code, "python", theme="monokai"))
 

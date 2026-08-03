@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import shlex
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
@@ -1130,7 +1131,8 @@ def backend_try_command(model: ModelInfo, action: str, backend: str) -> str:
             media_arg = " --image IMAGE"
         elif requires_video(model):
             media_arg = " --video VIDEO"
-    return f"whichvlm {action} '{model.id}' --backend {backend}{media_arg}"
+    command = shlex.join(["whichvlm", action, model.id, "--backend", backend])
+    return command + media_arg
 
 
 def incompatible_backend_message(
@@ -1278,8 +1280,8 @@ from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 
 {metrics}
-print("Downloading {model.id} ({variant.quant_type})...")
-model_path = hf_hub_download(repo_id="{model.id}", filename="{variant.filename}")
+print({f"Downloading {model.id} ({variant.quant_type})..."!r})
+model_path = hf_hub_download(repo_id={model.id!r}, filename={variant.filename!r})
 load_started_at = time.perf_counter()
 print("Loading model...")
 llm = Llama(
@@ -1346,9 +1348,9 @@ from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 from llama_cpp import llama_chat_format
 
-model_id = "{model.id}"
-model_filename = "{variant.filename}"
-projector_filename = "{projector.filename}"
+model_id = {model.id!r}
+model_filename = {variant.filename!r}
+projector_filename = {projector.filename!r}
 image_path = {image_path!r}
 {metrics}
 
@@ -1471,8 +1473,8 @@ import sys
 
 from huggingface_hub import hf_hub_download
 
-model_id = "{model.id}"
-model_filename = "{variant.filename}"
+model_id = {model.id!r}
+model_filename = {variant.filename!r}
 projector_filename = {projector_filename!r}
 
 print(f"Downloading {{model_id}}...")
@@ -1488,7 +1490,7 @@ cmd = [
     "--n_gpu_layers",
     "{n_gpu}",
     "--host",
-    "{host}",
+    {host!r},
     "--port",
     "{port}",
 ]
@@ -1531,7 +1533,7 @@ import torch
 from threading import Thread
 from transformers import {imports}
 
-model_id = "{model.id}"
+model_id = {model.id!r}
 device_map = {device_map}
 {runtime_setup}
 try:
@@ -1619,7 +1621,7 @@ from PIL import ImageOps
 from threading import Thread
 from transformers import {imports}
 
-model_id = "{model.id}"
+model_id = {model.id!r}
 image_paths = {image_paths!r}
 device_map = {device_map}
 {runtime_setup}
@@ -1728,7 +1730,7 @@ import torch
 from qwen_vl_utils import process_vision_info
 from transformers import {imports}
 
-model_id = "{model.id}"
+model_id = {model.id!r}
 video_path = {video_path!r}
 video_uri = Path(video_path).expanduser().resolve().as_uri()
 device_map = {device_map}
@@ -1825,7 +1827,7 @@ import psutil
 import torch
 from transformers import {imports}
 
-model_id = "{model.id}"
+model_id = {model.id!r}
 audio_path = {audio_path!r}
 device_map = {device_map}
 {runtime_setup}
@@ -1900,7 +1902,7 @@ try:
 except ImportError:
     apply_chat_template = None
 
-model_id = "{model.id}"
+model_id = {model.id!r}
 image_path = {image_path!r}
 
 print(f"Loading {{model_id}}...")
@@ -1957,7 +1959,7 @@ import time
 import torch
 from vllm import LLM, SamplingParams
 
-model_id = "{model.id}"
+model_id = {model.id!r}
 image_path = {image_path!r}
 quantization = {quantization!r}
 {metrics}
@@ -2030,7 +2032,7 @@ import time
 import torch
 from sglang import Engine
 
-model_id = "{model.id}"
+model_id = {model.id!r}
 image_path = {image_path!r}
 {metrics}
 
