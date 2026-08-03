@@ -81,6 +81,8 @@ def test_aa_index_normalization_snapshot():
     assert raw_score == 44.27
     assert normalize_aa_index(raw_score) == 44.3
     assert (AA_INDEX_MIN, AA_INDEX_MAX) == (0.0, 100.0)
+    assert normalize_aa_index(AA_INDEX_MIN) == 0.0
+    assert normalize_aa_index(AA_INDEX_MAX) == 100.0
     assert AA_INDEX_SOURCE_DATE == "2026-08-03"
     assert AA_INDEX_NORMALIZATION_VERSION == "v4.1"
 
