@@ -638,6 +638,55 @@ def test_parse_model_extracts_architecture_metadata():
     assert parsed.image_token_strategy == "full"
 
 
+def test_parse_model_extracts_gguf_sliding_window_pattern():
+    parsed = parse_model(
+        {
+            "id": "community/gemma-3-4b-gguf",
+            "config": {"architectures": ["Gemma3ForCausalLM"]},
+            "gguf": {
+                "gemma3.block_count": 4,
+                "gemma3.embedding_length": 1024,
+                "gemma3.attention.head_count": 8,
+                "gemma3.attention.head_count_kv": 2,
+                "gemma3.attention.sliding_window": 2048,
+                "gemma3.attention.sliding_window_pattern": [
+                    True,
+                    True,
+                    False,
+                    True,
+                ],
+            },
+            "safetensors": {"total": 4_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.sliding_window == 2048
+    assert parsed.sliding_window_layers == 3
+
+
+def test_parse_model_extracts_numeric_sliding_window_pattern():
+    parsed = parse_model(
+        {
+            "id": "google/gemma-3-4b-it",
+            "config": {
+                "architectures": ["Gemma3ForCausalLM"],
+                "num_hidden_layers": 6,
+                "sliding_window": 2048,
+                "sliding_window_pattern": 3,
+            },
+            "safetensors": {"total": 4_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.sliding_window_layers == 4
+
+
 def test_parse_model_marks_community_gguf_relationship():
     parsed = parse_model(
         {
