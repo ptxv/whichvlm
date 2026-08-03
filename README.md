@@ -8,23 +8,23 @@ Find local vision-language models that fit your machine.
 
 Use Python 3.11 or newer.
 
-Run without installing:
+Run from source without installing:
 
 ```bash
-uvx whichvlm --help
+uvx --from git+https://github.com/ptxv/whichvlm.git whichvlm --help
 ```
 
-Or install with pip:
+Or install from source with pip:
 
 ```bash
-python -m pip install whichvlm
+python -m pip install "whichvlm @ git+https://github.com/ptxv/whichvlm.git"
 whichvlm --help
 ```
 
 ## Use
 
-The examples below use the installed command. Prefix them with `uvx` to run
-without installing.
+The examples below use the installed command. To run without installing, replace
+`whichvlm` with `uvx --from git+https://github.com/ptxv/whichvlm.git whichvlm`.
 
 ![whichvlm CLI demo](https://raw.githubusercontent.com/ptxv/whichvlm/master/assets/whichvlm-demo.gif)
 
