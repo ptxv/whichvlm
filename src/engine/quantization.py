@@ -55,8 +55,9 @@ def infer_non_gguf_quant_type(model_id: str) -> str:
 def effective_quant_type(model: ModelInfo, variant: GGUFVariant | None) -> str:
     if variant:
         return variant.quant_type.upper()
-    if model.quantization_type:
-        return model.quantization_type.upper()
+    model_quant = (model.quantization_type or "").upper()
+    if model_quant in NON_GGUF_BYTES_PER_WEIGHT:
+        return model_quant
     return infer_non_gguf_quant_type(model.id)
 
 
@@ -66,7 +67,15 @@ def bytes_per_weight(quant_type: str) -> float:
 
 def estimate_weight_bytes(model: ModelInfo, variant: GGUFVariant | None) -> int:
     if variant:
-        return variant.file_size_bytes
+        projector_bytes = next(
+            (
+                artifact.file_size_bytes
+                for artifact in model.artifacts
+                if artifact.source_kind == "mmproj" and artifact.file_size_bytes
+            ),
+            0,
+        )
+        return variant.file_size_bytes + projector_bytes
     quant_type = effective_quant_type(model, None)
     if model.components:
         known_params = 0
