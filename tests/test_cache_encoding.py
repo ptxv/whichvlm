@@ -74,7 +74,7 @@ def test_model_cache_can_read_stale_snapshot(monkeypatch):
     assert snapshot["source"]["name"] == "huggingface"
 
 
-def test_model_cache_rejects_unsupported_schema_versions(monkeypatch):
+def test_model_cache_invalidates_old_and_rejects_future_schema(monkeypatch):
     payload = {
         "schema_version": cache_mod.CACHE_SCHEMA_VERSION - 1,
         "cached_at": time.time(),
@@ -130,7 +130,7 @@ def test_benchmark_cache_can_read_stale_snapshot(monkeypatch):
     assert snapshot["source"]["name"] == "benchmark_index"
 
 
-def test_benchmark_cache_rejects_unsupported_schema_versions(monkeypatch):
+def test_benchmark_cache_invalidates_old_and_rejects_future_schema(monkeypatch):
     payload = {
         "schema_version": benchmark_mod.BENCHMARK_CACHE_SCHEMA_VERSION - 1,
         "cached_at": time.time(),

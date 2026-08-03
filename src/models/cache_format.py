@@ -16,9 +16,8 @@ def read_cache_payload(cache_file: Any) -> dict | None:
 
 
 def cache_schema_supported(payload: dict, supported_version: int) -> bool:
-    try:
-        schema_version = int(payload.get("schema_version", 1))
-    except (TypeError, ValueError):
+    schema_version = payload.get("schema_version", 1)
+    if not isinstance(schema_version, int):
         return False
 
     if schema_version > supported_version:

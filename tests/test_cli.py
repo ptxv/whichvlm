@@ -275,13 +275,7 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
         encoding="utf-8",
     )
     (cache_path / "benchmark.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 2,
-                "cached_at": cached_at,
-                "scores": {},
-            }
-        ),
+        json.dumps({"schema_version": 2, "cached_at": cached_at, "scores": {}}),
         encoding="utf-8",
     )
 
