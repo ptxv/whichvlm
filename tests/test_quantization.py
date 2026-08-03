@@ -27,6 +27,13 @@ def test_estimate_weight_bytes_for_awq():
     assert estimate_weight_bytes(model, None) == 5_000_000_000
 
 
+def test_estimate_weight_bytes_uses_model_quantization_metadata():
+    model = make_model("org/Test-VL", params=10_000_000_000)
+    model.quantization_type = "AWQ"
+
+    assert estimate_weight_bytes(model, None) == 5_000_000_000
+
+
 def test_awq_vram_is_lower_than_fp16_fallback():
     awq = make_model("Qwen/Qwen2.5-14B-Instruct-AWQ")
     fp16 = make_model("Qwen/Qwen2.5-14B-Instruct")
