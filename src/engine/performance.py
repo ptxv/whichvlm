@@ -125,8 +125,8 @@ def lower_speed_confidence(
 def looks_synthetic_gguf(model: ModelInfo, variant: GGUFVariant | None) -> bool:
     if variant is None:
         return False
-    if not variant.filename:
-        return False
+    if variant.hypothetical or not variant.filename:
+        return True
     expected = f"{model.name}.{variant.quant_type}.gguf"
     return variant.filename == expected
 
@@ -239,7 +239,7 @@ def estimate_speed_uncertainty(
     if looks_synthetic_gguf(model, variant):
         confidence = lower_speed_confidence(confidence, "medium")
         notes.append(
-            "This is a synthetic GGUF estimate for an official repo, not a measured GGUF file."
+            "This synthetic GGUF estimate is hypothetical, not a measured GGUF file."
         )
 
     if is_multimodal_model(model):

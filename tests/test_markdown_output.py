@@ -142,6 +142,29 @@ def test_display_markdown_details_table_uses_metadata_columns():
     )
 
 
+def test_display_markdown_labels_unavailable_gguf_artifacts():
+    hypothetical = markdown_result(1)
+    hypothetical.gguf_variant.hypothetical = True
+
+    status_output = capture_markdown(
+        [hypothetical], hardware_fixture(), show_status=True
+    )
+    details_output = capture_markdown(
+        [hypothetical], hardware_fixture(), show_status=False
+    )
+
+    assert "Q4_K_M (hypothetical)" in status_output
+    assert "| Hypothetical |" in status_output
+    assert "| Q4_K_M (hypothetical) | 2026-01-01 | - |" in details_output
+
+    missing_projector = markdown_result(1)
+    missing_projector.model.hf_pipeline_tag = "image-text-to-text"
+    output = capture_markdown([missing_projector], hardware_fixture(), show_status=True)
+
+    assert "Q4_K_M (missing projector)" in output
+    assert "| Missing projector |" in output
+
+
 def test_display_markdown_empty_results():
     output = capture_markdown(
         [],

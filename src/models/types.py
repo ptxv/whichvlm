@@ -8,6 +8,7 @@ class GGUFVariant:
     filename: str
     quant_type: str
     file_size_bytes: int
+    hypothetical: bool = False
 
 
 @dataclass

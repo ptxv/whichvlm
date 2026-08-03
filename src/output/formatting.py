@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from math import log10
 
+from engine.quantization import effective_quant_type
 from engine.types import CompatibilityResult
+from models.types import GGUFVariant, ModelInfo
+from runtime import gguf_artifact_status
 
 
 def format_bytes(num_bytes: int) -> str:
@@ -38,6 +41,16 @@ def format_published_at(value: str | None) -> str:
         return dt.strftime("%Y-%m-%d")
     except ValueError:
         return value[:10] if len(value) >= 10 else value
+
+
+def format_artifact_label(model: ModelInfo, variant: GGUFVariant | None) -> str:
+    label = effective_quant_type(model, variant)
+    status = gguf_artifact_status(model, variant)
+    if status == "hypothetical":
+        return f"{label} (hypothetical)"
+    if status == "missing_projector":
+        return f"{label} (missing projector)"
+    return label
 
 
 def format_speed(result: CompatibilityResult) -> str:

@@ -16,7 +16,7 @@ from models.types import (
 from models.package_graph import capabilities_to_dict
 from output import console
 from output.upgrade import summarize_upgrade_row
-from runtime import recommended_runtime_backend
+from runtime import gguf_artifact_status, recommended_runtime_backend
 
 
 def backend_capability_dict(capability: BackendCapability) -> dict:
@@ -126,6 +126,15 @@ def model_dict(
     details: bool = False,
 ) -> dict:
     model = result.model
+    artifact_status = gguf_artifact_status(model, result.gguf_variant)
+    artifact_ready = artifact_status in {None, "available"}
+    file_size_bytes: int | None = estimate_weight_bytes(model, None)
+    if result.gguf_variant:
+        file_size_bytes = (
+            None
+            if artifact_status == "hypothetical"
+            else result.gguf_variant.file_size_bytes
+        )
     data = {
         "rank": rank,
         "model_id": model.id,
@@ -135,11 +144,14 @@ def model_dict(
         "parameter_count": model.parameter_count,
         "license": model.license,
         "quant_type": effective_quant_type(model, result.gguf_variant),
-        "file_size_bytes": (
+        "file_size_bytes": file_size_bytes,
+        "estimated_file_size_bytes": (
             result.gguf_variant.file_size_bytes
-            if result.gguf_variant
-            else estimate_weight_bytes(model, None)
+            if result.gguf_variant and artifact_status == "hypothetical"
+            else None
         ),
+        "artifact_status": artifact_status,
+        "downloadable": artifact_status == "available" if result.gguf_variant else None,
         "vram_required_bytes": result.vram_required_bytes,
         "vram_required_range_bytes": (
             list(result.vram_required_range_bytes)
@@ -153,7 +165,8 @@ def model_dict(
         "benchmark_source": result.benchmark_source,
         "ranking_evidence": result.ranking_evidence,
         "fit_type": result.fit_type,
-        "can_run": result.can_run,
+        "can_run": result.can_run and artifact_ready,
+        "hardware_compatible": result.can_run,
         "context_fits": result.context_fits,
         "offload_ratio": result.offload_ratio,
         "binding_constraint": result_binding_constraint(result),
@@ -245,9 +258,10 @@ def display_plan_json(
 ) -> None:
     from hardware.catalog import PLAN_SYSTEM_RAM_BYTES
     from output.plan import (
-        plan_multi_gpu_compatibility,
         plan_gpu_compatibility,
+        plan_multi_gpu_compatibility,
         plan_recommendations,
+        plan_variant_for_quant,
         plan_vram_by_quant,
     )
 
@@ -255,6 +269,8 @@ def display_plan_json(
     vram_by_quant = plan_vram_by_quant(
         model, context_length, image_count, image_size, video_frames
     )
+    target_variant = plan_variant_for_quant(model, target_quant)
+    artifact_status = gguf_artifact_status(model, target_variant)
     single_gpu_rows = plan_gpu_compatibility(
         model,
         target_quant,
@@ -289,6 +305,8 @@ def display_plan_json(
             "license": model.license,
         },
         "target_quant": target_quant,
+        "artifact_status": artifact_status,
+        "downloadable": artifact_status == "available",
         "context_length": context_length,
         "workload": {
             "image_count": image_count,

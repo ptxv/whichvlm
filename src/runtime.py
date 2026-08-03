@@ -522,6 +522,16 @@ def find_projector_artifact(model: ModelInfo) -> ModelArtifact | None:
     return None
 
 
+def gguf_artifact_status(model: ModelInfo, artifact: GGUFVariant | None) -> str | None:
+    if artifact is None:
+        return None
+    if artifact.hypothetical or not artifact.filename:
+        return "hypothetical"
+    if is_vlm_model(model) and find_projector_artifact(model) is None:
+        return "missing_projector"
+    return "available"
+
+
 TransformersProfile = tuple[str, str, tuple[str, ...]]
 
 
@@ -1214,6 +1224,8 @@ def recommended_runtime_backend(
     artifact: GGUFVariant | None,
     hardware: HardwareInfo | None = None,
 ) -> str | None:
+    if gguf_artifact_status(model, artifact) not in {None, "available"}:
+        return None
     for backend in RECOMMENDED_BACKENDS:
         if backend.supports(model, artifact, hardware):
             return backend.name
