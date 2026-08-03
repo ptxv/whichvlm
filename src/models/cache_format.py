@@ -30,8 +30,10 @@ def read_cache_payload(cache_file: Any) -> dict | None:
 
 
 def write_cache_payload(cache_file: Any, payload: dict) -> None:
-    payload["checksum"] = cache_checksum(payload)
-    cache_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    payload_with_checksum = {**payload, "checksum": cache_checksum(payload)}
+    cache_file.write_text(
+        json.dumps(payload_with_checksum, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def cache_expired(cached_at: float, ttl_seconds: int, *, allow_stale: bool) -> bool:

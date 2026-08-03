@@ -5,6 +5,7 @@ import time
 
 import models.benchmark as benchmark_mod
 import models.cache as cache_mod
+from models.cache_format import write_cache_payload
 
 
 class ReadableCacheFile:
@@ -29,6 +30,12 @@ class WritableCacheFile:
         self.encoding = encoding
         self.text = text
         return len(text)
+
+
+def test_cache_write_does_not_mutate_payload():
+    payload = {"models": []}
+    write_cache_payload(WritableCacheFile(), payload)
+    assert payload == {"models": []}
 
 
 def test_model_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
