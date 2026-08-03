@@ -48,6 +48,7 @@ Override incomplete detected GPU metadata:
 
 ```bash
 whichvlm --vram 12 --memory-bandwidth 288
+whichvlm --gpu-index 1 --vram 24 --memory-bandwidth 960
 ```
 
 Return machine-readable output:
