@@ -691,8 +691,16 @@ def test_main_json_and_markdown_are_mutually_exclusive():
     assert "--json and --markdown are mutually exclusive" in result.stdout
 
 
-def test_main_overrides_mocked_detected_dedicated_gpu(monkeypatch):
-    gpu = GPUInfo(
+def test_main_overrides_selected_detected_gpu(monkeypatch):
+    integrated_gpu = GPUInfo(
+        name="Integrated GPU",
+        vendor="amd",
+        vram_bytes=4 * 1024**3,
+        memory_bandwidth_gbps=128,
+        shared_memory=True,
+        backend_capabilities=[BackendCapability("vulkan")],
+    )
+    discrete_gpu = GPUInfo(
         name="Detected GPU",
         vendor="nvidia",
         vram_bytes=8 * 1024**3,
@@ -700,23 +708,22 @@ def test_main_overrides_mocked_detected_dedicated_gpu(monkeypatch):
         backend_capabilities=[BackendCapability("cuda")],
     )
     hardware = HardwareInfo(
-        gpus=[gpu],
+        gpus=[integrated_gpu, discrete_gpu],
         ram_bytes=32 * 1024**3,
         disk_free_bytes=100 * 1024**3,
         os="linux",
     )
 
-    def fake_rank_models(models, ranked_hardware, **kwargs):
-        return []
-
     monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hardware)
     monkeypatch.setattr(cli_mod, "load_model_catalog", lambda *args, **kwargs: [])
     monkeypatch.setattr(cli_mod, "load_benchmark_index", lambda refresh: {})
-    monkeypatch.setattr("engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr("engine.ranker.rank_models", lambda *args, **kwargs: [])
 
     result = CliRunner().invoke(
         app,
         [
+            "--gpu-index",
+            "1",
             "--vram",
             "12",
             "--memory-bandwidth",
@@ -731,15 +738,24 @@ def test_main_overrides_mocked_detected_dedicated_gpu(monkeypatch):
     )
 
     assert result.exit_code == 0
-    ranked_gpu = hardware.gpus[0]
-    assert ranked_gpu is gpu
+    assert integrated_gpu.vram_bytes == 4 * 1024**3
+    assert integrated_gpu.memory_bandwidth_gbps == 128
+    assert integrated_gpu.shared_memory is True
+    assert has_backend(integrated_gpu, "vulkan")
+    assert integrated_gpu.overrides == {}
+    ranked_gpu = hardware.gpus[1]
+    assert ranked_gpu is discrete_gpu
     assert ranked_gpu.name == "Detected GPU"
     assert ranked_gpu.vendor == "nvidia"
     assert ranked_gpu.vram_bytes == 12 * 1024**3
     assert ranked_gpu.memory_bandwidth_gbps == 600
     assert ranked_gpu.shared_memory is False
     assert has_backend(ranked_gpu, "cuda")
-    assert json.loads(result.stdout)["hardware"]["gpus"][0]["overrides"] == {
+    gpu_json = json.loads(result.stdout)["hardware"]["gpus"]
+    assert gpu_json[0]["index"] == 0
+    assert gpu_json[1]["index"] == 1
+    assert gpu_json[1]["name"] == "Detected GPU"
+    assert gpu_json[1]["overrides"] == {
         "vram_bytes": 12 * 1024**3,
         "memory_bandwidth_gbps": 600,
     }
@@ -817,68 +833,6 @@ def test_main_rejects_override_for_multiple_detected_gpus(monkeypatch):
 
     assert result.exit_code == 1
     assert "require exactly one detected or simulated GPU" in result.stdout
-
-
-def test_main_overrides_selected_detected_gpu(monkeypatch):
-    integrated_gpu = GPUInfo(
-        name="Integrated GPU",
-        vendor="amd",
-        vram_bytes=4 * 1024**3,
-        memory_bandwidth_gbps=128,
-        shared_memory=True,
-        backend_capabilities=[BackendCapability("vulkan")],
-    )
-    selected_gpu = GPUInfo(
-        name="Discrete GPU",
-        vendor="nvidia",
-        vram_bytes=8 * 1024**3,
-        memory_bandwidth_gbps=256,
-        backend_capabilities=[BackendCapability("cuda")],
-    )
-    hardware = HardwareInfo(
-        gpus=[integrated_gpu, selected_gpu], ram_bytes=32 * 1024**3, os="linux"
-    )
-
-    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hardware)
-    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda *args, **kwargs: [])
-    monkeypatch.setattr(cli_mod, "load_benchmark_index", lambda refresh: {})
-    monkeypatch.setattr("engine.ranker.rank_models", lambda *args, **kwargs: [])
-
-    result = CliRunner().invoke(
-        app,
-        [
-            "--gpu-index",
-            "1",
-            "--vram",
-            "16",
-            "--memory-bandwidth",
-            "512",
-            "--vram-headroom",
-            "none",
-            "--min-params",
-            "1",
-            "--json",
-            "--details",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert integrated_gpu.vram_bytes == 4 * 1024**3
-    assert integrated_gpu.memory_bandwidth_gbps == 128
-    assert integrated_gpu.overrides == {}
-    assert selected_gpu.name == "Discrete GPU"
-    assert selected_gpu.vendor == "nvidia"
-    assert has_backend(selected_gpu, "cuda")
-    assert selected_gpu.vram_bytes == 16 * 1024**3
-    assert selected_gpu.memory_bandwidth_gbps == 512
-    gpu_json = json.loads(result.stdout)["hardware"]["gpus"]
-    assert gpu_json[0]["index"] == 0
-    assert gpu_json[1]["index"] == 1
-    assert gpu_json[1]["name"] == "Discrete GPU"
-    assert gpu_json[1]["overrides"] == {
-        "vram_bytes": 16 * 1024**3,
-        "memory_bandwidth_gbps": 512,
-    }
 
 
 @pytest.mark.parametrize("gpu_index", ["-1", "2"])
