@@ -469,7 +469,8 @@ def test_low_compute_capability():
     hw = make_hardware(vram=24 * 1024**3, cc=(4, 0))
     result = check_compatibility(model, variant, hw)
     assert result.can_run is True
-    assert any("compute capability" in w.lower() for w in result.warnings)
+    assert any("llama.cpp CUDA" in warning for warning in result.warnings)
+    assert not any("Ollama" in warning for warning in result.warnings)
 
 
 def test_insufficient_disk():
