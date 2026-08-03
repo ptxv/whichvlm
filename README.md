@@ -83,9 +83,9 @@ whichvlm --fit full-gpu
 VLM runners require an image path.
 
 ```bash
-uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
-uv run whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend transformers --image ./before.jpg --image ./after.jpg
-uv run whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
+whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --max-tokens 256
+whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend transformers --image ./before.jpg --image ./after.jpg
+whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
 ```
 
 For vLLM and SGLang, derive backend memory utilization from the same reserve:
