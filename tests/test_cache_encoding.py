@@ -70,6 +70,10 @@ def test_model_cache_rejects_modified_payload(monkeypatch, tmp_path):
 
     assert cache_mod.load_cache() is None
 
+    payload["checksum"] = None
+    cache_file.write_text(json.dumps(payload), encoding="utf-8")
+    assert cache_mod.load_cache() is None
+
 
 def test_model_cache_can_read_stale_snapshot(monkeypatch):
     payload = {

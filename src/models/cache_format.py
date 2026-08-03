@@ -23,8 +23,7 @@ def read_cache_payload(cache_file: Any) -> dict | None:
         return None
     if not isinstance(payload, dict):
         return None
-    checksum = payload.get("checksum")
-    if checksum is not None and checksum != cache_checksum(payload):
+    if "checksum" in payload and payload["checksum"] != cache_checksum(payload):
         return None
     return payload
 
