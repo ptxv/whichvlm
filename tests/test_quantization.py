@@ -4,7 +4,7 @@ from engine.quantization import (
     infer_non_gguf_quant_type,
 )
 from engine.vram import estimate_vram
-from models.types import ModelComponent, ModelInfo
+from models.types import GGUFVariant, ModelArtifact, ModelComponent, ModelInfo
 
 
 def make_model(model_id: str, params: int = 14_000_000_000) -> ModelInfo:
@@ -25,6 +25,35 @@ def test_infer_non_gguf_awq():
 def test_estimate_weight_bytes_for_awq():
     model = make_model("Qwen/Qwen2.5-14B-Instruct-AWQ", params=10_000_000_000)
     assert estimate_weight_bytes(model, None) == 5_000_000_000
+
+
+def test_estimate_weight_bytes_uses_model_quantization_metadata():
+    model = make_model("org/Test-VL", params=10_000_000_000)
+    model.quantization_type = "AWQ"
+
+    assert estimate_weight_bytes(model, None) == 5_000_000_000
+
+
+def test_container_format_does_not_override_weight_quantization():
+    model = make_model("mlx-community/Test-VL-4bit", params=10_000_000_000)
+    model.quantization_type = "MLX"
+
+    assert estimate_weight_bytes(model, None) == 5_000_000_000
+
+
+def test_estimate_weight_bytes_includes_mmproj_artifact():
+    model = make_model("community/LLaVA-7B-GGUF", params=7_000_000_000)
+    model.artifacts = [
+        ModelArtifact(
+            repo_id=model.id,
+            format="adapter",
+            file_size_bytes=400_000_000,
+            source_kind="mmproj",
+        )
+    ]
+    variant = GGUFVariant("llava-q4_k_m.gguf", "Q4_K_M", 4_500_000_000)
+
+    assert estimate_weight_bytes(model, variant) == 4_900_000_000
 
 
 def test_awq_vram_is_lower_than_fp16_fallback():

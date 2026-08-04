@@ -145,7 +145,7 @@ def test_plan_reverse_lookup_returns_full_partial_and_multi_gpu():
 
     recommendations = plan_recommendations(single_gpu_rows, multi_gpu_rows)
 
-    assert recommendations["smallest_full_gpu"]["name"] == "H200"
+    assert recommendations["smallest_full_gpu"]["name"] == "A100 80GB"
     assert recommendations["smallest_partial_offload"]["name"] == "RTX 5090"
     assert recommendations["multi_gpu_alternatives"][0]["name"] == "2x RTX A6000"
     assert recommendations["multi_gpu_alternatives"][0]["uses_multi_gpu"] is True
