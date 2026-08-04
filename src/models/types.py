@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
+
+
+class GGUFArtifactStatus(StrEnum):
+    AVAILABLE = "available"
+    HYPOTHETICAL = "hypothetical"
+    MISSING_PROJECTOR = "missing_projector"
 
 
 @dataclass
@@ -8,6 +15,7 @@ class GGUFVariant:
     filename: str
     quant_type: str
     file_size_bytes: int
+    hypothetical: bool = False
 
 
 @dataclass

@@ -8,6 +8,7 @@ from models.integrations import (
     pipeline_tag_has_visual_input,
 )
 from models.types import (
+    GGUFArtifactStatus,
     GGUFVariant,
     ModelArtifact,
     ModelCapabilities,
@@ -63,6 +64,16 @@ def is_projector_filename(filename: str) -> bool:
     return "mmproj" in lower or "projector" in lower
 
 
+def find_projector_artifact(model: ModelInfo) -> ModelArtifact | None:
+    for artifact in model.artifacts:
+        if artifact.source_kind == "mmproj" and artifact.filename:
+            return artifact
+    for artifact in model.artifacts:
+        if artifact.filename and is_projector_filename(artifact.filename):
+            return artifact
+    return None
+
+
 def is_vision_model(
     model_id: str,
     pipeline_tag: object,
@@ -72,6 +83,25 @@ def is_vision_model(
     return capabilities_for_data(
         model_id, pipeline_tag, tags, architecture
     ).image or pipeline_tag_has_visual_input(pipeline_tag)
+
+
+def gguf_artifact_status(
+    model: ModelInfo, variant: GGUFVariant | None
+) -> GGUFArtifactStatus | None:
+    if variant is None:
+        return None
+    if variant.hypothetical or not variant.filename:
+        return GGUFArtifactStatus.HYPOTHETICAL
+    is_vlm = (
+        model.capabilities.image
+        or is_vision_model(
+            model.id, model.hf_pipeline_tag, model.tags, model.architecture
+        )
+        or any(component.role == "vision_encoder" for component in model.components)
+    )
+    if is_vlm and find_projector_artifact(model) is None:
+        return GGUFArtifactStatus.MISSING_PROJECTOR
+    return GGUFArtifactStatus.AVAILABLE
 
 
 def lineage_relationship(

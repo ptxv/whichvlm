@@ -2154,6 +2154,26 @@ def test_json_output_defaults_to_compact():
     assert "budget_notes" not in compact["hardware"]
 
 
+def test_json_output_marks_hypothetical_gguf_unavailable():
+    result, hardware = json_output_case()
+    result.gguf_variant = GGUFVariant(
+        filename="Test-7B.Q4_K_M.gguf",
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+        hypothetical=True,
+    )
+
+    entry = render_json_output(result, hardware)["models"][0]
+
+    assert entry["artifact_status"] == "hypothetical"
+    assert entry["downloadable"] is False
+    assert entry["can_run"] is True
+    assert entry["runnable"] is False
+    assert entry["file_size_bytes"] is None
+    assert entry["estimated_file_size_bytes"] == 4_000_000_000
+    assert entry["recommended_runtime_backend"] is None
+
+
 def test_json_output_includes_diagnostics_when_requested():
     result, hardware = json_output_case()
     data = render_json_output(result, hardware, details=True)

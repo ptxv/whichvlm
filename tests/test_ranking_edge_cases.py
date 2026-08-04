@@ -612,6 +612,8 @@ class TestSpeedUncertainty:
             benchmark_scores={"Qwen/Qwen3-30B-A3B": 80.0},
         )[0]
 
+        assert result.gguf_variant is not None
+        assert result.gguf_variant.hypothetical is True
         assert result.speed_confidence == "medium"
         assert result.speed_range_tok_per_sec is not None
         assert result.speed_range_tok_per_sec[0] < result.estimated_tok_per_sec

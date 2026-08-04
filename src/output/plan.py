@@ -21,7 +21,8 @@ from hardware.catalog import (
     HardwareCatalogEntry,
 )
 from hardware.types import GPUInfo, HardwareInfo
-from models.types import GGUFVariant, ModelInfo
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus, GGUFVariant, ModelInfo
 from output import console
 from output.formatting import format_bytes, format_params
 
@@ -42,11 +43,16 @@ def apply_plan_memory_budget(hardware: HardwareInfo, perf_vram: str) -> Hardware
 
 
 def plan_variant_for_quant(model: ModelInfo, quant: str) -> GGUFVariant:
-    bpw = QUANT_BYTES_PER_WEIGHT.get(quant.upper(), 0.5625)
+    quant = quant.upper()
+    for variant in model.gguf_variants:
+        if variant.quant_type.upper() == quant:
+            return variant
+    bpw = QUANT_BYTES_PER_WEIGHT.get(quant, 0.5625)
     return GGUFVariant(
         filename="",
         quant_type=quant,
         file_size_bytes=int(model.parameter_count * bpw),
+        hypothetical=True,
     )
 
 
@@ -80,14 +86,15 @@ def plan_vram_by_quant(
     for quant in PLAN_QUANTS:
         if quant not in QUANT_BYTES_PER_WEIGHT:
             continue
-        vram = estimate_vram_details(
-            model, plan_variant_for_quant(model, quant), context_length, vision_workload
-        )
+        variant = plan_variant_for_quant(model, quant)
+        artifact_status = gguf_artifact_status(model, variant)
+        vram = estimate_vram_details(model, variant, context_length, vision_workload)
         rows[quant] = {
             "vram_bytes": vram.required_bytes,
             "vram_range_bytes": [vram.lower_bytes, vram.upper_bytes],
             "vram_confidence": vram.confidence,
             "quality_loss": QUANT_QUALITY_PENALTY.get(quant, 0.0),
+            "artifact_status": artifact_status,
         }
     return rows
 
@@ -421,12 +428,26 @@ def display_plan(
     panel = Panel("\n".join(lines), title="[bold]Model Info[/]", border_style="cyan")
     console.console.print(panel)
 
+    target_variant = plan_variant_for_quant(model, target_quant)
+    target_artifact_status = gguf_artifact_status(model, target_variant)
+    if target_artifact_status is GGUFArtifactStatus.HYPOTHETICAL:
+        console.console.print(
+            f"[yellow]Artifact:[/] No concrete {target_quant} GGUF file found; "
+            "results are hypothetical and not downloadable or runnable."
+        )
+    elif target_artifact_status is GGUFArtifactStatus.MISSING_PROJECTOR:
+        console.console.print(
+            "[yellow]Artifact:[/] GGUF file found, but the VLM package has no "
+            "mmproj/projector and is not runnable."
+        )
+
     vram_table = Table(
         title=f"VRAM Required (context: {context_length})", show_lines=True
     )
     vram_table.add_column("Quant", style="bold", width=8)
     vram_table.add_column("VRAM", justify="right", width=10)
     vram_table.add_column("Quality Loss", justify="right", width=12)
+    vram_table.add_column("Artifact", width=18)
 
     vram_by_quant = plan_vram_by_quant(
         model, context_length, image_count, image_size, video_frames
@@ -447,7 +468,11 @@ def display_plan(
         marker = " ★" if qt.upper() == target_quant.upper() else ""
         style = "bold green" if qt.upper() == target_quant.upper() else ""
         vram_table.add_row(
-            f"{qt}{marker}", format_bytes(vram_bytes), penalty_str, style=style
+            f"{qt}{marker}",
+            format_bytes(vram_bytes),
+            penalty_str,
+            row["artifact_status"].replace("_", " "),
+            style=style,
         )
 
     console.console.print(vram_table)
@@ -499,7 +524,13 @@ def display_plan(
         gpu_name = row["name"]
         vram_gb = row["vram_gb"]
         fit_type = row["fit_type"]
-        if fit_type == "full_gpu":
+        if fit_type == "too_small":
+            fit = "[red]✗ Too small[/]"
+        elif target_artifact_status is GGUFArtifactStatus.HYPOTHETICAL:
+            fit = "[yellow]? Hypothetical[/]"
+        elif target_artifact_status is GGUFArtifactStatus.MISSING_PROJECTOR:
+            fit = "[red]✗ No projector[/]"
+        elif fit_type == "full_gpu":
             fit = "[green]✓ Full GPU[/]"
         elif fit_type == "partial_offload":
             fit = (

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from engine.quantization import effective_quant_type
 from engine.types import CompatibilityResult
 from hardware.types import HardwareInfo
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus
 from output import console
 from output.formatting import (
+    format_artifact_label,
     format_downloads,
     format_params,
     format_published_at,
@@ -40,13 +42,18 @@ def format_markdown_score(result: CompatibilityResult) -> str:
     return score
 
 
-def format_markdown_fit(fit_type: str) -> str:
+def format_markdown_fit(result: CompatibilityResult) -> str:
+    status = gguf_artifact_status(result.model, result.gguf_variant)
+    if status is GGUFArtifactStatus.HYPOTHETICAL:
+        return "Hypothetical"
+    if status is GGUFArtifactStatus.MISSING_PROJECTOR:
+        return "Missing projector"
     labels = {
         "full_gpu": "Full GPU",
         "partial_offload": "Partial",
         "cpu_only": "CPU only",
     }
-    return labels.get(fit_type, fit_type)
+    return labels.get(result.fit_type, result.fit_type)
 
 
 def format_markdown_params(result: CompatibilityResult) -> str:
@@ -107,8 +114,8 @@ def display_markdown(
                 str(index),
                 result.model.id,
                 format_markdown_params(result),
-                effective_quant_type(result.model, result.gguf_variant),
-                format_markdown_fit(result.fit_type),
+                format_artifact_label(result.model, result.gguf_variant),
+                format_markdown_fit(result),
                 format_vram(result),
                 format_markdown_speed(result),
                 format_published_at(result.model.published_at),
@@ -135,9 +142,14 @@ def display_markdown(
                 str(index),
                 result.model.id,
                 format_markdown_params(result),
-                effective_quant_type(result.model, result.gguf_variant),
+                format_artifact_label(result.model, result.gguf_variant),
                 format_published_at(result.model.published_at),
-                format_downloads(result.model.downloads),
+                (
+                    "-"
+                    if gguf_artifact_status(result.model, result.gguf_variant)
+                    is GGUFArtifactStatus.HYPOTHETICAL
+                    else format_downloads(result.model.downloads)
+                ),
                 format_markdown_score(result),
                 result.ranking_evidence,
                 result.model.license or "-",

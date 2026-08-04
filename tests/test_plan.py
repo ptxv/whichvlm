@@ -5,6 +5,7 @@ from rich.console import Console
 
 import output.console as console_mod
 from data.gpu import BYTES_PER_GIB
+from engine.performance import looks_synthetic_gguf
 from hardware.budget import auto_vram_headroom
 from hardware.catalog import (
     HARDWARE_CATALOG,
@@ -13,14 +14,16 @@ from hardware.catalog import (
 )
 from hardware.gpu_simulator import create_synthetic_gpu
 from hardware.types import BackendCapability, GPUInfo, HardwareInfo
-from models.types import ModelInfo
-from output.display import display_plan_json
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus, GGUFVariant, ModelArtifact, ModelInfo
+from output.display import display_plan, display_plan_json
 from output.plan import (
     plan_row_for_hardware,
     plan_gpu_compatibility,
     plan_multi_gpu_compatibility,
     plan_recommendations,
     plan_target_vram,
+    plan_variant_for_quant,
     plan_vision_workload,
     plan_vram_by_quant,
 )
@@ -38,6 +41,53 @@ def planning_model(
         context_length=context_length,
         hf_pipeline_tag="image-text-to-text",
     )
+
+
+def test_plan_without_gguf_file_is_hypothetical():
+    model = planning_model(params=7_000_000_000)
+
+    variant = plan_variant_for_quant(model, "Q4_K_M")
+
+    assert variant.hypothetical is True
+    assert variant.filename == ""
+    assert looks_synthetic_gguf(model, variant) is True
+    assert gguf_artifact_status(model, variant) is GGUFArtifactStatus.HYPOTHETICAL
+
+
+def test_plan_gguf_vlm_requires_projector():
+    model = planning_model(params=7_000_000_000)
+    variant = GGUFVariant("test-q4.gguf", "Q4_K_M", 4_000_000_000)
+    model.gguf_variants = [variant]
+
+    assert plan_variant_for_quant(model, "Q4_K_M") is variant
+    assert gguf_artifact_status(model, variant) is GGUFArtifactStatus.MISSING_PROJECTOR
+
+    model.artifacts = [
+        ModelArtifact(
+            repo_id=model.id,
+            format="adapter",
+            filename="mmproj-test-f16.gguf",
+            source_kind="mmproj",
+        )
+    ]
+
+    assert gguf_artifact_status(model, variant) is GGUFArtifactStatus.AVAILABLE
+
+
+def test_plan_terminal_labels_hypothetical_artifact():
+    buf = StringIO()
+    original_console = console_mod.console
+    console_mod.console = Console(file=buf, force_terminal=False, width=160)
+    try:
+        display_plan(
+            planning_model(params=7_000_000_000),
+            context_length=4096,
+            target_quant="Q4_K_M",
+        )
+    finally:
+        console_mod.console = original_console
+
+    assert "results are hypothetical and not downloadable or runnable" in buf.getvalue()
 
 
 def test_plan_partial_offload_uses_ram_not_vram_ratio():
@@ -145,6 +195,10 @@ def test_plan_json_includes_workload_and_reverse_lookup():
     assert data["gpu_compatibility"][0]["supported_backends"]
     assert data["workload"]["os"] == "linux"
     assert data["workload"]["perf_vram"] == "10%"
+    assert data["artifact_status"] == "hypothetical"
+    assert data["downloadable"] is False
+    assert data["runnable"] is False
+    assert any(row["can_run"] for row in data["gpu_compatibility"])
 
 
 def test_hardware_catalog_carries_normalized_metadata():

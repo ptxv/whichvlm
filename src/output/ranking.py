@@ -9,12 +9,14 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from engine.quantization import effective_quant_type
 from engine.types import CompatibilityResult
 from hardware.types import HardwareInfo
+from models.package_graph import gguf_artifact_status
+from models.types import GGUFArtifactStatus
 from output import console
 from output.formatting import (
     downloads_style,
+    format_artifact_label,
     format_bytes,
     format_downloads,
     format_params,
@@ -197,7 +199,7 @@ def display_ranking(
     )
     table.add_column("#", style=f"bold {ACCENT}", width=3, justify="right")
     table.add_column("Model", style=CYAN, min_width=14, overflow="fold")
-    table.add_column("Artifact", style=VIOLET, justify="center", width=8)
+    table.add_column("Artifact", style=VIOLET, justify="center", width=14)
     if show_status:
         table.add_column(f"Fit / {mem_label}", justify="center", width=8)
         table.add_column("Speed", justify="right", width=12)
@@ -219,7 +221,8 @@ def display_ranking(
     newest_ts = max((d.timestamp() for d in published_valid), default=None)
 
     for i, r in enumerate(results, 1):
-        quant = effective_quant_type(r.model, r.gguf_variant)
+        quant = format_artifact_label(r.model, r.gguf_variant)
+        artifact_status = gguf_artifact_status(r.model, r.gguf_variant)
         vram_str = format_vram(r)
         speed_str = format_speed(r)
 
@@ -238,14 +241,23 @@ def display_ranking(
             "partial_offload": f"[{AMBER}]Partial[/]",
             "cpu_only": "[red]CPU only[/]",
         }
-        fit_str = fit_style.get(r.fit_type, r.fit_type)
+        if artifact_status is GGUFArtifactStatus.HYPOTHETICAL:
+            fit_str = f"[{AMBER}]Hypothetical[/]"
+        elif artifact_status is GGUFArtifactStatus.MISSING_PROJECTOR:
+            fit_str = "[red]No projector[/]"
+        else:
+            fit_str = fit_style.get(r.fit_type, r.fit_type)
         published_dt = parse_published_at(r.model.published_at)
         published_str = Text(
             format_published_at(r.model.published_at),
             style=published_style(published_dt, oldest_ts, newest_ts),
         )
         downloads_str = Text(
-            format_downloads(r.model.downloads),
+            (
+                "—"
+                if artifact_status is GGUFArtifactStatus.HYPOTHETICAL
+                else format_downloads(r.model.downloads)
+            ),
             style=downloads_style(
                 r.model.downloads, min_download_log, max_download_log
             ),
