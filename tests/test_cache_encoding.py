@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+
 import models.benchmark as benchmark_mod
 import models.cache as cache_mod
 
@@ -33,7 +35,11 @@ class WritableCacheFile:
 
 def test_model_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
     reader = ReadableCacheFile(
-        {"cached_at": time.time(), "models": [{"id": "test/Omega-Ω"}]}
+        {
+            "schema_version": cache_mod.CACHE_SCHEMA_VERSION,
+            "cached_at": time.time(),
+            "models": [{"id": "test/Omega-Ω"}],
+        }
     )
     monkeypatch.setattr(cache_mod, "CACHE_FILE", reader)
     assert cache_mod.load_cache() == [{"id": "test/Omega-Ω"}]
@@ -52,6 +58,7 @@ def test_model_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
 
 def test_model_cache_can_read_stale_snapshot(monkeypatch):
     payload = {
+        "schema_version": cache_mod.CACHE_SCHEMA_VERSION,
         "cached_at": time.time() - cache_mod.DEFAULT_TTL_SECONDS - 1,
         "ttl_seconds": cache_mod.DEFAULT_TTL_SECONDS,
         "source": {"name": "huggingface", "queries": []},
@@ -67,9 +74,28 @@ def test_model_cache_can_read_stale_snapshot(monkeypatch):
     assert snapshot["source"]["name"] == "huggingface"
 
 
+def test_model_cache_invalidates_old_and_rejects_future_schema(monkeypatch):
+    payload = {
+        "schema_version": cache_mod.CACHE_SCHEMA_VERSION - 1,
+        "cached_at": time.time(),
+        "models": [{"id": "test/model"}],
+    }
+    monkeypatch.setattr(cache_mod, "CACHE_FILE", ReadableCacheFile(payload))
+
+    assert cache_mod.load_cache() is None
+
+    payload["schema_version"] = cache_mod.CACHE_SCHEMA_VERSION + 1
+    with pytest.raises(ValueError, match="update whichvlm or run with --refresh"):
+        cache_mod.load_cache()
+
+
 def test_benchmark_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
     reader = ReadableCacheFile(
-        {"cached_at": time.time(), "scores": {"test/Omega-Ω": 1.0}}
+        {
+            "schema_version": benchmark_mod.BENCHMARK_CACHE_SCHEMA_VERSION,
+            "cached_at": time.time(),
+            "scores": {"test/Omega-Ω": 1.0},
+        }
     )
     monkeypatch.setattr(benchmark_mod, "BENCHMARK_CACHE", reader)
     assert benchmark_mod.load_benchmark_cache() == {"test/Omega-Ω": 1.0}
@@ -88,6 +114,7 @@ def test_benchmark_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
 
 def test_benchmark_cache_can_read_stale_snapshot(monkeypatch):
     payload = {
+        "schema_version": benchmark_mod.BENCHMARK_CACHE_SCHEMA_VERSION,
         "cached_at": time.time() - benchmark_mod.DEFAULT_TTL_SECONDS - 1,
         "ttl_seconds": benchmark_mod.DEFAULT_TTL_SECONDS,
         "source": benchmark_mod.BENCHMARK_SOURCE_PROVENANCE,
@@ -101,3 +128,18 @@ def test_benchmark_cache_can_read_stale_snapshot(monkeypatch):
     assert snapshot is not None
     assert snapshot["stale"] is True
     assert snapshot["source"]["name"] == "benchmark_index"
+
+
+def test_benchmark_cache_invalidates_old_and_rejects_future_schema(monkeypatch):
+    payload = {
+        "schema_version": benchmark_mod.BENCHMARK_CACHE_SCHEMA_VERSION - 1,
+        "cached_at": time.time(),
+        "scores": {"test/model": 1.0},
+    }
+    monkeypatch.setattr(benchmark_mod, "BENCHMARK_CACHE", ReadableCacheFile(payload))
+
+    assert benchmark_mod.load_benchmark_cache() is None
+
+    payload["schema_version"] = benchmark_mod.BENCHMARK_CACHE_SCHEMA_VERSION + 1
+    with pytest.raises(ValueError, match="update whichvlm or run with --refresh"):
+        benchmark_mod.load_benchmark_cache()
