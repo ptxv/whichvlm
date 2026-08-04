@@ -821,9 +821,42 @@ def parse_model(data: dict) -> ModelInfo | None:
         architecture=architecture,
     )
 
-    context_length = config.get("max_position_embeddings") or config.get(
-        "max_sequence_length"
-    )
+    text_config = config.get("text_config", {})
+    if not isinstance(text_config, dict):
+        text_config = {}
+    language_config = {**config, **text_config}
+    layer_types = language_config.get("layer_types", [])
+    if not isinstance(layer_types, list):
+        layer_types = []
+    layer_count = int_config(
+        language_config,
+        "num_hidden_layers",
+        "num_layers",
+        "n_layer",
+    ) or int_config(gguf_meta, "block_count")
+    sliding_window_pattern = language_config.get("sliding_window_pattern")
+    if sliding_window_pattern is None:
+        sliding_window_pattern = next(
+            (
+                value
+                for key, value in gguf_meta.items()
+                if key.rsplit(".", 1)[-1] == "sliding_window_pattern"
+            ),
+            None,
+        )
+    if layer_types:
+        sliding_window_layers = sum(
+            layer_type == "sliding_attention" for layer_type in layer_types
+        )
+    elif isinstance(sliding_window_pattern, list):
+        sliding_window_layers = sum(value is True for value in sliding_window_pattern)
+    elif isinstance(sliding_window_pattern, int) and layer_count:
+        sliding_window_layers = layer_count - layer_count // sliding_window_pattern
+    else:
+        sliding_window_layers = None
+    context_length = language_config.get(
+        "max_position_embeddings"
+    ) or language_config.get("max_sequence_length")
     if not context_length:
         context_length = gguf_meta.get("context_length")
     vision_config = config.get("vision_config", {})
@@ -845,40 +878,37 @@ def parse_model(data: dict) -> ModelInfo | None:
         architecture=architecture,
         is_moe=is_moe,
         context_length=context_length,
-        layer_count=int_config(
-            config,
-            "num_hidden_layers",
-            "num_layers",
-            "n_layer",
-        )
-        or int_config(gguf_meta, "block_count"),
-        hidden_size=int_config(config, "hidden_size", "n_embd", "d_model")
+        layer_count=layer_count,
+        hidden_size=int_config(language_config, "hidden_size", "n_embd", "d_model")
         or int_config(gguf_meta, "embedding_length"),
         intermediate_size=int_config(
-            config,
+            language_config,
             "intermediate_size",
             "n_inner",
             "ffn_dim",
         )
         or int_config(gguf_meta, "feed_forward_length"),
-        attention_heads=int_config(config, "num_attention_heads", "n_head")
+        attention_heads=int_config(language_config, "num_attention_heads", "n_head")
         or int_config(gguf_meta, "head_count"),
         kv_heads=int_config(
-            config,
+            language_config,
             "num_key_value_heads",
             "num_kv_heads",
             "n_head_kv",
         )
         or int_config(gguf_meta, "head_count_kv"),
-        head_dim=int_config(config, "head_dim", "head_size")
+        head_dim=int_config(language_config, "head_dim", "head_size")
         or int_config(
             gguf_meta,
             "key_length",
             "head_dim",
             "head_size",
         ),
-        dtype=str_config(config, "torch_dtype", "dtype"),
-        kv_cache_dtype=str_config(config, "kv_cache_dtype"),
+        dtype=str_config(language_config, "torch_dtype", "dtype"),
+        kv_cache_dtype=str_config(language_config, "kv_cache_dtype"),
+        sliding_window=int_config(language_config, "sliding_window")
+        or int_config(gguf_meta, "sliding_window"),
+        sliding_window_layers=sliding_window_layers,
         vision_layer_count=int_config(
             vision_config,
             "num_hidden_layers",
@@ -1171,6 +1201,8 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
             "head_dim": model.head_dim,
             "dtype": model.dtype,
             "kv_cache_dtype": model.kv_cache_dtype,
+            "sliding_window": model.sliding_window,
+            "sliding_window_layers": model.sliding_window_layers,
             "vision_layer_count": model.vision_layer_count,
             "vision_hidden_size": model.vision_hidden_size,
             "vision_intermediate_size": model.vision_intermediate_size,
@@ -1311,6 +1343,8 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 head_dim=d.get("head_dim"),
                 dtype=d.get("dtype"),
                 kv_cache_dtype=d.get("kv_cache_dtype"),
+                sliding_window=d.get("sliding_window"),
+                sliding_window_layers=d.get("sliding_window_layers"),
                 vision_layer_count=d.get("vision_layer_count"),
                 vision_hidden_size=d.get("vision_hidden_size"),
                 vision_intermediate_size=d.get("vision_intermediate_size"),

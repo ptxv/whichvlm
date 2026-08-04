@@ -78,6 +78,8 @@ class ModelInfo:
     head_dim: int | None = None
     dtype: str | None = None
     kv_cache_dtype: str | None = None
+    sliding_window: int | None = None
+    sliding_window_layers: int | None = None
     vision_layer_count: int | None = None
     vision_hidden_size: int | None = None
     vision_intermediate_size: int | None = None

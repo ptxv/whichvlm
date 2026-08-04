@@ -324,6 +324,8 @@ def test_models_cache_roundtrip_keeps_architecture_metadata():
         kv_heads=4,
         head_dim=128,
         dtype="bfloat16",
+        sliding_window=4096,
+        sliding_window_layers=1,
         vision_layer_count=32,
         vision_hidden_size=1280,
         vision_intermediate_size=3420,
@@ -339,6 +341,8 @@ def test_models_cache_roundtrip_keeps_architecture_metadata():
     assert restored[0].layer_count == 28
     assert restored[0].intermediate_size == 18944
     assert restored[0].kv_heads == 4
+    assert restored[0].sliding_window == 4096
+    assert restored[0].sliding_window_layers == 1
     assert restored[0].vision_hidden_size == 1280
     assert restored[0].vision_intermediate_size == 3420
     assert restored[0].vision_attention_heads == 16
@@ -588,13 +592,17 @@ def test_parse_model_extracts_architecture_metadata():
             "tags": ["vision-language", "safetensors"],
             "config": {
                 "architectures": ["Qwen2VLForConditionalGeneration"],
-                "num_hidden_layers": 28,
-                "hidden_size": 3584,
-                "intermediate_size": 18944,
-                "num_attention_heads": 28,
-                "num_key_value_heads": 4,
-                "head_dim": 128,
-                "torch_dtype": "bfloat16",
+                "text_config": {
+                    "num_hidden_layers": 28,
+                    "hidden_size": 3584,
+                    "intermediate_size": 18944,
+                    "num_attention_heads": 28,
+                    "num_key_value_heads": 4,
+                    "head_dim": 128,
+                    "torch_dtype": "bfloat16",
+                    "sliding_window": 4096,
+                    "layer_types": ["sliding_attention", "full_attention"],
+                },
                 "vision_feature_select_strategy": "full",
                 "vision_config": {
                     "num_hidden_layers": 32,
@@ -619,6 +627,8 @@ def test_parse_model_extracts_architecture_metadata():
     assert parsed.kv_heads == 4
     assert parsed.head_dim == 128
     assert parsed.dtype == "bfloat16"
+    assert parsed.sliding_window == 4096
+    assert parsed.sliding_window_layers == 1
     assert parsed.vision_layer_count == 32
     assert parsed.vision_hidden_size == 1280
     assert parsed.vision_intermediate_size == 3420
@@ -626,6 +636,55 @@ def test_parse_model_extracts_architecture_metadata():
     assert parsed.patch_size == 14
     assert parsed.spatial_merge_size == 2
     assert parsed.image_token_strategy == "full"
+
+
+def test_parse_model_extracts_gguf_sliding_window_pattern():
+    parsed = parse_model(
+        {
+            "id": "community/gemma-3-4b-gguf",
+            "config": {"architectures": ["Gemma3ForCausalLM"]},
+            "gguf": {
+                "gemma3.block_count": 4,
+                "gemma3.embedding_length": 1024,
+                "gemma3.attention.head_count": 8,
+                "gemma3.attention.head_count_kv": 2,
+                "gemma3.attention.sliding_window": 2048,
+                "gemma3.attention.sliding_window_pattern": [
+                    True,
+                    True,
+                    False,
+                    True,
+                ],
+            },
+            "safetensors": {"total": 4_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.sliding_window == 2048
+    assert parsed.sliding_window_layers == 3
+
+
+def test_parse_model_extracts_numeric_sliding_window_pattern():
+    parsed = parse_model(
+        {
+            "id": "google/gemma-3-4b-it",
+            "config": {
+                "architectures": ["Gemma3ForCausalLM"],
+                "num_hidden_layers": 6,
+                "sliding_window": 2048,
+                "sliding_window_pattern": 3,
+            },
+            "safetensors": {"total": 4_000_000_000},
+            "siblings": [],
+            "cardData": {},
+        }
+    )
+
+    assert parsed is not None
+    assert parsed.sliding_window_layers == 4
 
 
 def test_parse_model_marks_community_gguf_relationship():
