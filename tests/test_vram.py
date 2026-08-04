@@ -33,15 +33,71 @@ CALIBRATION_PROVENANCE = {
     "source": "https://example.com/calibration-log",
 }
 
+EVIDENCED_CALIBRATION = vram.VramCalibration(
+    architecture="qwen2vl",
+    parameter_count=7_000_000_000,
+    backend="transformers",
+    quant_type="FP16",
+    model_format="safetensors",
+    context_length=4096,
+    image_count=1,
+    image_size=448,
+    estimate_bytes=16_769_715_744,
+    measured_peak_bytes=19_900_000_000,
+    **CALIBRATION_PROVENANCE,
+)
+QWEN_GGUF_CALIBRATION = replace(
+    EVIDENCED_CALIBRATION,
+    backend="llama.cpp",
+    quant_type="Q4_K_M",
+    model_format="gguf",
+    estimate_bytes=7_269_715_744,
+    measured_peak_bytes=8_100_000_000,
+)
+
 
 @pytest.fixture
 def calibrations_with_evidence(monkeypatch):
     monkeypatch.setattr(
         vram,
         "VRAM_CALIBRATIONS",
-        tuple(
-            replace(calibration, **CALIBRATION_PROVENANCE)
-            for calibration in vram.VRAM_CALIBRATIONS
+        (
+            EVIDENCED_CALIBRATION,
+            replace(
+                EVIDENCED_CALIBRATION,
+                quant_type="AWQ",
+                estimate_bytes=6_794_715_744,
+                measured_peak_bytes=8_200_000_000,
+            ),
+            QWEN_GGUF_CALIBRATION,
+            replace(
+                EVIDENCED_CALIBRATION,
+                architecture="internvl",
+                parameter_count=8_000_000_000,
+                estimate_bytes=19_425_694_720,
+                measured_peak_bytes=21_800_000_000,
+            ),
+            replace(
+                EVIDENCED_CALIBRATION,
+                architecture="gemma",
+                parameter_count=27_000_000_000,
+                quant_type="GPTQ",
+                estimate_bytes=23_774_270_912,
+                measured_peak_bytes=27_100_000_000,
+            ),
+            replace(
+                EVIDENCED_CALIBRATION,
+                architecture="qwen3",
+                parameter_count=30_000_000_000,
+                backend="llama.cpp",
+                quant_type="Q4_K_M",
+                model_format="gguf",
+                image_count=0,
+                image_size=0,
+                estimate_bytes=19_779_537_766,
+                measured_peak_bytes=21_300_000_000,
+                is_moe=True,
+            ),
         ),
     )
 
@@ -133,7 +189,7 @@ def qwen3_dense_model() -> ModelInfo:
 
 
 def test_calibration_loader_reads_provenance(tmp_path):
-    calibration = replace(vram.VRAM_CALIBRATIONS[0], **CALIBRATION_PROVENANCE)
+    calibration = EVIDENCED_CALIBRATION
     path = tmp_path / "calibrations.json"
     path.write_text(json.dumps([asdict(calibration)]), encoding="utf-8")
 
@@ -141,6 +197,10 @@ def test_calibration_loader_reads_provenance(tmp_path):
 
     assert loaded == (calibration,)
     assert loaded[0].has_reproducible_evidence
+
+
+def test_packaged_calibrations_exclude_unproven_records():
+    assert vram.VRAM_CALIBRATIONS == ()
 
 
 def test_estimate_vram_gguf_variant():
@@ -240,7 +300,13 @@ def test_estimate_kv_cache_keeps_full_context_for_unknown_window_coverage():
 
 def test_incomplete_calibration_evidence_uses_fallback_estimate(monkeypatch):
     calibration = replace(
-        replace(vram.VRAM_CALIBRATIONS[0], **CALIBRATION_PROVENANCE),
+        EVIDENCED_CALIBRATION,
+        architecture="llama",
+        backend="llama.cpp",
+        quant_type="Q4_K_M",
+        model_format="gguf",
+        image_count=0,
+        image_size=0,
         source=None,
     )
     monkeypatch.setattr(vram, "VRAM_CALIBRATIONS", (calibration,))
@@ -395,8 +461,8 @@ def test_quantized_transformers_variant_uses_quantized_calibration(
     assert awq_estimate.required_bytes < fp16_estimate.required_bytes
 
 
-def test_evidenced_calibration_transfers_to_architecture_alias(
-    calibrations_with_evidence,
+def test_evidenced_calibration_affects_architecture_alias_estimate(
+    monkeypatch,
 ):
     variant = GGUFVariant(
         filename="qwen2.5-vl-7b-q4_k_m.gguf",
@@ -404,26 +470,31 @@ def test_evidenced_calibration_transfers_to_architecture_alias(
         file_size_bytes=4_500_000_000,
     )
     workload = VisionWorkload(image_count=1, image_size=448)
-    calibrated = estimate_vram_details(
-        vlm_calibration_model(architecture="qwen2_vl"),
+    model = vlm_calibration_model(architecture="qwen2_vl")
+    fallback = estimate_vram_details(
+        model,
         variant,
         vision_workload=workload,
     )
-    fallback = estimate_vram_details(
+    monkeypatch.setattr(vram, "VRAM_CALIBRATIONS", (QWEN_GGUF_CALIBRATION,))
+    calibrated = estimate_vram_details(model, variant, vision_workload=workload)
+    unrelated = estimate_vram_details(
         vlm_calibration_model(architecture="other_vlm"),
         variant,
         vision_workload=workload,
     )
 
+    assert QWEN_GGUF_CALIBRATION.has_reproducible_evidence
     assert calibrated.confidence == "high"
     assert calibrated.notes == []
-    assert fallback.confidence == "medium"
+    assert calibrated.required_bytes != fallback.required_bytes
+    assert unrelated.confidence == "medium"
     assert any(
         "no matching reproducible peak-memory calibration" in note
-        for note in fallback.notes
+        for note in unrelated.notes
     )
     assert calibrated.upper_bytes - calibrated.lower_bytes < (
-        fallback.upper_bytes - fallback.lower_bytes
+        unrelated.upper_bytes - unrelated.lower_bytes
     )
 
 
