@@ -299,9 +299,7 @@ async def fetch_aa_index_scores(client: httpx.AsyncClient) -> dict[str, float]:
         raise ExtractionFailed("frontier index: live fetch returned 0 mapped scores")
 
     scores = get_aa_curated_fallback()
-    for hf_id, normalized in live.items():
-        if normalized > scores.get(hf_id, 0.0):
-            scores[hf_id] = normalized
+    scores.update(live)
     logger.debug(f"frontier index: {len(live)} live + {len(scores)} merged scores")
     return scores
 

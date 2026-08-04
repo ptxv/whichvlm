@@ -14,6 +14,7 @@ from models.benchmark_sources.aa_index import (
     extract_aa_pairs_from_html,
     fetch_aa_index_scores,
     get_aa_curated_fallback,
+    normalize_aa_index,
 )
 
 
@@ -82,15 +83,19 @@ def run_fetch(html: str) -> dict[str, float]:
     return asyncio.run(go())
 
 
-def test_fetch_maps_canonical_names_and_merges_over_fallback():
-    page = rsc_page([{"name": "Qwen3 14B (Reasoning)", "index": 55.0}])
+@pytest.mark.parametrize(
+    "live_index", [44.27, 52.0, 56.0], ids=["lower", "equal", "higher"]
+)
+def test_fetch_live_score_replaces_fallback(live_index: float):
+    page = rsc_page(
+        [{"name": "DeepSeek V4 Pro (Reasoning, Max Effort)", "index": live_index}]
+    )
     scores = run_fetch(page)
 
     fallback = get_aa_curated_fallback()
 
     assert set(fallback).issubset(set(scores))
-
-    assert scores["Qwen/Qwen3-14B"] > fallback["Qwen/Qwen3-14B"]
+    assert scores["deepseek-ai/DeepSeek-V4-Pro"] == normalize_aa_index(live_index)
 
 
 def test_fetch_raises_when_no_records_found():
