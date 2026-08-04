@@ -161,7 +161,7 @@ def check_compatibility(
         if best_gpu.compute_capability < MIN_COMPUTE_CAPABILITY_OLLAMA:
             warnings.append(
                 f"Compute capability {best_gpu.compute_capability} is below "
-                f"minimum {MIN_COMPUTE_CAPABILITY_OLLAMA} for Ollama"
+                f"minimum {MIN_COMPUTE_CAPABILITY_OLLAMA} for llama.cpp CUDA"
             )
 
     if best_gpu and is_vulkan_only_gpu(best_gpu):
