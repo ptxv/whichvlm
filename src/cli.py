@@ -268,6 +268,7 @@ def apply_gpu_overrides(
     gpu: list[str] | None,
     vram: float | None,
     memory_bandwidth: float | None = None,
+    gpu_index: int | None = None,
 ) -> HardwareInfo:
     if cpu_only:
         hardware.gpus = []
@@ -281,15 +282,24 @@ def apply_gpu_overrides(
         except ValueError as e:
             console.print(f"[red]Error:[/] {e}")
             raise typer.Exit(code=1)
-    if vram is None and memory_bandwidth is None:
-        return hardware
-    if len(hardware.gpus) != 1:
+    if gpu_index is not None and not 0 <= gpu_index < len(hardware.gpus):
         console.print(
-            "[red]Error:[/] GPU overrides require exactly one detected or simulated GPU."
+            f"[red]Error:[/] --gpu-index {gpu_index} is out of range for "
+            f"{len(hardware.gpus)} detected or simulated GPU(s)."
         )
         raise typer.Exit(code=1)
+    if vram is None and memory_bandwidth is None:
+        return hardware
+    if gpu_index is None:
+        if len(hardware.gpus) != 1:
+            console.print(
+                "[red]Error:[/] GPU overrides require exactly one detected or "
+                "simulated GPU unless --gpu-index is specified."
+            )
+            raise typer.Exit(code=1)
+        gpu_index = 0
 
-    gpu_info = hardware.gpus[0]
+    gpu_info = hardware.gpus[gpu_index]
     if vram is not None:
         gpu_info.vram_bytes = int(vram * BYTES_PER_GIB)
         gpu_info.overrides["vram_bytes"] = gpu_info.vram_bytes
@@ -649,13 +659,19 @@ def main(
     vram: Optional[float] = typer.Option(
         None,
         "--vram",
-        help="Override VRAM or shared-memory cap in GB; requires exactly one GPU",
+        help="Override VRAM or shared-memory cap in GB",
         rich_help_panel=HARDWARE_PANEL,
     ),
     memory_bandwidth: Optional[float] = typer.Option(
         None,
         "--memory-bandwidth",
-        help="Override GPU memory bandwidth in GB/s; requires exactly one GPU",
+        help="Override GPU memory bandwidth in GB/s",
+        rich_help_panel=HARDWARE_PANEL,
+    ),
+    gpu_index: Optional[int] = typer.Option(
+        None,
+        "--gpu-index",
+        help="Zero-based detected GPU index to receive overrides",
         rich_help_panel=HARDWARE_PANEL,
     ),
     vram_headroom: str = typer.Option(
@@ -713,7 +729,7 @@ def main(
     with vlm_progress() as progress:
         task = progress.add_task("scanning silicon...", total=None)
         hardware = detect_hardware()
-        apply_gpu_overrides(hardware, cpu_only, gpu, vram, memory_bandwidth)
+        apply_gpu_overrides(hardware, cpu_only, gpu, vram, memory_bandwidth, gpu_index)
         apply_memory_budgets(
             hardware,
             vram_headroom=vram_headroom,
@@ -1958,6 +1974,9 @@ def hardware(
     memory_bandwidth: Optional[float] = typer.Option(
         None, "--memory-bandwidth", help="Override GPU memory bandwidth in GB/s"
     ),
+    gpu_index: Optional[int] = typer.Option(
+        None, "--gpu-index", help="Zero-based detected GPU index to receive overrides"
+    ),
 ):
     validate_gpu_flags(cpu_only, gpu, vram, memory_bandwidth)
 
@@ -1967,7 +1986,7 @@ def hardware(
     with vlm_progress() as progress:
         task = progress.add_task("scanning silicon...", total=None)
         hw = detect_hardware()
-        apply_gpu_overrides(hw, cpu_only, gpu, vram, memory_bandwidth)
+        apply_gpu_overrides(hw, cpu_only, gpu, vram, memory_bandwidth, gpu_index)
         progress.remove_task(task)
 
     console.print()

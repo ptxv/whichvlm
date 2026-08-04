@@ -64,7 +64,7 @@ def lineage_dict(lineage: ModelLineage) -> dict:
 def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
     gpus = []
     usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
-    for gpu in hardware.gpus:
+    for index, gpu in enumerate(hardware.gpus):
         gpu_data = {
             "name": gpu.name,
             "vram_bytes": gpu.vram_bytes,
@@ -73,6 +73,7 @@ def hardware_dict(hardware: HardwareInfo, details: bool = False) -> dict:
         if details:
             gpu_data.update(
                 {
+                    "index": index,
                     "vendor": gpu.vendor,
                     "memory_bandwidth_gbps": gpu.memory_bandwidth_gbps,
                     "shared_memory": gpu.shared_memory,
