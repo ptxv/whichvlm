@@ -1,5 +1,9 @@
+import ast
+import shlex
+
 import pytest
 
+from hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from models.fetcher import parse_model
 from models.types import (
     GGUFVariant,
@@ -8,12 +12,22 @@ from models.types import (
     ModelComponent,
     ModelInfo,
 )
-from hardware.types import BackendCapability, GPUInfo, HardwareInfo
 from runtime import (
-    ServeRequest,
     RuntimeUnsupportedError,
+    ServeRequest,
     auto_gpu_memory_utilization,
+    backend_try_command,
+    generate_llama_cpp_serve_script,
+    generate_llama_cpp_text_script,
+    generate_llama_cpp_vlm_script,
+    generate_mlx_vlm_script,
     generate_run_script,
+    generate_sglang_vlm_script,
+    generate_transformers_audio_script,
+    generate_transformers_text_script,
+    generate_transformers_video_script,
+    generate_transformers_vlm_script,
+    generate_vllm_vlm_script,
     recommended_runtime_backend,
     requires_audio,
     requires_image,
@@ -534,6 +548,97 @@ def test_generated_scripts_compile():
         compile(script, "<whichvlm-generated>", "exec")
 
 
+def test_runtime_scripts_escape_external_values():
+    def unsafe_value(name):
+        return f"{name}\"; injected_{name} = True\n# \\\\ ' 雪"
+
+    model_id = unsafe_value("model")
+    model_filename = unsafe_value("filename")
+    quant_type = unsafe_value("quant")
+    projector_filename = unsafe_value("projector")
+    image_path = unsafe_value("image")
+    video_path = unsafe_value("video")
+    audio_path = unsafe_value("audio")
+    host = unsafe_value("host")
+    variant = GGUFVariant(
+        filename=model_filename,
+        quant_type=quant_type,
+        file_size_bytes=4_000_000_000,
+    )
+    text_model = ModelInfo(
+        id=model_id,
+        family_id="test-7b",
+        name="Test-7B",
+        parameter_count=7_000_000_000,
+    )
+    projector = ModelArtifact(
+        repo_id=model_id,
+        format="adapter",
+        filename=projector_filename,
+        source_kind="mmproj",
+    )
+    vlm = vlm_model(id=model_id)
+
+    def assert_script_escapes(script, values):
+        tree = ast.parse(script)
+        literals = {
+            node.value for node in ast.walk(tree) if isinstance(node, ast.Constant)
+        }
+        assert set(values) <= literals
+        assert not any(
+            isinstance(node, ast.Name) and node.id.startswith("injected_")
+            for node in ast.walk(tree)
+        )
+
+    assert_script_escapes(
+        generate_llama_cpp_text_script(text_model, variant, 4096, False, 512),
+        (model_id, model_filename, quant_type),
+    )
+    assert_script_escapes(
+        generate_llama_cpp_vlm_script(
+            vlm, variant, projector, 4096, False, image_path, 512
+        ),
+        (model_id, model_filename, projector_filename, image_path),
+    )
+    assert_script_escapes(
+        generate_llama_cpp_serve_script(
+            vlm, variant, projector, 4096, False, host, 9000
+        ),
+        (model_id, model_filename, projector_filename, host),
+    )
+    assert_script_escapes(
+        generate_transformers_text_script(text_model, False, 512), (model_id,)
+    )
+    assert_script_escapes(
+        generate_transformers_vlm_script(vlm, (image_path,), False, 512),
+        (model_id, image_path),
+    )
+    assert_script_escapes(
+        generate_transformers_video_script(
+            qwen25_video_model(id=model_id), video_path, False, 512
+        ),
+        (model_id, video_path),
+    )
+    assert_script_escapes(
+        generate_transformers_audio_script(
+            qwen2_audio_model(id=model_id), audio_path, False, 512
+        ),
+        (model_id, audio_path),
+    )
+    assert_script_escapes(
+        generate_mlx_vlm_script(vlm, image_path, 512), (model_id, image_path)
+    )
+    assert_script_escapes(
+        generate_vllm_vlm_script(vlm, 4096, image_path, 512), (model_id, image_path)
+    )
+    assert_script_escapes(
+        generate_sglang_vlm_script(vlm, 4096, image_path, 512), (model_id, image_path)
+    )
+
+    command = backend_try_command(text_model, "run", "transformers")
+    assert shlex.split(command)[2] == model_id
+
+
 def test_runtime_detects_vlm_from_architecture():
     model = parse_model(
         {
@@ -631,7 +736,7 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
     assert script_type == "gguf_vlm"
     assert "Llava15ChatHandler" in script
     assert "clip_model_path=mmproj_path" in script
-    assert 'projector_filename = "mmproj-test-f16.gguf"' in script
+    assert "projector_filename = 'mmproj-test-f16.gguf'" in script
     assert "image_data_url" in script
     assert "max_tokens=128" in script
 
