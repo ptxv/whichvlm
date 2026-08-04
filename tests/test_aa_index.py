@@ -7,6 +7,11 @@ import httpx
 import pytest
 
 from models.benchmark_sources.aa_index import (
+    AA_INDEX_FALLBACK_2026_08_03,
+    AA_INDEX_MAX,
+    AA_INDEX_MIN,
+    AA_INDEX_NORMALIZATION_VERSION,
+    AA_INDEX_SOURCE_DATE,
     AA_LEADERBOARD_URL,
     ExtractionFailed,
     canonical_name,
@@ -68,6 +73,18 @@ def test_extract_pairs_from_rsc_html():
 
 def test_extract_pairs_returns_empty_on_legacy_or_garbage_html():
     assert extract_aa_pairs_from_html("<html>no rsc here</html>") == []
+
+
+def test_aa_index_normalization_snapshot():
+    raw_score = AA_INDEX_FALLBACK_2026_08_03["deepseek-ai/DeepSeek-V4-Pro"]
+
+    assert raw_score == 44.27
+    assert normalize_aa_index(raw_score) == 44.3
+    assert (AA_INDEX_MIN, AA_INDEX_MAX) == (0.0, 100.0)
+    assert normalize_aa_index(AA_INDEX_MIN) == 0.0
+    assert normalize_aa_index(AA_INDEX_MAX) == 100.0
+    assert AA_INDEX_SOURCE_DATE == "2026-08-03"
+    assert AA_INDEX_NORMALIZATION_VERSION == "v4.1"
 
 
 def run_fetch(html: str) -> dict[str, float]:
