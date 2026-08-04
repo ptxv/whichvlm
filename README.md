@@ -115,6 +115,7 @@ The ranker is VLM-aware but conservative. Vision memory includes language weight
 ## Data Sources
 
 Model metadata comes from Hugging Face API queries, local cache, and curated VLM seeds.
+Cache payloads include a SHA-256 checksum of their canonical JSON content and are ignored when the checksum does not match.
 
 The fetcher prioritizes:
 

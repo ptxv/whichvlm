@@ -7,6 +7,7 @@ import pytest
 
 import models.benchmark as benchmark_mod
 import models.cache as cache_mod
+from models.cache_format import write_cache_payload
 
 
 class ReadableCacheFile:
@@ -33,6 +34,12 @@ class WritableCacheFile:
         return len(text)
 
 
+def test_cache_write_does_not_mutate_payload():
+    payload = {"models": []}
+    write_cache_payload(WritableCacheFile(), payload)
+    assert payload == {"models": []}
+
+
 def test_model_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
     reader = ReadableCacheFile(
         {
@@ -54,6 +61,24 @@ def test_model_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
     saved = json.loads(writer.text)
     assert saved["schema_version"] == cache_mod.CACHE_SCHEMA_VERSION
     assert saved["source"]["name"] == "huggingface"
+    assert saved["checksum"]
+
+
+def test_model_cache_rejects_modified_payload(monkeypatch, tmp_path):
+    cache_file = tmp_path / "models.json"
+    monkeypatch.setattr(cache_mod, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(cache_mod, "CACHE_FILE", cache_file)
+    cache_mod.save_cache([{"id": "test/original"}])
+
+    payload = json.loads(cache_file.read_text(encoding="utf-8"))
+    payload["models"][0]["id"] = "test/modified"
+    cache_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert cache_mod.load_cache() is None
+
+    payload["checksum"] = None
+    cache_file.write_text(json.dumps(payload), encoding="utf-8")
+    assert cache_mod.load_cache() is None
 
 
 def test_model_cache_can_read_stale_snapshot(monkeypatch):
@@ -110,6 +135,7 @@ def test_benchmark_cache_reads_and_writes_utf8(monkeypatch, tmp_path):
     saved = json.loads(writer.text)
     assert saved["schema_version"] == benchmark_mod.BENCHMARK_CACHE_SCHEMA_VERSION
     assert saved["source"]["name"] == "benchmark_index"
+    assert saved["checksum"]
 
 
 def test_benchmark_cache_can_read_stale_snapshot(monkeypatch):
