@@ -38,7 +38,7 @@ jobs:
             model_file: Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf
             projector_file: mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf
           - backend: mlx
-            runner: '["macos-14"]'
+            runner: '["macos-15"]'
             model: mlx-community/SmolVLM-256M-Instruct-4bit
             architecture: smolvlm
             packages: mlx-vlm pillow
