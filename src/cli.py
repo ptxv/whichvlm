@@ -399,6 +399,30 @@ def resolve_runtime_gpu_memory_utilization(
     return None
 
 
+def print_runtime_memory_budget(
+    hardware: HardwareInfo | None,
+    backend_name: str,
+    utilization: float | None,
+) -> None:
+    if hardware is None or utilization is None:
+        return
+    option = {
+        "transformers": "max_memory",
+        "vllm": "gpu_memory_utilization",
+        "sglang": "mem_fraction_static",
+    }[backend_name]
+    backend_fraction = f"{utilization:g}"
+    for index, gpu in enumerate(hardware.gpus):
+        effective_bytes = int(gpu.vram_bytes * float(backend_fraction))
+        backend_value = (
+            effective_bytes if backend_name == "transformers" else backend_fraction
+        )
+        console.print(
+            f"[dim]GPU {index} memory budget: effective_bytes={effective_bytes}; "
+            f"{backend_name}.{option}={backend_value}[/]"
+        )
+
+
 def auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float | None:
     if profile != "general":
         return None
@@ -1570,7 +1594,7 @@ def run(
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
         "--gpu-memory-utilization",
-        help="Backend GPU memory utilization: auto | 0.82",
+        help="Per-GPU budget as a fraction of total memory: auto | 0.82",
     ),
     perf_vram: str = typer.Option(
         "none",
@@ -1725,6 +1749,7 @@ def run(
 
     fmt = variant.quant_type if variant else script_type.upper()
     console.print(f"\n[bold green]Running {model.id}[/] [dim]({fmt})[/]")
+    print_runtime_memory_budget(hardware, backend.name, runtime_gpu_memory_utilization)
     console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]\n")
 
     try:
@@ -1772,7 +1797,7 @@ def serve(
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
         "--gpu-memory-utilization",
-        help="Backend GPU memory utilization: auto | 0.82",
+        help="Per-GPU budget as a fraction of total memory: auto | 0.82",
     ),
     perf_vram: str = typer.Option(
         "none",
@@ -1812,6 +1837,7 @@ def serve(
 
     fmt = variant.quant_type if variant else backend.name.upper()
     console.print(f"\n[bold green]Serving {model.id}[/] [dim]({fmt})[/]")
+    print_runtime_memory_budget(hardware, backend.name, runtime_gpu_memory_utilization)
     console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]")
     console.print(f"[dim]Listening on http://{host}:{port}[/]\n")
 
@@ -1872,7 +1898,7 @@ def snippet(
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
         "--gpu-memory-utilization",
-        help="Backend GPU memory utilization: auto | 0.82",
+        help="Per-GPU budget as a fraction of total memory: auto | 0.82",
     ),
     perf_vram: str = typer.Option(
         "none",
@@ -1957,6 +1983,7 @@ def snippet(
     console.print(f"\n[bold]{model.id}[/]")
     console.print(f"[dim]# Run directly:[/]  {run_command}")
     console.print(f"[dim]# Or manually:[/]   uv run --no-project {dep_str} script.py\n")
+    print_runtime_memory_budget(hardware, backend.name, runtime_gpu_memory_utilization)
     console.print(Syntax(code, "python", theme="monokai"))
 
 

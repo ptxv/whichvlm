@@ -674,7 +674,7 @@ def cuda_memory_limits():
     if not torch.cuda.is_available():
         return None
     return {{
-        index: f"{{int(torch.cuda.mem_get_info(index)[0] * gpu_memory_fraction / 1024**2)}}MiB"
+        index: int(torch.cuda.get_device_properties(index).total_memory * gpu_memory_fraction)
         for index in range(torch.cuda.device_count())
     }}
 
