@@ -1376,6 +1376,7 @@ def generate_llama_cpp_vlm_script(
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
     revision = artifact_revision(model, variant)
+    projector_revision = projector.revision
     return f'''\
 import base64
 import mimetypes
@@ -1390,6 +1391,7 @@ model_id = {model.id!r}
 model_filename = {variant.filename!r}
 projector_filename = {projector.filename!r}
 revision = {revision!r}
+projector_revision = {projector_revision!r}
 image_path = {image_path!r}
 {metrics}
 
@@ -1431,7 +1433,7 @@ model_path = hf_hub_download(
     repo_id=model_id, filename=model_filename, revision=revision
 )
 mmproj_path = hf_hub_download(
-    repo_id=model_id, filename=projector_filename, revision=revision
+    repo_id=model_id, filename=projector_filename, revision=projector_revision
 )
 handler = chat_handler(model_id, mmproj_path)
 
@@ -1509,6 +1511,7 @@ def generate_llama_cpp_serve_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     projector_filename = projector.filename if projector else None
+    projector_revision = projector.revision if projector else None
     chat_format = llama_cpp_server_chat_format(model.id)
     revision = artifact_revision(model, variant)
     return f'''\
@@ -1521,6 +1524,7 @@ model_id = {model.id!r}
 model_filename = {variant.filename!r}
 projector_filename = {projector_filename!r}
 revision = {revision!r}
+projector_revision = {projector_revision!r}
 
 print(f"Downloading {{model_id}}...")
 model_path = hf_hub_download(
@@ -1543,7 +1547,7 @@ cmd = [
 ]
 if projector_filename is not None:
     mmproj_path = hf_hub_download(
-        repo_id=model_id, filename=projector_filename, revision=revision
+        repo_id=model_id, filename=projector_filename, revision=projector_revision
     )
     cmd.extend(
         [

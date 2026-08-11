@@ -671,7 +671,13 @@ def test_runtime_scripts_pin_cached_artifact_revision():
             revision_artifact("Qwen/Qwen2.5-VL-7B-Instruct", "gguf", variant.filename),
         ],
     )
-    projector = revision_artifact(model.id, "adapter", "mmproj.gguf")
+    projector_revision = "fedcba9876543210fedcba9876543210fedcba98"
+    projector = ModelArtifact(
+        repo_id=model.id,
+        format="adapter",
+        revision=projector_revision,
+        filename="mmproj.gguf",
+    )
 
     llama_vlm_script = generate_llama_cpp_vlm_script(
         model, variant, projector, 4096, False, "/tmp/image.png", 512
@@ -682,8 +688,8 @@ def test_runtime_scripts_pin_cached_artifact_revision():
     vllm_script = generate_vllm_vlm_script(model, 4096, "/tmp/image.png", 512)
     scripts_and_uses = [
         (generate_llama_cpp_text_script(model, variant, 4096, False, 512), 1),
-        (llama_vlm_script, 2),
-        (llama_serve_script, 2),
+        (llama_vlm_script, 1),
+        (llama_serve_script, 1),
         (generate_transformers_text_script(model, False, 512), 2),
         (generate_transformers_vlm_script(model, ("/tmp/image.png",), False, 512), 2),
         (
@@ -717,6 +723,9 @@ def test_runtime_scripts_pin_cached_artifact_revision():
 
     assert "code_revision=revision" in vllm_script
     assert "tokenizer_revision=revision" in vllm_script
+    for script in (llama_vlm_script, llama_serve_script):
+        assert f"projector_revision = {projector_revision!r}" in script
+        assert script.count("revision=projector_revision") == 1
 
 
 def test_runtime_detects_vlm_from_architecture():
