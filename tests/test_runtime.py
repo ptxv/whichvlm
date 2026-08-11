@@ -696,49 +696,67 @@ def test_gguf_vlm_runtime_requires_projector_artifact():
         )
 
 
-def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
+@pytest.mark.parametrize(
+    ("model_repo_id", "projector_repo_id"),
+    [
+        ("org/Test-VL-7B-GGUF", "org/Test-VL-7B-mmproj"),
+        ("org/Test-VL-7B", "org/Test-VL-7B"),
+    ],
+)
+def test_gguf_vlm_scripts_use_artifact_repositories(model_repo_id, projector_repo_id):
+    variant = GGUFVariant(
+        filename="test-q4.gguf",
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+    )
+    projector = ModelArtifact(
+        repo_id=projector_repo_id,
+        format="adapter",
+        filename="mmproj-test-f16.gguf",
+        source_kind="mmproj",
+    )
     model = vlm_model(
-        gguf_variants=[
-            GGUFVariant(
-                filename="test-q4.gguf",
-                quant_type="Q4_K_M",
-                file_size_bytes=4_000_000_000,
-            )
-        ],
+        id="org/Test-VL-7B",
+        gguf_variants=[variant],
         model_format="gguf",
         artifacts=[
             ModelArtifact(
-                repo_id="org/Test-VL-7B",
+                repo_id=model_repo_id,
                 format="gguf",
-                filename="test-q4.gguf",
+                filename=variant.filename,
                 source_kind="gguf_variant",
             ),
-            ModelArtifact(
-                repo_id="org/Test-VL-7B",
-                format="adapter",
-                filename="mmproj-test-f16.gguf",
-                source_kind="mmproj",
-            ),
+            projector,
         ],
     )
 
-    deps, script_type = resolve_model_deps(model, model.gguf_variants[0])
-    script = generate_run_script(
+    deps, script_type = resolve_model_deps(model, variant)
+    run_script = generate_run_script(
         model,
-        model.gguf_variants[0],
+        variant,
         4096,
         False,
         image_paths=("/tmp/image.png",),
         max_tokens=128,
     )
+    serve_script = generate_llama_cpp_serve_script(
+        model, variant, projector, 4096, False, "127.0.0.1", 8000
+    )
 
     assert "pillow" in deps
     assert script_type == "gguf_vlm"
-    assert "Llava15ChatHandler" in script
-    assert "clip_model_path=mmproj_path" in script
-    assert "projector_filename = 'mmproj-test-f16.gguf'" in script
-    assert "image_data_url" in script
-    assert "max_tokens=128" in script
+    assert "Llava15ChatHandler" in run_script
+    assert "clip_model_path=mmproj_path" in run_script
+    assert "projector_filename = 'mmproj-test-f16.gguf'" in run_script
+    assert "image_data_url" in run_script
+    assert "max_tokens=128" in run_script
+    for script in (run_script, serve_script):
+        assert f"model_repo_id = {model_repo_id!r}" in script
+        assert f"projector_repo_id = {projector_repo_id!r}" in script
+        assert (
+            "hf_hub_download(repo_id=model_repo_id, filename=model_filename)" in script
+        )
+        assert "repo_id=projector_repo_id, filename=projector_filename" in script
 
 
 def test_mlx_vlm_script_uses_mlx_vlm_runner():

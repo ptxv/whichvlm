@@ -1331,6 +1331,13 @@ print("\\nBye!")
 '''
 
 
+def gguf_repo_id(model: ModelInfo, variant: GGUFVariant) -> str:
+    for artifact in model.artifacts:
+        if artifact.format == "gguf" and artifact.filename == variant.filename:
+            return artifact.repo_id
+    return model.id
+
+
 def generate_llama_cpp_vlm_script(
     model: ModelInfo,
     variant: GGUFVariant,
@@ -1342,6 +1349,7 @@ def generate_llama_cpp_vlm_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
+    model_repo_id = gguf_repo_id(model, variant)
     return f'''\
 import base64
 import mimetypes
@@ -1353,7 +1361,9 @@ from llama_cpp import Llama
 from llama_cpp import llama_chat_format
 
 model_id = {model.id!r}
+model_repo_id = {model_repo_id!r}
 model_filename = {variant.filename!r}
+projector_repo_id = {projector.repo_id!r}
 projector_filename = {projector.filename!r}
 image_path = {image_path!r}
 {metrics}
@@ -1391,9 +1401,11 @@ def chat_handler(model_id, mmproj_path):
     )
 
 
-print(f"Downloading {{model_id}}...")
-model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
-mmproj_path = hf_hub_download(repo_id=model_id, filename=projector_filename)
+print(f"Downloading {{model_repo_id}}...")
+model_path = hf_hub_download(repo_id=model_repo_id, filename=model_filename)
+mmproj_path = hf_hub_download(
+    repo_id=projector_repo_id, filename=projector_filename
+)
 handler = chat_handler(model_id, mmproj_path)
 
 load_started_at = time.perf_counter()
@@ -1469,6 +1481,8 @@ def generate_llama_cpp_serve_script(
     port: int,
 ) -> str:
     n_gpu = 0 if cpu_only else -1
+    model_repo_id = gguf_repo_id(model, variant)
+    projector_repo_id = projector.repo_id if projector else None
     projector_filename = projector.filename if projector else None
     chat_format = llama_cpp_server_chat_format(model.id)
     return f'''\
@@ -1477,12 +1491,13 @@ import sys
 
 from huggingface_hub import hf_hub_download
 
-model_id = {model.id!r}
+model_repo_id = {model_repo_id!r}
 model_filename = {variant.filename!r}
+projector_repo_id = {projector_repo_id!r}
 projector_filename = {projector_filename!r}
 
-print(f"Downloading {{model_id}}...")
-model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
+print(f"Downloading {{model_repo_id}}...")
+model_path = hf_hub_download(repo_id=model_repo_id, filename=model_filename)
 cmd = [
     sys.executable,
     "-m",
@@ -1499,7 +1514,9 @@ cmd = [
     "{port}",
 ]
 if projector_filename is not None:
-    mmproj_path = hf_hub_download(repo_id=model_id, filename=projector_filename)
+    mmproj_path = hf_hub_download(
+        repo_id=projector_repo_id, filename=projector_filename
+    )
     cmd.extend(
         [
             "--clip_model_path",
