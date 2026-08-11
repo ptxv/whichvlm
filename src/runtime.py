@@ -99,21 +99,6 @@ VLLM_VLM_FAMILIES = frozenset(
 )
 SGLANG_VLM_FAMILIES = VLLM_VLM_FAMILIES
 ALL_OSES = frozenset({"linux", "darwin", "windows"})
-LLAMA_CPP_VLM_PROFILES: dict[str, tuple[tuple[str, ...], str]] = {
-    "qwen-vl": (
-        ("Qwen25VLChatHandler", "Qwen2VLChatHandler"),
-        "qwen2-vl",
-    ),
-    "llava": (
-        ("Llava16ChatHandler", "Llava15ChatHandler"),
-        "llava-1-5",
-    ),
-    "minicpm": (
-        ("MiniCPMv26ChatHandler", "MiniCPMVChatHandler"),
-        "minicpm-v-2.6",
-    ),
-}
-LLAMA_CPP_VLM_FAMILY_ALIASES = {"minicpm-v": "minicpm", "minicpmv": "minicpm"}
 
 COMPATIBILITY_MATRIX = (
     CompatibilityRule(
@@ -238,10 +223,13 @@ def model_family_keys(model: ModelInfo) -> set[str]:
 
 
 def llama_cpp_vlm_profile(model: ModelInfo) -> tuple[tuple[str, ...], str]:
-    for family_id in model_family_keys(model):
-        family_id = LLAMA_CPP_VLM_FAMILY_ALIASES.get(family_id, family_id)
-        if family_id in LLAMA_CPP_VLM_PROFILES:
-            return LLAMA_CPP_VLM_PROFILES[family_id]
+    family_ids = model_family_keys(model)
+    if "qwen-vl" in family_ids:
+        return ("Qwen25VLChatHandler", "Qwen2VLChatHandler"), "qwen2-vl"
+    if "llava" in family_ids:
+        return ("Llava16ChatHandler", "Llava15ChatHandler"), "llava-1-5"
+    if "minicpm" in family_ids:
+        return ("MiniCPMv26ChatHandler", "MiniCPMVChatHandler"), "minicpm-v-2.6"
     raise RuntimeUnsupportedError(
         f"llama.cpp has no validated multimodal chat handler for {model.id}. "
         "Use a Qwen-VL, LLaVA, or MiniCPM-V GGUF package, or choose a "
@@ -1464,10 +1452,6 @@ print("\\nBye!")
 '''
 
 
-def llama_cpp_server_chat_format(model: ModelInfo) -> str:
-    return llama_cpp_vlm_profile(model)[1]
-
-
 def generate_llama_cpp_serve_script(
     model: ModelInfo,
     variant: GGUFVariant,
@@ -1479,7 +1463,9 @@ def generate_llama_cpp_serve_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     projector_filename = projector.filename if projector else None
-    chat_format = llama_cpp_server_chat_format(model) if projector else None
+    chat_format = None
+    if projector:
+        _, chat_format = llama_cpp_vlm_profile(model)
     return f'''\
 import subprocess
 import sys

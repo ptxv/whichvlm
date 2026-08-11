@@ -103,6 +103,10 @@ VLM_FAMILY_SEEDS: Final[dict[str, dict[str, tuple[str, ...]]]] = {
         ),
         "aliases": ("llava", "bakllava", "llava-next", "llava-onevision"),
     },
+    "minicpm": {
+        "canonical": ("openbmb/MiniCPM-V", "openbmb/MiniCPM-V-2_6"),
+        "aliases": ("minicpm-v", "minicpmv"),
+    },
 }
 
 VLM_SEED_MODEL_IDS: Final[tuple[str, ...]] = (
