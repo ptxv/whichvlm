@@ -105,7 +105,7 @@ def test_runtime_dependencies_are_pinned():
             "psutil==7.2.2",
         ],
         "vllm": ["vllm==0.27.1", "psutil==7.2.2"],
-        "sglang": ["sglang==0.5.17", "psutil==7.2.2"],
+        "sglang": ["sglang==0.5.9", "psutil==7.2.2"],
     }
 
 
@@ -965,7 +965,7 @@ def test_sglang_vlm_backend_uses_offline_engine():
         hardware=linux_cuda_hardware(),
     )
 
-    assert deps == ["sglang==0.5.17", "psutil==7.2.2"]
+    assert deps == ["sglang==0.5.9", "psutil==7.2.2"]
     assert script_type == "sglang"
     assert "from sglang import Engine" in script
     assert 'if __name__ == "__main__":' in script

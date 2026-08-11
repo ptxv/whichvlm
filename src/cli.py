@@ -1973,9 +1973,12 @@ def snippet(
         raise typer.Exit(code=1)
 
     dep_str = " ".join(f"--with {quote_shell_argument(d)}" for d in deps)
-    run_command = f"whichvlm run {quote_shell_argument(model.id)}"
-    for dependency in dependency_overrides:
-        run_command += f" --runtime-dependency {quote_shell_argument(dependency)}"
+    run_parts = ["whichvlm", "run", quote_shell_argument(model.id)]
+    run_parts.extend(
+        f"--runtime-dependency {quote_shell_argument(dependency)}"
+        for dependency in dependency_overrides
+    )
+    run_command = " ".join(run_parts)
     console.print(f"\n[bold]{model.id}[/]")
     console.print(f"[dim]# Run directly:[/]  {run_command}")
     console.print(f"[dim]# Or manually:[/]   uv run --no-project {dep_str} script.py\n")

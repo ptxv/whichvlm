@@ -155,7 +155,7 @@ RUNTIME_DEPENDENCY_VERSIONS = {
     "pillow": "12.3.0",
     "psutil": "7.2.2",
     "qwen-vl-utils": "0.0.14",
-    "sglang": "0.5.17",
+    "sglang": "0.5.9",
     "torch": "2.13.0",
     "torchvision": "0.28.0",
     "transformers": "5.14.1",
@@ -163,7 +163,7 @@ RUNTIME_DEPENDENCY_VERSIONS = {
 }
 
 
-def dependency_name(requirement: str) -> str:
+def requirement_name(requirement: str) -> str:
     name = re.split(r"[<>=!~@\[]", requirement, maxsplit=1)[0].strip()
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -171,13 +171,15 @@ def dependency_name(requirement: str) -> str:
 def resolve_runtime_dependencies(
     dependencies: list[str], overrides: tuple[str, ...] = ()
 ) -> list[str]:
-    resolved = {}
+    requirements_by_name = {}
     for dependency in dependencies:
-        name = dependency_name(dependency)
-        resolved[name] = f"{dependency}=={RUNTIME_DEPENDENCY_VERSIONS[name]}"
+        name = requirement_name(dependency)
+        requirements_by_name[name] = (
+            f"{dependency}=={RUNTIME_DEPENDENCY_VERSIONS[name]}"
+        )
     for override in overrides:
-        resolved[dependency_name(override)] = override
-    return list(resolved.values())
+        requirements_by_name[requirement_name(override)] = override
+    return list(requirements_by_name.values())
 
 
 class Backend(ABC):
