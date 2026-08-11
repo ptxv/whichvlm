@@ -160,6 +160,7 @@ def gguf_mmproj(args: argparse.Namespace) -> None:
 
 
 def runtime_smoke(args: argparse.Namespace) -> None:
+    from hardware.detector import detect_hardware
     from models.types import GGUFVariant, ModelArtifact, ModelCapabilities, ModelInfo
     from runtime import generate_run_script
 
@@ -199,6 +200,7 @@ def runtime_smoke(args: argparse.Namespace) -> None:
         image_paths=(str(args.image),),
         max_tokens=args.max_tokens,
         backend_name=args.backend,
+        hardware=detect_hardware(),
     )
     subprocess.run(
         [sys.executable, "-c", script],

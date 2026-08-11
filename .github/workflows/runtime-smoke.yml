@@ -41,7 +41,7 @@ jobs:
             runner: '["macos-15"]'
             model: mlx-community/SmolVLM-256M-Instruct-4bit
             architecture: smolvlm
-            packages: mlx-vlm pillow
+            packages: mlx-vlm pillow torchvision
           - backend: vllm
             runner: '["self-hosted", "linux", "x64", "cuda"]'
             model: Qwen/Qwen2.5-VL-3B-Instruct
@@ -64,8 +64,8 @@ jobs:
       - name: Download smoke image
         run: >-
           curl --fail --location
-          --output "$RUNNER_TEMP/runtime-smoke.jpg"
-          https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg
+          --output "$RUNNER_TEMP/runtime-smoke.png"
+          https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png
       - name: Start backend and run inference
         env:
           CPU_ONLY: ${{ matrix.cpu_only }}
@@ -76,7 +76,7 @@ jobs:
           --architecture "${{ matrix.architecture }}"
           --model-file "${{ matrix.model_file }}"
           --projector-file "${{ matrix.projector_file }}"
-          --image "$RUNNER_TEMP/runtime-smoke.jpg"
+          --image "$RUNNER_TEMP/runtime-smoke.png"
           --output "$RUNNER_TEMP/runtime-smoke.json"
           $CPU_ONLY
       - uses: actions/upload-artifact@v7

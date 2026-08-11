@@ -23,6 +23,7 @@ def test_runtime_smoke_runs_generated_backend_and_records_result(monkeypatch, tm
     )
     generated = {}
     executed = {}
+    hardware = object()
 
     def fake_generate(model, variant, context, cpu_only, **kwargs):
         generated.update(
@@ -38,6 +39,7 @@ def test_runtime_smoke_runs_generated_backend_and_records_result(monkeypatch, tm
         executed.update(command=command, kwargs=kwargs)
 
     monkeypatch.setattr("runtime.generate_run_script", fake_generate)
+    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hardware)
     monkeypatch.setattr(real_hardware.subprocess, "run", fake_run)
     monkeypatch.setattr(real_hardware.metadata, "version", lambda _: "1.2.3")
 
@@ -48,8 +50,13 @@ def test_runtime_smoke_runs_generated_backend_and_records_result(monkeypatch, tm
     assert generated["model"].artifacts[0].filename == "mmproj-model-f16.gguf"
     assert generated["cpu_only"] is True
     assert generated["kwargs"]["backend_name"] == "llama.cpp"
+    assert generated["kwargs"]["hardware"] is hardware
     assert executed["command"] == [real_hardware.sys.executable, "-c", "print('smoke')"]
-    assert executed["kwargs"]["check"] is True
+    assert executed["kwargs"] == {
+        "input": "Describe this image in one sentence.\nexit\n",
+        "text": True,
+        "check": True,
+    }
     assert json.loads(output.read_text()) == {
         "backend": "llama.cpp",
         "version": "1.2.3",
