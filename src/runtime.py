@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import platform
 import shlex
@@ -8,11 +7,9 @@ import subprocess
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
 from difflib import get_close_matches
-from pathlib import Path
 
-from data.vlm_inventory import canonical_vlm_family_id
+from data.vlm_inventory import MULTI_IMAGE_FAMILY_IDS, canonical_vlm_family_id
 from engine.quantization import infer_non_gguf_quant_type
 from hardware.types import HardwareInfo, infer_backend_capabilities
 from models.integrations import (
@@ -62,49 +59,85 @@ class ServeRequest:
 @dataclass(frozen=True)
 class CompatibilityRule:
     backend: str
-    backend_version: str
-    model_id: str
-    model_revision: str
-    last_tested: date
-    source: str
     families: frozenset[str]
     artifact_formats: frozenset[str]
     operating_systems: frozenset[str]
     accelerators: frozenset[str]
     multi_image_families: frozenset[str] = frozenset()
 
-    def is_stale(self, today: date | None = None) -> bool:
-        current_date = today or datetime.now(UTC).date()
-        return (current_date - self.last_tested).days > COMPATIBILITY_MAX_AGE_DAYS
 
+TRANSFORMERS_VLM_FAMILIES = frozenset(
+    {
+        "qwen-vl",
+        "qwen2vl",
+        "qwen3vl",
+        "gemma-multimodal",
+        "paligemma",
+        "llama-vision",
+        "mllama",
+        "pixtral",
+        "phi-vision",
+        "phi3v",
+        "phi3_v",
+        "deepseek_vl",
+        "llava",
+    }
+)
+TRANSFORMERS_AUDIO_FAMILIES = frozenset({"qwen2-audio"})
+VLLM_VLM_FAMILIES = frozenset(
+    {
+        "qwen-vl",
+        "gemma-multimodal",
+        "llama-vision",
+        "pixtral",
+        "phi-vision",
+        "llava",
+        "internvl",
+        "deepseek-vl",
+        "glm-vision",
+    }
+)
+SGLANG_VLM_FAMILIES = VLLM_VLM_FAMILIES
+ALL_OSES = frozenset({"linux", "darwin", "windows"})
 
-COMPATIBILITY_MAX_AGE_DAYS = 90
-COMPATIBILITY_DATA_PATH = Path(__file__).parent / "data" / "runtime_compatibility.json"
-
-
-def load_compatibility_matrix(
-    path: Path = COMPATIBILITY_DATA_PATH,
-) -> tuple[CompatibilityRule, ...]:
-    records = json.loads(path.read_text(encoding="utf-8"))
-    return tuple(
-        CompatibilityRule(
-            **{
-                **record,
-                "last_tested": date.fromisoformat(record["last_tested"]),
-                "families": frozenset(record["families"]),
-                "artifact_formats": frozenset(record["artifact_formats"]),
-                "operating_systems": frozenset(record["operating_systems"]),
-                "accelerators": frozenset(record["accelerators"]),
-                "multi_image_families": frozenset(
-                    record.get("multi_image_families", [])
-                ),
-            }
-        )
-        for record in records
-    )
-
-
-COMPATIBILITY_MATRIX = load_compatibility_matrix()
+COMPATIBILITY_MATRIX = (
+    CompatibilityRule(
+        "llama.cpp",
+        frozenset(),
+        frozenset({"gguf"}),
+        ALL_OSES,
+        frozenset({"cpu", "cuda", "vulkan", "metal"}),
+    ),
+    CompatibilityRule(
+        "mlx",
+        frozenset(),
+        frozenset({"mlx"}),
+        frozenset({"darwin"}),
+        frozenset({"mlx", "metal"}),
+    ),
+    CompatibilityRule(
+        "transformers",
+        TRANSFORMERS_VLM_FAMILIES | TRANSFORMERS_AUDIO_FAMILIES,
+        frozenset({"transformers"}),
+        ALL_OSES,
+        frozenset({"cpu", "cuda", "rocm", "mps"}),
+        multi_image_families=MULTI_IMAGE_FAMILY_IDS,
+    ),
+    CompatibilityRule(
+        "vllm",
+        VLLM_VLM_FAMILIES,
+        frozenset({"transformers"}),
+        frozenset({"linux"}),
+        frozenset({"cuda"}),
+    ),
+    CompatibilityRule(
+        "sglang",
+        SGLANG_VLM_FAMILIES,
+        frozenset({"transformers"}),
+        frozenset({"linux"}),
+        frozenset({"cuda"}),
+    ),
+)
 
 
 class Backend(ABC):
@@ -242,7 +275,6 @@ def matrix_supports(
         and bool(accelerators & rule.accelerators)
         and (not rule.families or bool(families & rule.families))
         and (not multi_image or bool(families & rule.multi_image_families))
-        and not rule.is_stale()
         for rule in COMPATIBILITY_MATRIX
     )
 

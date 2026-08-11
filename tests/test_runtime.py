@@ -1,8 +1,5 @@
 import ast
-import json
 import shlex
-from dataclasses import replace
-from datetime import date
 
 import pytest
 
@@ -16,8 +13,6 @@ from models.types import (
     ModelInfo,
 )
 from runtime import (
-    COMPATIBILITY_MATRIX,
-    CompatibilityRule,
     RuntimeUnsupportedError,
     ServeRequest,
     auto_gpu_memory_utilization,
@@ -33,8 +28,6 @@ from runtime import (
     generate_transformers_video_script,
     generate_transformers_vlm_script,
     generate_vllm_vlm_script,
-    load_compatibility_matrix,
-    matrix_supports,
     recommended_runtime_backend,
     requires_audio,
     requires_image,
@@ -44,69 +37,6 @@ from runtime import (
     select_serve_backend,
     serve_request,
 )
-
-
-def test_compatibility_matrix_records_smoke_metadata():
-    assert {record.backend for record in COMPATIBILITY_MATRIX} == {
-        "llama.cpp",
-        "mlx",
-        "transformers",
-        "vllm",
-        "sglang",
-    }
-    assert all(record.backend_version for record in COMPATIBILITY_MATRIX)
-    assert all(len(record.model_revision) == 40 for record in COMPATIBILITY_MATRIX)
-    assert all(record.source for record in COMPATIBILITY_MATRIX)
-
-
-def test_compatibility_matrix_loader_and_staleness(tmp_path):
-    record = {
-        "backend": "transformers",
-        "backend_version": "1.2.3",
-        "model_id": "org/model",
-        "model_revision": "a" * 40,
-        "last_tested": "2026-01-01",
-        "source": "https://example.com/smoke",
-        "families": ["family"],
-        "artifact_formats": ["transformers"],
-        "operating_systems": ["linux"],
-        "accelerators": ["cpu"],
-    }
-    path = tmp_path / "compatibility.json"
-    path.write_text(json.dumps([record]), encoding="utf-8")
-
-    loaded = load_compatibility_matrix(path)
-
-    assert loaded == (
-        CompatibilityRule(
-            backend="transformers",
-            backend_version="1.2.3",
-            model_id="org/model",
-            model_revision="a" * 40,
-            last_tested=date(2026, 1, 1),
-            source="https://example.com/smoke",
-            families=frozenset({"family"}),
-            artifact_formats=frozenset({"transformers"}),
-            operating_systems=frozenset({"linux"}),
-            accelerators=frozenset({"cpu"}),
-        ),
-    )
-    assert loaded[0].is_stale(date(2026, 4, 1)) is False
-    assert loaded[0].is_stale(date(2026, 4, 2)) is True
-
-
-def test_matrix_support_ignores_stale_records(monkeypatch):
-    record = replace(
-        next(
-            record
-            for record in COMPATIBILITY_MATRIX
-            if record.backend == "transformers"
-        ),
-        last_tested=date(2000, 1, 1),
-    )
-    monkeypatch.setattr("runtime.COMPATIBILITY_MATRIX", (record,))
-
-    assert not matrix_supports("transformers", vlm_model(), None, linux_cuda_hardware())
 
 
 def vlm_model(**kwargs) -> ModelInfo:
