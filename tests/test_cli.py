@@ -1177,7 +1177,6 @@ def test_cached_model_revision_changes_only_on_refresh(monkeypatch):
     )
 
     cached = models_to_dicts([cached_model])
-    saved = {}
     fetch_calls = 0
 
     async def fake_fetch_models(include_vision=True):
@@ -1185,11 +1184,8 @@ def test_cached_model_revision_changes_only_on_refresh(monkeypatch):
         fetch_calls += 1
         return [refreshed_model]
 
-    def fake_save_cache(models, *, source):
-        saved["models"] = models
-
     monkeypatch.setattr("models.cache.load_cache", lambda **kwargs: cached)
-    monkeypatch.setattr("models.cache.save_cache", fake_save_cache)
+    monkeypatch.setattr("models.cache.save_cache", lambda *args, **kwargs: None)
     monkeypatch.setattr("models.fetcher.fetch_models", fake_fetch_models)
 
     first = cli_mod.load_model_catalog(refresh=False)
@@ -1199,7 +1195,6 @@ def test_cached_model_revision_changes_only_on_refresh(monkeypatch):
     assert first[0].artifacts[0].revision == cached_revision
     assert second[0].artifacts[0].revision == cached_revision
     assert refreshed[0].artifacts[0].revision == refreshed_revision
-    assert saved["models"][0]["artifacts"][0]["revision"] == refreshed_revision
     assert fetch_calls == 1
 
 

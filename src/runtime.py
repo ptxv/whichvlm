@@ -420,7 +420,9 @@ def artifact_revision(
     model: ModelInfo, variant: GGUFVariant | None = None
 ) -> str | None:
     for artifact in model.artifacts:
-        if variant is None or artifact.filename == variant.filename:
+        if artifact.repo_id == model.id and (
+            variant is None or artifact.filename == variant.filename
+        ):
             return artifact.revision
     return None
 
@@ -678,6 +680,7 @@ def transformers_runtime_setup(
 offload_folder = tempfile.mkdtemp(prefix="whichvlm_transformers_offload_")
 process = psutil.Process()
 gpu_memory_fraction = {gpu_memory_fraction}
+revision = {revision!r}
 
 
 def cuda_memory_limits():
@@ -717,7 +720,7 @@ model_kwargs = dict(
     device_map=device_map,
     torch_dtype=torch_dtype,
     trust_remote_code=True,
-    revision={revision!r},
+    revision=revision,
     offload_folder=offload_folder,
     offload_state_dict=True,
     attn_implementation="sdpa",
@@ -1590,7 +1593,7 @@ try:
     tokenizer = AutoTokenizer.from_pretrained(
         model_id,
         trust_remote_code=True,
-        revision=model_kwargs["revision"],
+        revision=revision,
     )
     model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
     model.eval()
@@ -1685,7 +1688,7 @@ try:
     processor = {processor_class}.from_pretrained(
         model_id,
         trust_remote_code=True,
-        revision=model_kwargs["revision"]{processor_arg_lines},
+        revision=revision{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
     model = {model_class}.from_pretrained(model_id, **model_kwargs)
@@ -1798,7 +1801,7 @@ try:
     processor = AutoProcessor.from_pretrained(
         model_id,
         trust_remote_code=True,
-        revision=model_kwargs["revision"]{processor_arg_lines},
+        revision=revision{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
@@ -1897,7 +1900,7 @@ try:
     processor = AutoProcessor.from_pretrained(
         model_id,
         trust_remote_code=True,
-        revision=model_kwargs["revision"],
+        revision=revision,
     )
     tokenizer = processor.tokenizer
     model = Qwen2AudioForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
