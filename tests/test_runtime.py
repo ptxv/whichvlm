@@ -945,7 +945,7 @@ def test_sglang_vlm_backend_uses_offline_engine():
 
 
 @pytest.mark.parametrize("backend_name", ["transformers", "vllm", "sglang"])
-def test_generated_scripts_require_remote_code_opt_in(backend_name):
+def test_generated_scripts_honor_remote_code_opt_in(backend_name):
     script = generate_run_script(
         vlm_model(revision="0123456789abcdef"),
         None,
@@ -1027,56 +1027,8 @@ def test_transformers_backend_is_not_a_server_backend():
         )
 
 
-def test_vllm_serve_uses_openai_server_command(monkeypatch):
-    model = vlm_model()
-    captured: dict[str, list[str]] = {}
-
-    class Result:
-        returncode = 0
-
-    def fake_run(cmd):
-        captured["cmd"] = cmd
-        return Result()
-
-    monkeypatch.setattr("runtime.subprocess.run", fake_run)
-
-    code = serve_request(
-        ServeRequest(
-            model=model,
-            artifact=None,
-            context_length=8192,
-            cpu_only=False,
-            hardware=linux_cuda_hardware(),
-            host="0.0.0.0",
-            port=9000,
-        ),
-        backend_name="vllm",
-    )
-
-    assert code == 0
-    assert captured["cmd"] == [
-        "uv",
-        "run",
-        "--no-project",
-        "--with",
-        "vllm",
-        "vllm",
-        "serve",
-        "Qwen/Qwen2.5-VL-7B-Instruct",
-        "--revision",
-        "main",
-        "--code-revision",
-        "main",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "9000",
-        "--max-model-len",
-        "8192",
-    ]
-
-
-def test_vllm_serve_enables_remote_code_at_pinned_revision(monkeypatch):
+@pytest.mark.parametrize("trust_remote_code", [False, True])
+def test_vllm_serve_uses_openai_server_command(monkeypatch, trust_remote_code):
     model = vlm_model(revision="0123456789abcdef")
     captured: dict[str, list[str]] = {}
 
@@ -1098,16 +1050,35 @@ def test_vllm_serve_enables_remote_code_at_pinned_revision(monkeypatch):
             hardware=linux_cuda_hardware(),
             host="0.0.0.0",
             port=9000,
-            trust_remote_code=True,
+            trust_remote_code=trust_remote_code,
         ),
         backend_name="vllm",
     )
 
     assert code == 0
-    assert "--trust-remote-code" in captured["cmd"]
-    assert captured["cmd"][captured["cmd"].index("--code-revision") + 1] == (
-        "0123456789abcdef"
-    )
+    expected = [
+        "uv",
+        "run",
+        "--no-project",
+        "--with",
+        "vllm",
+        "vllm",
+        "serve",
+        "Qwen/Qwen2.5-VL-7B-Instruct",
+        "--revision",
+        "0123456789abcdef",
+        "--code-revision",
+        "0123456789abcdef",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "9000",
+        "--max-model-len",
+        "8192",
+    ]
+    if trust_remote_code:
+        expected.append("--trust-remote-code")
+    assert captured["cmd"] == expected
 
 
 def test_vllm_serve_passes_gpu_memory_utilization(monkeypatch):

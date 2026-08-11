@@ -119,13 +119,14 @@ RANKING_PANEL = "Ranking"
 WORKLOAD_PANEL = "Workload"
 HARDWARE_PANEL = "Hardware"
 OUTPUT_PANEL = "Output"
-REMOTE_CODE_BACKENDS = frozenset({"transformers", "vllm", "sglang"})
+GPU_MEMORY_BACKENDS = {"vllm", "sglang"}
+RUNTIME_MEMORY_BUDGET_BACKENDS = {"transformers", "vllm", "sglang"}
 
 
 def show_remote_code_status(
     model: ModelInfo, backend_name: str, trust_remote_code: bool
 ) -> None:
-    if backend_name not in REMOTE_CODE_BACKENDS:
+    if backend_name not in RUNTIME_MEMORY_BUDGET_BACKENDS:
         return
     source = f"{model.id}@{model_revision(model)}"
     if trust_remote_code:
@@ -135,10 +136,6 @@ def show_remote_code_status(
             f"[yellow]Remote code disabled:[/] Refusing to execute code from {source}. "
             "Use --trust-remote-code to allow it."
         )
-
-
-GPU_MEMORY_BACKENDS = {"vllm", "sglang"}
-RUNTIME_MEMORY_BUDGET_BACKENDS = {"transformers", "vllm", "sglang"}
 
 
 def vlm_progress():

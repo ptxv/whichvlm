@@ -294,7 +294,7 @@ def test_parse_model_recovers_qwen36_a3b_active_params_from_name():
     assert parsed.revision == "0123456789abcdef"
 
 
-def test_models_cache_roundtrip_keeps_published_at():
+def test_models_cache_roundtrip_keeps_metadata():
     models = [
         ModelInfo(
             id="Qwen/Qwen3-8B-AWQ",

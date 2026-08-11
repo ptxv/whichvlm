@@ -257,7 +257,7 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
     (cache_path / "models.json").write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "cached_at": cached_at,
                 "models": [
                     {
