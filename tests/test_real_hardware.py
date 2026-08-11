@@ -1,38 +1,25 @@
-import importlib.util
 import json
+from argparse import Namespace
 from pathlib import Path
-
-spec = importlib.util.spec_from_file_location(
-    "real_hardware", Path(__file__).parents[1] / "benchmarks" / "real_hardware.py"
-)
-assert spec is not None
-assert spec.loader is not None
-real_hardware = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(real_hardware)
 
 
 def test_runtime_smoke_runs_generated_backend_and_records_result(monkeypatch, tmp_path):
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[1]))
+    from benchmarks import real_hardware
+
     image = tmp_path / "image.jpg"
     output = tmp_path / "result.json"
-    args = real_hardware.parser().parse_args(
-        [
-            "runtime-smoke",
-            "--backend",
-            "llama.cpp",
-            "--model",
-            "org/model-gguf",
-            "--architecture",
-            "qwen2_vl",
-            "--model-file",
-            "model-q4_k_m.gguf",
-            "--projector-file",
-            "mmproj-model-f16.gguf",
-            "--image",
-            str(image),
-            "--cpu-only",
-            "--output",
-            str(output),
-        ]
+    args = Namespace(
+        backend="llama.cpp",
+        model="org/model-gguf",
+        architecture="qwen2_vl",
+        model_file="model-q4_k_m.gguf",
+        projector_file="mmproj-model-f16.gguf",
+        image=image,
+        context=2048,
+        max_tokens=4,
+        cpu_only=True,
+        output=output,
     )
     generated = {}
     executed = {}
@@ -54,7 +41,7 @@ def test_runtime_smoke_runs_generated_backend_and_records_result(monkeypatch, tm
     monkeypatch.setattr(real_hardware.subprocess, "run", fake_run)
     monkeypatch.setattr(real_hardware.metadata, "version", lambda _: "1.2.3")
 
-    args.func(args)
+    real_hardware.runtime_smoke(args)
 
     assert generated["variant"].filename == "model-q4_k_m.gguf"
     assert generated["model"].model_format == "gguf"
@@ -67,5 +54,4 @@ def test_runtime_smoke_runs_generated_backend_and_records_result(monkeypatch, tm
         "backend": "llama.cpp",
         "version": "1.2.3",
         "model": "org/model-gguf",
-        "status": "passed",
     }

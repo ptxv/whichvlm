@@ -211,7 +211,6 @@ def runtime_smoke(args: argparse.Namespace) -> None:
         "backend": args.backend,
         "version": metadata.version(BACKEND_DISTRIBUTIONS[args.backend]),
         "model": args.model,
-        "status": "passed",
     }
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result))
