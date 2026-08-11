@@ -882,7 +882,7 @@ class TransformersBackend(Backend):
                 *transformers_quant_deps(model),
             ]
             if is_transformers_video_model(model):
-                deps.append("qwen-vl-utils")
+                deps.extend(["qwen-vl-utils", "av"])
             return deps
         if is_transformers_video_model(model):
             return [
@@ -891,6 +891,7 @@ class TransformersBackend(Backend):
                 "torchvision",
                 "accelerate",
                 "qwen-vl-utils",
+                "av",
                 "psutil",
                 *transformers_quant_deps(model),
             ]
@@ -1720,8 +1721,8 @@ def generate_transformers_video_script(
 import shutil
 import tempfile
 import time
-from pathlib import Path
 
+import av
 import psutil
 import torch
 from qwen_vl_utils import process_vision_info
@@ -1729,7 +1730,6 @@ from transformers import {imports}
 
 model_id = {model.id!r}
 video_path = {video_path!r}
-video_uri = Path(video_path).expanduser().resolve().as_uri()
 device_map = {device_map}
 {runtime_setup}
 try:
@@ -1742,6 +1742,14 @@ try:
     tokenizer = processor.tokenizer
     model = {model_class}.from_pretrained(model_id, **model_kwargs)
     model.eval()
+    with av.open(video_path) as container:
+        source_fps = float(container.streams.video[0].average_rate or 1)
+        frame_step = max(round(source_fps), 1)
+        video_frames = [
+            frame.to_image()
+            for index, frame in enumerate(container.decode(video=0))
+            if index % frame_step == 0
+        ]
     print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
     print("Ready! Type 'exit' to quit.\\n")
     while True:
@@ -1757,7 +1765,12 @@ try:
             {{
                 "role": "user",
                 "content": [
-                    {{"type": "video", "video": video_uri, "fps": 1.0}},
+                    {{
+                        "type": "video",
+                        "video": video_frames,
+                        "sample_fps": 1.0,
+                        "raw_fps": source_fps,
+                    }},
                     {{"type": "text", "text": text}},
                 ],
             }}
@@ -1771,6 +1784,7 @@ try:
             messages,
             return_video_kwargs=True,
         )
+        video_kwargs["fps"] = video_kwargs["fps"][0]
         inputs = processor(
             text=[prompt],
             images=image_inputs,

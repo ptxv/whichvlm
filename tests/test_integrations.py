@@ -189,10 +189,11 @@ def test_qwen_vl_video_profiles_have_transformers_runtime_path(
     assert recommended_runtime_backend(model, None, linux_cuda_hardware()) == "vllm"
     assert "torchvision" in deps
     assert "qwen-vl-utils" in deps
+    assert "av" in deps
     assert script_type == "transformers_vlm"
     assert model_class in script
     assert "video_path = '/tmp/video.mp4'" in script
-    assert '{"type": "video", "video": video_uri, "fps": 1.0}' in script
+    assert '"video": video_frames' in script
     assert "process_vision_info" in script
 
 

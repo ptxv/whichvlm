@@ -246,11 +246,13 @@ def test_qwen_vl_video_runtimes_use_transformers_video_path(
     assert "transformers" in deps
     assert "torchvision" in deps
     assert "qwen-vl-utils" in deps
+    assert "av" in deps
     assert script_type == "transformers_video"
     assert model_class in script
     assert "video_path = '/tmp/video.mp4'" in script
-    assert '{"type": "video", "video": video_uri, "fps": 1.0}' in script
+    assert '"video": video_frames' in script
     assert "process_vision_info" in script
+    assert 'video_kwargs["fps"] = video_kwargs["fps"][0]' in script
     assert "max_new_tokens=96" in script
     assert "[metrics] ttft=" in script
     compile(script, "<whichvlm-video>", "exec")
