@@ -89,6 +89,13 @@ whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend transformers --image ./before
 whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
 ```
 
+Generated environments use pinned runtime dependencies and print the resolved
+versions before launch. Override a dependency explicitly when needed:
+
+```bash
+whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --runtime-dependency 'transformers<6'
+```
+
 For vLLM and SGLang, derive backend memory utilization from the same reserve:
 
 ```bash

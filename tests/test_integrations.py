@@ -177,8 +177,8 @@ def test_qwen25_vl_video_profile_has_transformers_runtime_path():
     )
 
     assert recommended_runtime_backend(model, None, linux_cuda_hardware()) == "vllm"
-    assert "torchvision" in deps
-    assert "qwen-vl-utils" in deps
+    assert "torchvision==0.28.0" in deps
+    assert "qwen-vl-utils==0.0.14" in deps
     assert script_type == "transformers_vlm"
     assert "Qwen2_5_VLForConditionalGeneration" in script
     assert "video_path = '/tmp/video.mp4'" in script
@@ -230,7 +230,7 @@ def test_qwen2_audio_profile_has_transformers_runtime_path():
         recommended_runtime_backend(model, None, linux_cuda_hardware())
         == "transformers"
     )
-    assert "librosa" in deps
+    assert "librosa==0.11.0" in deps
     assert script_type == "transformers_audio"
     assert "Qwen2AudioForConditionalGeneration" in script
     assert "audio_path = '/tmp/audio.wav'" in script
@@ -347,7 +347,7 @@ def test_registered_integration_has_complete_path(
         hardware=linux_cuda_hardware(),
     )
 
-    assert "pillow" in deps
+    assert "pillow==12.3.0" in deps
     assert script_type == "transformers_vlm"
     assert "AutoProcessor" in script
     assert "TextIteratorStreamer" in script

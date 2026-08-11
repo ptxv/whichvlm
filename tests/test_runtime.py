@@ -13,6 +13,7 @@ from models.types import (
     ModelInfo,
 )
 from runtime import (
+    EXPLICIT_BACKENDS,
     RuntimeUnsupportedError,
     ServeRequest,
     auto_gpu_memory_utilization,
@@ -80,6 +81,45 @@ def qwen2_audio_model(**kwargs) -> ModelInfo:
     )
 
 
+def test_runtime_dependencies_are_pinned():
+    model = ModelInfo(
+        id="org/model",
+        family_id="x",
+        name="model",
+        parameter_count=1,
+    )
+
+    assert {
+        backend.name: backend.dependencies(model, None) for backend in EXPLICIT_BACKENDS
+    } == {
+        "llama.cpp": [
+            "llama-cpp-python==0.3.34",
+            "huggingface-hub==1.24.0",
+            "psutil==7.2.2",
+        ],
+        "mlx": ["mlx-vlm==0.6.6", "pillow==12.3.0"],
+        "transformers": [
+            "transformers==5.14.1",
+            "torch==2.13.0",
+            "accelerate==1.14.0",
+            "psutil==7.2.2",
+        ],
+        "vllm": ["vllm==0.27.1", "psutil==7.2.2"],
+        "sglang": ["sglang==0.5.17", "psutil==7.2.2"],
+    }
+
+
+def test_runtime_dependency_overrides_replace_or_extend_pins():
+    model = vlm_model()
+    backend = next(backend for backend in EXPLICIT_BACKENDS if backend.name == "vllm")
+
+    assert backend.dependencies(
+        model,
+        None,
+        ("vllm==0.26.2", "torch<2.13"),
+    ) == ["vllm==0.26.2", "psutil==7.2.2", "torch<2.13"]
+
+
 def test_vlm_runtime_requires_image():
     model = vlm_model()
 
@@ -113,7 +153,7 @@ def test_runtime_uses_cached_vision_capability():
     deps, script_type = resolve_model_deps(model, None)
 
     assert requires_image(model)
-    assert "pillow" in deps
+    assert "pillow==12.3.0" in deps
     assert script_type == "transformers_vlm"
 
 
@@ -194,9 +234,9 @@ def test_qwen25_vl_video_runtime_uses_transformers_video_path():
         recommended_runtime_backend(model, None, linux_cuda_hardware())
         == "transformers"
     )
-    assert "transformers" in deps
-    assert "torchvision" in deps
-    assert "qwen-vl-utils" in deps
+    assert "transformers==5.14.1" in deps
+    assert "torchvision==0.28.0" in deps
+    assert "qwen-vl-utils==0.0.14" in deps
     assert script_type == "transformers_video"
     assert "Qwen2_5_VLForConditionalGeneration" in script
     assert "video_path = '/tmp/video.mp4'" in script
@@ -233,8 +273,8 @@ def test_qwen2_audio_runtime_uses_transformers_audio_path():
         recommended_runtime_backend(model, None, linux_cuda_hardware())
         == "transformers"
     )
-    assert "transformers" in deps
-    assert "librosa" in deps
+    assert "transformers==5.14.1" in deps
+    assert "librosa==0.11.0" in deps
     assert script_type == "transformers_audio"
     assert "Qwen2AudioForConditionalGeneration" in script
     assert "audio_path = '/tmp/audio.wav'" in script
@@ -266,7 +306,7 @@ def test_transformers_vlm_script_uses_processor_and_image_paths():
         max_tokens=128,
     )
 
-    assert "pillow" in deps
+    assert "pillow==12.3.0" in deps
     assert script_type == "transformers_vlm"
     assert "AutoProcessor" in script
     assert "Qwen2_5_VLForConditionalGeneration" in script
@@ -410,7 +450,7 @@ def test_transformers_quantized_script_uses_bitsandbytes_loader():
     script = generate_run_script(model, None, 4096, False)
 
     assert script_type == "transformers"
-    assert "bitsandbytes" in deps
+    assert "bitsandbytes==0.49.2" in deps
     assert "BitsAndBytesConfig" in script
     assert 'model_kwargs["quantization_config"]' in script
     assert 'attn_implementation="sdpa"' in script
@@ -658,7 +698,7 @@ def test_runtime_detects_vlm_from_architecture():
     deps, script_type = resolve_model_deps(model, None)
 
     assert requires_image(model)
-    assert "pillow" in deps
+    assert "pillow==12.3.0" in deps
     assert script_type == "transformers_vlm"
 
 
@@ -732,7 +772,7 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
         max_tokens=128,
     )
 
-    assert "pillow" in deps
+    assert "pillow==12.3.0" in deps
     assert script_type == "gguf_vlm"
     assert "Llava15ChatHandler" in script
     assert "clip_model_path=mmproj_path" in script
@@ -765,7 +805,7 @@ def test_mlx_vlm_script_uses_mlx_vlm_runner():
         hardware=hardware,
     )
 
-    assert deps == ["mlx-vlm", "pillow"]
+    assert deps == ["mlx-vlm==0.6.6", "pillow==12.3.0"]
     assert script_type == "mlx_vlm"
     assert "from mlx_vlm import generate, load" in script
     assert "apply_chat_template" in script
@@ -879,7 +919,7 @@ def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
         hardware=linux_cuda_hardware(),
     )
 
-    assert deps == ["vllm", "psutil"]
+    assert deps == ["vllm==0.27.1", "psutil==7.2.2"]
     assert script_type == "vllm"
     assert "from vllm import LLM, SamplingParams" in script
     assert "llm.chat" in script
@@ -925,7 +965,7 @@ def test_sglang_vlm_backend_uses_offline_engine():
         hardware=linux_cuda_hardware(),
     )
 
-    assert deps == ["sglang", "psutil"]
+    assert deps == ["sglang==0.5.17", "psutil==7.2.2"]
     assert script_type == "sglang"
     assert "from sglang import Engine" in script
     assert 'if __name__ == "__main__":' in script
@@ -1025,6 +1065,7 @@ def test_vllm_serve_uses_openai_server_command(monkeypatch):
             hardware=linux_cuda_hardware(),
             host="0.0.0.0",
             port=9000,
+            dependency_overrides=("vllm==0.26.2",),
         ),
         backend_name="vllm",
     )
@@ -1035,7 +1076,7 @@ def test_vllm_serve_uses_openai_server_command(monkeypatch):
         "run",
         "--no-project",
         "--with",
-        "vllm",
+        "vllm==0.26.2",
         "vllm",
         "serve",
         "Qwen/Qwen2.5-VL-7B-Instruct",

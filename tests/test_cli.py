@@ -1584,7 +1584,7 @@ def test_transformers_chat_script_provides_disk_offload_folder():
     assert "shutil.rmtree(offload_folder, ignore_errors=True)" in script
 
 
-def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
+def test_run_explicit_transformers_override_does_not_select_gguf(monkeypatch):
     model = make_model(
         model_id="org/Test-7B",
         gguf_variants=[
@@ -1600,6 +1600,7 @@ def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
     def fake_run_request(request, backend_name=None):
         captured["artifact"] = request.artifact
         captured["backend_name"] = backend_name
+        captured["dependency_overrides"] = request.dependency_overrides
         return 0
 
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
@@ -1608,12 +1609,22 @@ def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
     monkeypatch.setattr(cli_mod, "run_request", fake_run_request)
 
     result = CliRunner().invoke(
-        app, ["run", "org/Test-7B", "--backend", "transformers"]
+        app,
+        [
+            "run",
+            "org/Test-7B",
+            "--backend",
+            "transformers",
+            "--runtime-dependency",
+            "transformers==5.13.0",
+        ],
     )
 
     assert result.exit_code == 0
     assert captured["artifact"] is None
     assert captured["backend_name"] == "transformers"
+    assert captured["dependency_overrides"] == ("transformers==5.13.0",)
+    assert "transformers==5.13.0" in result.stdout
 
 
 def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
@@ -1690,8 +1701,8 @@ def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
     assert captured["model_id"] == "unsloth/Qwen3.6-27B-GGUF"
     assert captured["variant"].filename == "q4.gguf"
     assert captured["max_tokens"] == 128
-    assert "llama-cpp-python" in captured["cmd"]
-    assert "transformers" not in captured["cmd"]
+    assert "llama-cpp-python==0.3.34" in captured["cmd"]
+    assert not any(dep.startswith("transformers") for dep in captured["cmd"])
 
 
 def test_run_vlm_requires_image(monkeypatch):
@@ -1911,6 +1922,7 @@ def test_serve_gguf_model_uses_server_request(monkeypatch):
         captured["backend_name"] = backend_name
         captured["host"] = request.host
         captured["port"] = request.port
+        captured["dependency_overrides"] = request.dependency_overrides
         return 0
 
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
@@ -1920,7 +1932,16 @@ def test_serve_gguf_model_uses_server_request(monkeypatch):
 
     result = CliRunner().invoke(
         app,
-        ["serve", "org/Test-7B-GGUF", "--host", "0.0.0.0", "--port", "9000"],
+        [
+            "serve",
+            "org/Test-7B-GGUF",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9000",
+            "--runtime-dependency",
+            "llama-cpp-python==0.3.33",
+        ],
     )
 
     assert result.exit_code == 0
@@ -1928,6 +1949,7 @@ def test_serve_gguf_model_uses_server_request(monkeypatch):
     assert captured["backend_name"] == "llama.cpp"
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 9000
+    assert captured["dependency_overrides"] == ("llama-cpp-python==0.3.33",)
 
 
 def test_run_vllm_perf_budget_sets_gpu_memory_utilization(monkeypatch):
@@ -2036,6 +2058,8 @@ def test_snippet_passes_options_and_quotes_model_id(monkeypatch):
             "8192",
             "--max-tokens",
             "128",
+            "--runtime-dependency",
+            "torch<2.13",
         ],
     )
 
@@ -2043,6 +2067,7 @@ def test_snippet_passes_options_and_quotes_model_id(monkeypatch):
     assert captured["context_length"] == 8192
     assert captured["max_tokens"] == 128
     assert shlex.join(["whichvlm", "run", model_id]) in result.stdout
+    assert "--runtime-dependency 'torch<2.13'" in result.stdout
 
 
 @pytest.mark.parametrize(

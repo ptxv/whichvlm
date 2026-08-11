@@ -1567,6 +1567,11 @@ def run(
         "-b",
         help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
     ),
+    runtime_dependency: Optional[list[str]] = typer.Option(
+        None,
+        "--runtime-dependency",
+        help="Override a pinned runtime dependency; repeat as needed",
+    ),
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
         "--gpu-memory-utilization",
@@ -1714,7 +1719,8 @@ def run(
             hardware = detect_runtime_hardware(
                 cpu_only, gpu_memory_utilization, perf_vram
             )
-        deps = backend.dependencies(model, variant)
+        dependency_overrides = tuple(runtime_dependency or ())
+        deps = backend.dependencies(model, variant, dependency_overrides)
         _, script_type = resolve_model_deps(model, variant, backend.name, hardware)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
             gpu_memory_utilization, hardware, backend.name, perf_vram
@@ -1739,6 +1745,7 @@ def run(
             max_tokens=max_tokens,
             hardware=hardware,
             gpu_memory_utilization=runtime_gpu_memory_utilization,
+            dependency_overrides=dependency_overrides,
         )
         raise typer.Exit(code=run_request(request, backend.name))
     except RuntimeUnsupportedError as e:
@@ -1768,6 +1775,11 @@ def serve(
         "--backend",
         "-b",
         help="Server backend: auto, llama.cpp, vllm, sglang",
+    ),
+    runtime_dependency: Optional[list[str]] = typer.Option(
+        None,
+        "--runtime-dependency",
+        help="Override a pinned runtime dependency; repeat as needed",
     ),
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
@@ -1802,7 +1814,8 @@ def serve(
     )
     try:
         backend = select_serve_backend(model, variant, hardware, backend_name)
-        deps = backend.serve_dependencies(model, variant)
+        dependency_overrides = tuple(runtime_dependency or ())
+        deps = backend.serve_dependencies(model, variant, dependency_overrides)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
             gpu_memory_utilization, hardware, backend.name, perf_vram
         )
@@ -1825,6 +1838,7 @@ def serve(
             host=host,
             port=port,
             gpu_memory_utilization=runtime_gpu_memory_utilization,
+            dependency_overrides=dependency_overrides,
         )
         raise typer.Exit(code=serve_request(request, backend.name))
     except RuntimeUnsupportedError as e:
@@ -1868,6 +1882,11 @@ def snippet(
         "--backend",
         "-b",
         help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
+    ),
+    runtime_dependency: Optional[list[str]] = typer.Option(
+        None,
+        "--runtime-dependency",
+        help="Override a pinned runtime dependency; repeat as needed",
     ),
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
@@ -1931,7 +1950,8 @@ def snippet(
             and perf_vram_reserve_enabled(perf_vram)
         ):
             hardware = detect_runtime_hardware(False, gpu_memory_utilization, perf_vram)
-        deps = backend.dependencies(model, variant)
+        dependency_overrides = tuple(runtime_dependency or ())
+        deps = backend.dependencies(model, variant, dependency_overrides)
         runtime_gpu_memory_utilization = resolve_runtime_gpu_memory_utilization(
             gpu_memory_utilization, hardware, backend.name, perf_vram
         )
@@ -1952,8 +1972,10 @@ def snippet(
         console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(code=1)
 
-    dep_str = " ".join(f"--with {d}" for d in deps)
+    dep_str = " ".join(f"--with {quote_shell_argument(d)}" for d in deps)
     run_command = f"whichvlm run {quote_shell_argument(model.id)}"
+    for dependency in dependency_overrides:
+        run_command += f" --runtime-dependency {quote_shell_argument(dependency)}"
     console.print(f"\n[bold]{model.id}[/]")
     console.print(f"[dim]# Run directly:[/]  {run_command}")
     console.print(f"[dim]# Or manually:[/]   uv run --no-project {dep_str} script.py\n")

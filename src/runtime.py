@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shlex
 import subprocess
 import tempfile
@@ -42,6 +43,7 @@ class RuntimeRequest:
     hardware: HardwareInfo | None = None
     script_path: str | None = None
     gpu_memory_utilization: float | None = None
+    dependency_overrides: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,7 @@ class ServeRequest:
     host: str
     port: int
     gpu_memory_utilization: float | None = None
+    dependency_overrides: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,43 @@ COMPATIBILITY_MATRIX = (
     ),
 )
 
+RUNTIME_DEPENDENCY_VERSIONS = {
+    "accelerate": "1.14.0",
+    "auto-gptq": "0.7.1",
+    "autoawq": "0.2.9",
+    "bitsandbytes": "0.49.2",
+    "huggingface-hub": "1.24.0",
+    "librosa": "0.11.0",
+    "llama-cpp-python": "0.3.34",
+    "mlx-vlm": "0.6.6",
+    "optimum": "2.2.0",
+    "pillow": "12.3.0",
+    "psutil": "7.2.2",
+    "qwen-vl-utils": "0.0.14",
+    "sglang": "0.5.17",
+    "torch": "2.13.0",
+    "torchvision": "0.28.0",
+    "transformers": "5.14.1",
+    "vllm": "0.27.1",
+}
+
+
+def dependency_name(requirement: str) -> str:
+    name = re.split(r"[<>=!~@\[]", requirement, maxsplit=1)[0].strip()
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def resolve_runtime_dependencies(
+    dependencies: list[str], overrides: tuple[str, ...] = ()
+) -> list[str]:
+    resolved = {}
+    for dependency in dependencies:
+        name = dependency_name(dependency)
+        resolved[name] = f"{dependency}=={RUNTIME_DEPENDENCY_VERSIONS[name]}"
+    for override in overrides:
+        resolved[dependency_name(override)] = override
+    return list(resolved.values())
+
 
 class Backend(ABC):
     name: str
@@ -153,16 +193,28 @@ class Backend(ABC):
     ) -> bool: ...
 
     @abstractmethod
-    def dependencies(
+    def dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
     ) -> list[str]: ...
 
+    def dependencies(
+        self,
+        model: ModelInfo,
+        artifact: GGUFVariant | None,
+        overrides: tuple[str, ...] = (),
+    ) -> list[str]:
+        return resolve_runtime_dependencies(
+            self.dependency_names(model, artifact), overrides
+        )
+
     def build_command(self, request: RuntimeRequest) -> list[str]:
         assert request.script_path is not None
         return uv_command(
-            self.dependencies(request.model, request.artifact),
+            self.dependencies(
+                request.model, request.artifact, request.dependency_overrides
+            ),
             [request.script_path],
         )
 
@@ -182,12 +234,22 @@ class Backend(ABC):
     @abstractmethod
     def generate_script(self, request: RuntimeRequest) -> str: ...
 
-    def serve_dependencies(
+    def serve_dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
     ) -> list[str]:
-        return self.dependencies(model, artifact)
+        return self.dependency_names(model, artifact)
+
+    def serve_dependencies(
+        self,
+        model: ModelInfo,
+        artifact: GGUFVariant | None,
+        overrides: tuple[str, ...] = (),
+    ) -> list[str]:
+        return resolve_runtime_dependencies(
+            self.serve_dependency_names(model, artifact), overrides
+        )
 
     def serve(self, request: ServeRequest) -> int:
         raise RuntimeUnsupportedError(f"{self.name} does not support serve.")
@@ -732,7 +794,7 @@ class LlamaCppBackend(Backend):
             self.name, model, artifact, hardware
         )
 
-    def dependencies(
+    def dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
@@ -770,7 +832,7 @@ class LlamaCppBackend(Backend):
             request.max_tokens,
         )
 
-    def serve_dependencies(
+    def serve_dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
@@ -802,7 +864,11 @@ class LlamaCppBackend(Backend):
                 f.write(script)
             result = subprocess.run(
                 uv_command(
-                    self.serve_dependencies(request.model, request.artifact),
+                    self.serve_dependencies(
+                        request.model,
+                        request.artifact,
+                        request.dependency_overrides,
+                    ),
                     [script_path],
                 )
             )
@@ -826,7 +892,7 @@ class MLXBackend(Backend):
             self.name, model, artifact, hardware
         )
 
-    def dependencies(
+    def dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
@@ -860,7 +926,7 @@ class TransformersBackend(Backend):
             return True
         return matrix_supports(self.name, model, artifact, hardware)
 
-    def dependencies(
+    def dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
@@ -965,14 +1031,14 @@ class VLLMBackend(Backend):
             and matrix_supports(self.name, model, artifact, hardware)
         )
 
-    def dependencies(
+    def dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
     ) -> list[str]:
         return ["vllm", "psutil"]
 
-    def serve_dependencies(
+    def serve_dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
@@ -1012,7 +1078,11 @@ class VLLMBackend(Backend):
             )
         result = subprocess.run(
             uv_command(
-                self.serve_dependencies(request.model, request.artifact),
+                self.serve_dependencies(
+                    request.model,
+                    request.artifact,
+                    request.dependency_overrides,
+                ),
                 cmd,
             )
         )
@@ -1037,14 +1107,14 @@ class SGLangBackend(Backend):
             and matrix_supports(self.name, model, artifact, hardware)
         )
 
-    def dependencies(
+    def dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
     ) -> list[str]:
         return ["sglang", "psutil"]
 
-    def serve_dependencies(
+    def serve_dependency_names(
         self,
         model: ModelInfo,
         artifact: GGUFVariant | None,
@@ -1086,7 +1156,11 @@ class SGLangBackend(Backend):
             )
         result = subprocess.run(
             uv_command(
-                self.serve_dependencies(request.model, request.artifact),
+                self.serve_dependencies(
+                    request.model,
+                    request.artifact,
+                    request.dependency_overrides,
+                ),
                 cmd,
             )
         )
