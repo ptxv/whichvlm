@@ -7,6 +7,7 @@ def test_known_vlm_inventory_families_have_stable_ids():
     assert canonical_vlm_family_id("Qwen/Qwen2-Audio-7B-Instruct") == "qwen2-audio"
     assert canonical_vlm_family_id("OpenGVLab/InternVL3-8B") == "internvl"
     assert canonical_vlm_family_id("llava-hf/llava-1.5-7b-hf") == "llava"
+    assert canonical_vlm_family_id("MiniCPMV") == "minicpm"
     assert canonical_vlm_family_id("unknown/Plain-Text-7B") is None
 
 

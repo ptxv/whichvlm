@@ -222,6 +222,21 @@ def model_family_keys(model: ModelInfo) -> set[str]:
     return {key for key in keys if key}
 
 
+def llama_cpp_vlm_profile(model: ModelInfo) -> tuple[str, str]:
+    family_ids = model_family_keys(model)
+    if "qwen-vl" in family_ids:
+        return "Qwen25VLChatHandler", "qwen2.5-vl"
+    if "llava" in family_ids:
+        return "Llava15ChatHandler", "llava-1-5"
+    if "minicpm" in family_ids:
+        return "MiniCPMv26ChatHandler", "minicpm-v-2.6"
+    raise RuntimeUnsupportedError(
+        f"llama.cpp has no validated multimodal chat handler for {model.id}. "
+        "Use a Qwen-VL, LLaVA, or MiniCPM-V GGUF package, or choose a "
+        "Transformers or MLX package."
+    )
+
+
 def artifact_format(model: ModelInfo, artifact: GGUFVariant | None) -> str:
     if artifact:
         return "gguf"
@@ -1342,6 +1357,7 @@ def generate_llama_cpp_vlm_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
+    handler_name, _ = llama_cpp_vlm_profile(model)
     return f'''\
 import base64
 import mimetypes
@@ -1366,35 +1382,20 @@ def image_data_url(path):
     return f"data:{{mime}};base64,{{encoded}}"
 
 
-def chat_handler(model_id, mmproj_path):
-    lower = model_id.lower()
-    preferred = []
-    if "qwen" in lower and "vl" in lower:
-        preferred.extend(["Qwen25VLChatHandler", "Qwen2VLChatHandler"])
-    if "llava" in lower:
-        preferred.extend(["Llava16ChatHandler", "Llava15ChatHandler"])
-    if "minicpm" in lower:
-        preferred.extend(["MiniCPMv26ChatHandler", "MiniCPMVChatHandler"])
-    preferred.extend(["Llava16ChatHandler", "Llava15ChatHandler"])
-
-    seen = set()
-    for name in preferred:
-        if name in seen:
-            continue
-        seen.add(name)
-        cls = getattr(llama_chat_format, name, None)
-        if cls is not None:
-            return cls(clip_model_path=mmproj_path)
-    raise SystemExit(
-        "llama-cpp-python does not expose a compatible multimodal chat handler "
-        f"for {{model_id}}. Install a newer llama-cpp-python or use Transformers/MLX."
-    )
+def chat_handler(mmproj_path):
+    cls = getattr(llama_chat_format, {handler_name!r}, None)
+    if cls is None:
+        raise SystemExit(
+            "llama-cpp-python does not expose a compatible multimodal chat handler "
+            f"for {{model_id}}. Install a newer llama-cpp-python or use Transformers/MLX."
+        )
+    return cls(clip_model_path=mmproj_path)
 
 
 print(f"Downloading {{model_id}}...")
 model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
 mmproj_path = hf_hub_download(repo_id=model_id, filename=projector_filename)
-handler = chat_handler(model_id, mmproj_path)
+handler = chat_handler(mmproj_path)
 
 load_started_at = time.perf_counter()
 print("Loading model...")
@@ -1450,15 +1451,6 @@ print("\\nBye!")
 '''
 
 
-def llama_cpp_server_chat_format(model_id: str) -> str:
-    value = model_id.lower()
-    if "qwen" in value and "vl" in value:
-        return "qwen2-vl"
-    if "minicpm" in value:
-        return "minicpm-v-2.6"
-    return "llava-1-5"
-
-
 def generate_llama_cpp_serve_script(
     model: ModelInfo,
     variant: GGUFVariant,
@@ -1470,7 +1462,9 @@ def generate_llama_cpp_serve_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     projector_filename = projector.filename if projector else None
-    chat_format = llama_cpp_server_chat_format(model.id)
+    chat_format = None
+    if projector:
+        _, chat_format = llama_cpp_vlm_profile(model)
     return f'''\
 import subprocess
 import sys
