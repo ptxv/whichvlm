@@ -2190,11 +2190,23 @@ def test_json_output_defaults_to_compact():
     assert "budget_notes" not in compact["hardware"]
 
 
-def test_json_output_reflects_runtime_readiness():
+@pytest.mark.parametrize(
+    ("model_id", "family_id", "runtime_backend", "runtime_ready"),
+    [
+        ("Qwen/Qwen2.5-VL-7B-Instruct", "qwen-vl", "vllm", True),
+        ("HuggingFaceM4/Idefics3-8B-Llama3", "idefics", None, False),
+    ],
+)
+def test_json_output_reflects_runtime_readiness(
+    model_id,
+    family_id,
+    runtime_backend,
+    runtime_ready,
+):
     model = ModelInfo(
-        id="Qwen/Qwen2.5-VL-7B-Instruct",
-        family_id="qwen-vl",
-        name="Qwen2.5-VL-7B-Instruct",
+        id=model_id,
+        family_id=family_id,
+        name=model_id.rsplit("/", 1)[-1],
         parameter_count=7_000_000_000,
         capabilities=ModelCapabilities(image=True),
     )
@@ -2208,20 +2220,11 @@ def test_json_output_reflects_runtime_readiness():
 
     entry = render_json_output(result, hw_with_gpu(24))["models"][0]
 
-    assert entry["recommended_runtime_backend"] == "vllm"
+    assert entry["recommended_runtime_backend"] == runtime_backend
     assert entry["artifact_ready"] is True
-    assert entry["runtime_ready"] is True
-    assert entry["runnable"] is True
-
-    model.id = "HuggingFaceM4/Idefics3-8B-Llama3"
-    model.family_id = "idefics"
-    model.name = "Idefics3-8B-Llama3"
-    entry = render_json_output(result, hw_with_gpu(24))["models"][0]
-
-    assert entry["recommended_runtime_backend"] is None
-    assert entry["runtime_ready"] is False
+    assert entry["runtime_ready"] is runtime_ready
     assert entry["can_run"] is True
-    assert entry["runnable"] is False
+    assert entry["runnable"] is runtime_ready
 
 
 def test_json_output_marks_hypothetical_gguf_unavailable():

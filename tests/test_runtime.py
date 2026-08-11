@@ -814,12 +814,7 @@ def test_recommended_runtime_backend_prefers_vllm_for_linux_cuda_vlm():
 
 
 def test_compatible_runtime_backend_ignores_artifact_availability():
-    model = ModelInfo(
-        id="org/Test-7B-GGUF",
-        family_id="test-7b",
-        name="Test-7B-GGUF",
-        parameter_count=7_000_000_000,
-    )
+    model = vlm_model()
     artifact = GGUFVariant(
         filename="Test-7B.Q4_K_M.gguf",
         quant_type="Q4_K_M",

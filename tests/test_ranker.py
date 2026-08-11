@@ -196,8 +196,8 @@ def test_cpu_only_backend_filters_out_non_gguf_models():
     assert results[0].model.id == "Qwen/Qwen3-8B-GGUF"
 
 
-def test_ranker_excludes_unknown_runtime_family():
-    model = ModelInfo(
+def test_ranker_requires_supported_runtime_family():
+    unsupported = ModelInfo(
         id="HuggingFaceM4/Idefics3-8B-Llama3",
         family_id="idefics",
         name="Idefics3-8B-Llama3",
@@ -212,12 +212,7 @@ def test_ranker_excludes_unknown_runtime_family():
         ],
         capabilities=ModelCapabilities(image=True),
     )
-
-    assert rank_models([model], make_hardware(), task_profile="any") == []
-
-
-def test_ranker_includes_supported_runtime_family():
-    model = ModelInfo(
+    supported = ModelInfo(
         id="Qwen/Qwen2.5-VL-7B-Instruct",
         family_id="qwen-vl",
         name="Qwen2.5-VL-7B-Instruct",
@@ -226,9 +221,9 @@ def test_ranker_includes_supported_runtime_family():
         capabilities=ModelCapabilities(image=True),
     )
 
-    results = rank_models([model], make_hardware(), task_profile="any")
+    results = rank_models([unsupported, supported], make_hardware(), task_profile="any")
 
-    assert [result.model.id for result in results] == [model.id]
+    assert [result.model.id for result in results] == [supported.id]
 
 
 def test_architecture_marks_transformers_vlm_for_vision_profile():

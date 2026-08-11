@@ -17,7 +17,7 @@ from models.types import (
 )
 from output import console
 from output.upgrade import summarize_upgrade_row
-from runtime import compatible_runtime_backend, recommended_runtime_backend
+from runtime import compatible_runtime_backend
 
 
 def backend_capability_dict(capability: BackendCapability) -> dict:
@@ -129,14 +129,14 @@ def model_dict(
 ) -> dict:
     model = result.model
     artifact_status = gguf_artifact_status(model, result.gguf_variant)
-    runtime_backend = recommended_runtime_backend(model, result.gguf_variant, hardware)
+    compatible_backend = compatible_runtime_backend(
+        model, result.gguf_variant, hardware
+    )
     artifact_ready = artifact_status in {
         None,
         GGUFArtifactStatus.AVAILABLE,
     }
-    runtime_ready = (
-        compatible_runtime_backend(model, result.gguf_variant, hardware) is not None
-    )
+    runtime_ready = compatible_backend is not None
     runnable = result.can_run and artifact_ready and runtime_ready
     file_size_bytes: int | None = estimate_weight_bytes(model, None)
     if result.gguf_variant:
@@ -148,7 +148,7 @@ def model_dict(
     data = {
         "rank": rank,
         "model_id": model.id,
-        "recommended_runtime_backend": runtime_backend,
+        "recommended_runtime_backend": compatible_backend if artifact_ready else None,
         "artifact_ready": artifact_ready,
         "runtime_ready": runtime_ready,
         "parameter_count": model.parameter_count,
