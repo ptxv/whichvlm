@@ -423,6 +423,7 @@ def test_transformers_text_script_uses_inference_mode_and_joined_stream():
         family_id="test-7b",
         name="Test-7B",
         parameter_count=7_000_000_000,
+        revision="0123456789abcdef",
     )
 
     script = generate_run_script(model, None, 4096, False)
@@ -432,6 +433,8 @@ def test_transformers_text_script_uses_inference_mode_and_joined_stream():
     assert "output_parts.append(text)" in script
     assert '"".join(output_parts)' in script
     assert "full +=" not in script
+    assert "model_revision = '0123456789abcdef'" in script
+    assert "trust_remote_code = False" in script
 
 
 def test_llama_cpp_text_script_joins_streamed_response():
@@ -860,7 +863,7 @@ def test_unknown_backend_suggests_close_match():
 
 
 def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
-    model = vlm_model(quantization_type="AWQ")
+    model = vlm_model(quantization_type="AWQ", revision="0123456789abcdef")
 
     deps, script_type = resolve_model_deps(
         model,
@@ -887,6 +890,8 @@ def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
     assert "SamplingParams(max_tokens=96)" in script
     assert "quantization = 'awq'" in script
     assert "gpu_memory_utilization=0.90" in script
+    assert "model_revision = '0123456789abcdef'" in script
+    assert "trust_remote_code = False" in script
     assert "[metrics] ttft=" in script
 
 
@@ -906,7 +911,7 @@ def test_vllm_vlm_script_uses_requested_gpu_memory_utilization():
 
 
 def test_sglang_vlm_backend_uses_offline_engine():
-    model = vlm_model()
+    model = vlm_model(revision="0123456789abcdef")
 
     deps, script_type = resolve_model_deps(
         model,
@@ -935,6 +940,25 @@ def test_sglang_vlm_backend_uses_offline_engine():
     assert "image_data=image_path" in script
     assert '"max_new_tokens": 96' in script
     assert "mem_fraction_static=0.90" in script
+    assert "model_revision = '0123456789abcdef'" in script
+    assert "trust_remote_code = False" in script
+
+
+@pytest.mark.parametrize("backend_name", ["transformers", "vllm", "sglang"])
+def test_generated_scripts_honor_remote_code_opt_in(backend_name):
+    script = generate_run_script(
+        vlm_model(revision="0123456789abcdef"),
+        None,
+        4096,
+        False,
+        image_paths=("/tmp/image.png",),
+        backend_name=backend_name,
+        hardware=linux_cuda_hardware(),
+        trust_remote_code=True,
+    )
+
+    assert "model_revision = '0123456789abcdef'" in script
+    assert "trust_remote_code = True" in script
 
 
 def test_sglang_vlm_script_uses_requested_gpu_memory_utilization():
@@ -1003,8 +1027,9 @@ def test_transformers_backend_is_not_a_server_backend():
         )
 
 
-def test_vllm_serve_uses_openai_server_command(monkeypatch):
-    model = vlm_model()
+@pytest.mark.parametrize("trust_remote_code", [False, True])
+def test_vllm_serve_uses_openai_server_command(monkeypatch, trust_remote_code):
+    model = vlm_model(revision="0123456789abcdef")
     captured: dict[str, list[str]] = {}
 
     class Result:
@@ -1025,12 +1050,13 @@ def test_vllm_serve_uses_openai_server_command(monkeypatch):
             hardware=linux_cuda_hardware(),
             host="0.0.0.0",
             port=9000,
+            trust_remote_code=trust_remote_code,
         ),
         backend_name="vllm",
     )
 
     assert code == 0
-    assert captured["cmd"] == [
+    expected = [
         "uv",
         "run",
         "--no-project",
@@ -1039,14 +1065,20 @@ def test_vllm_serve_uses_openai_server_command(monkeypatch):
         "vllm",
         "serve",
         "Qwen/Qwen2.5-VL-7B-Instruct",
+        "--revision",
+        "0123456789abcdef",
+        "--code-revision",
+        "0123456789abcdef",
         "--host",
         "0.0.0.0",
         "--port",
         "9000",
         "--max-model-len",
         "8192",
-        "--trust-remote-code",
     ]
+    if trust_remote_code:
+        expected.append("--trust-remote-code")
+    assert captured["cmd"] == expected
 
 
 def test_vllm_serve_passes_gpu_memory_utilization(monkeypatch):
@@ -1081,8 +1113,9 @@ def test_vllm_serve_passes_gpu_memory_utilization(monkeypatch):
     assert "0.82" in captured["cmd"]
 
 
-def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
-    model = vlm_model()
+@pytest.mark.parametrize("trust_remote_code", [False, True])
+def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch, trust_remote_code):
+    model = vlm_model(revision="0123456789abcdef")
     captured: dict[str, list[str]] = {}
 
     class Result:
@@ -1104,6 +1137,7 @@ def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
             host="0.0.0.0",
             port=9000,
             gpu_memory_utilization=0.82,
+            trust_remote_code=trust_remote_code,
         ),
         backend_name="sglang",
     )
@@ -1111,3 +1145,7 @@ def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
     assert code == 0
     assert "--mem-fraction-static" in captured["cmd"]
     assert "0.82" in captured["cmd"]
+    assert ("--trust-remote-code" in captured["cmd"]) is trust_remote_code
+    assert captured["cmd"][captured["cmd"].index("--revision") + 1] == (
+        "0123456789abcdef"
+    )

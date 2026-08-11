@@ -42,6 +42,7 @@ class RuntimeRequest:
     hardware: HardwareInfo | None = None
     script_path: str | None = None
     gpu_memory_utilization: float | None = None
+    trust_remote_code: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,7 @@ class ServeRequest:
     host: str
     port: int
     gpu_memory_utilization: float | None = None
+    trust_remote_code: bool = False
 
 
 @dataclass(frozen=True)
@@ -203,6 +205,10 @@ def uv_command(deps: list[str], command: list[str]) -> list[str]:
 def quote_shell_argument(value: str) -> str:
     quoted = shlex.quote(value)
     return quoted if quoted != value else f"'{value}'"
+
+
+def model_revision(model: ModelInfo) -> str:
+    return model.revision or "main"
 
 
 def model_family_keys(model: ModelInfo) -> set[str]:
@@ -450,6 +456,7 @@ def generate_run_script(
     backend_name: str | None = None,
     hardware: HardwareInfo | None = None,
     gpu_memory_utilization: float | None = None,
+    trust_remote_code: bool = False,
 ) -> str:
     backend = select_backend(model, variant, hardware, backend_name)
     validate_multi_image_run(model, variant, image_paths, backend.name, hardware)
@@ -464,6 +471,7 @@ def generate_run_script(
         max_tokens=max_tokens,
         hardware=hardware,
         gpu_memory_utilization=gpu_memory_utilization,
+        trust_remote_code=trust_remote_code,
     )
     return backend.generate_script(request)
 
@@ -662,9 +670,13 @@ def print_decode_metrics(started_at, first_token_at, token_count):
 def transformers_runtime_setup(
     quantization_lines: str,
     gpu_memory_utilization: float | None = None,
+    revision: str = "main",
+    trust_remote_code: bool = False,
 ) -> str:
     gpu_memory_fraction = format_gpu_memory_utilization(gpu_memory_utilization)
     return f"""\
+model_revision = {revision!r}
+trust_remote_code = {trust_remote_code!r}
 offload_folder = tempfile.mkdtemp(prefix="whichvlm_transformers_offload_")
 process = psutil.Process()
 gpu_memory_fraction = {gpu_memory_fraction}
@@ -706,7 +718,8 @@ torch_dtype = (
 model_kwargs = dict(
     device_map=device_map,
     torch_dtype=torch_dtype,
-    trust_remote_code=True,
+    revision=model_revision,
+    trust_remote_code=trust_remote_code,
     offload_folder=offload_folder,
     offload_state_dict=True,
     attn_implementation="sdpa",
@@ -911,6 +924,7 @@ class TransformersBackend(Backend):
                 request.cpu_only,
                 request.max_tokens,
                 request.gpu_memory_utilization,
+                request.trust_remote_code,
             )
         if (
             is_transformers_video_model(request.model)
@@ -922,6 +936,7 @@ class TransformersBackend(Backend):
                 request.cpu_only,
                 request.max_tokens,
                 request.gpu_memory_utilization,
+                request.trust_remote_code,
             )
         if is_vlm_model(request.model):
             if not request.image_paths:
@@ -936,6 +951,7 @@ class TransformersBackend(Backend):
                 request.cpu_only,
                 request.max_tokens,
                 request.gpu_memory_utilization,
+                request.trust_remote_code,
             )
         if is_transformers_video_model(request.model):
             raise RuntimeUnsupportedError("Video runners require --video PATH.")
@@ -944,6 +960,7 @@ class TransformersBackend(Backend):
             request.cpu_only,
             request.max_tokens,
             request.gpu_memory_utilization,
+            request.trust_remote_code,
         )
 
 
@@ -988,6 +1005,7 @@ class VLLMBackend(Backend):
             request.image_paths[0],
             request.max_tokens,
             request.gpu_memory_utilization,
+            request.trust_remote_code,
         )
 
     def serve(self, request: ServeRequest) -> int:
@@ -995,14 +1013,19 @@ class VLLMBackend(Backend):
             "vllm",
             "serve",
             request.model.id,
+            "--revision",
+            model_revision(request.model),
+            "--code-revision",
+            model_revision(request.model),
             "--host",
             request.host,
             "--port",
             str(request.port),
             "--max-model-len",
             str(request.context_length),
-            "--trust-remote-code",
         ]
+        if request.trust_remote_code:
+            cmd.append("--trust-remote-code")
         if request.gpu_memory_utilization is not None:
             cmd.extend(
                 [
@@ -1060,6 +1083,7 @@ class SGLangBackend(Backend):
             request.image_paths[0],
             request.max_tokens,
             request.gpu_memory_utilization,
+            request.trust_remote_code,
         )
 
     def serve(self, request: ServeRequest) -> int:
@@ -1069,14 +1093,17 @@ class SGLangBackend(Backend):
             "sglang.launch_server",
             "--model-path",
             request.model.id,
+            "--revision",
+            model_revision(request.model),
             "--host",
             request.host,
             "--port",
             str(request.port),
             "--context-length",
             str(request.context_length),
-            "--trust-remote-code",
         ]
+        if request.trust_remote_code:
+            cmd.append("--trust-remote-code")
         if request.gpu_memory_utilization is not None:
             cmd.extend(
                 [
@@ -1517,6 +1544,7 @@ def generate_transformers_text_script(
     cpu_only: bool,
     max_tokens: int,
     gpu_memory_utilization: float | None = None,
+    trust_remote_code: bool = False,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     imports = transformers_import_names(
@@ -1525,7 +1553,10 @@ def generate_transformers_text_script(
         ("TextIteratorStreamer", *quantization_import_names(model)),
     )
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        model_revision(model),
+        trust_remote_code,
     )
     return f'''\
 import shutil
@@ -1543,7 +1574,11 @@ device_map = {device_map}
 try:
     print(f"Loading {{model_id}}...")
     load_started_at = time.perf_counter()
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id,
+        revision=model_revision,
+        trust_remote_code=trust_remote_code,
+    )
     model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
     model.eval()
     print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
@@ -1601,6 +1636,7 @@ def generate_transformers_vlm_script(
     cpu_only: bool,
     max_tokens: int,
     gpu_memory_utilization: float | None = None,
+    trust_remote_code: bool = False,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     model_class, processor_class, processor_extra_args = transformers_vlm_profile(model)
@@ -1611,7 +1647,10 @@ def generate_transformers_vlm_script(
     )
     processor_arg_lines = processor_kwargs_lines(processor_extra_args)
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        model_revision(model),
+        trust_remote_code,
     )
     return f'''\
 import shutil
@@ -1634,7 +1673,8 @@ try:
     load_started_at = time.perf_counter()
     processor = {processor_class}.from_pretrained(
         model_id,
-        trust_remote_code=True{processor_arg_lines},
+        revision=model_revision,
+        trust_remote_code=trust_remote_code{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
     model = {model_class}.from_pretrained(model_id, **model_kwargs)
@@ -1707,6 +1747,7 @@ def generate_transformers_video_script(
     cpu_only: bool,
     max_tokens: int,
     gpu_memory_utilization: float | None = None,
+    trust_remote_code: bool = False,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     imports = transformers_import_names(
@@ -1721,7 +1762,10 @@ def generate_transformers_video_script(
         )
     )
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        model_revision(model),
+        trust_remote_code,
     )
     return f'''\
 import shutil
@@ -1744,7 +1788,8 @@ try:
     load_started_at = time.perf_counter()
     processor = AutoProcessor.from_pretrained(
         model_id,
-        trust_remote_code=True{processor_arg_lines},
+        revision=model_revision,
+        trust_remote_code=trust_remote_code{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
@@ -1811,6 +1856,7 @@ def generate_transformers_audio_script(
     cpu_only: bool,
     max_tokens: int,
     gpu_memory_utilization: float | None = None,
+    trust_remote_code: bool = False,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
     imports = transformers_import_names(
@@ -1819,7 +1865,10 @@ def generate_transformers_audio_script(
         quantization_import_names(model),
     )
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        model_revision(model),
+        trust_remote_code,
     )
     return f'''\
 import shutil
@@ -1838,7 +1887,11 @@ device_map = {device_map}
 try:
     print(f"Loading {{model_id}}...")
     load_started_at = time.perf_counter()
-    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+    processor = AutoProcessor.from_pretrained(
+        model_id,
+        revision=model_revision,
+        trust_remote_code=trust_remote_code,
+    )
     tokenizer = processor.tokenizer
     model = Qwen2AudioForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
     model.eval()
@@ -1950,6 +2003,7 @@ def generate_vllm_vlm_script(
     image_path: str,
     max_tokens: int,
     gpu_memory_utilization: float | None = None,
+    trust_remote_code: bool = False,
 ) -> str:
     metrics = backend_decode_metrics_block()
     quantization = vllm_quantization(model)
@@ -1964,6 +2018,8 @@ import torch
 from vllm import LLM, SamplingParams
 
 model_id = {model.id!r}
+model_revision = {model_revision(model)!r}
+trust_remote_code = {trust_remote_code!r}
 image_path = {image_path!r}
 quantization = {quantization!r}
 {metrics}
@@ -1980,7 +2036,9 @@ print(f"Loading {{model_id}} with vLLM...")
 load_started_at = time.perf_counter()
 llm = LLM(
     model=model_id,
-    trust_remote_code=True,
+    revision=model_revision,
+    code_revision=model_revision,
+    trust_remote_code=trust_remote_code,
     dtype="auto",
     quantization=quantization,
     max_model_len={context_length},
@@ -2026,6 +2084,7 @@ def generate_sglang_vlm_script(
     image_path: str,
     max_tokens: int,
     gpu_memory_utilization: float | None = None,
+    trust_remote_code: bool = False,
 ) -> str:
     metrics = backend_decode_metrics_block()
     utilization = format_gpu_memory_utilization(gpu_memory_utilization)
@@ -2037,6 +2096,8 @@ import torch
 from sglang import Engine
 
 model_id = {model.id!r}
+model_revision = {model_revision(model)!r}
+trust_remote_code = {trust_remote_code!r}
 image_path = {image_path!r}
 {metrics}
 
@@ -2045,7 +2106,8 @@ if __name__ == "__main__":
     load_started_at = time.perf_counter()
     engine = Engine(
         model_path=model_id,
-        trust_remote_code=True,
+        revision=model_revision,
+        trust_remote_code=trust_remote_code,
         context_length={context_length},
         mem_fraction_static={utilization},
         log_level="error",

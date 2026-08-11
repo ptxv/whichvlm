@@ -59,6 +59,7 @@ TASK_EVAL_KEYWORDS: dict[str, tuple[str, ...]] = {
 VLM_PIPELINE_TAGS = discovery_pipeline_tags()
 VLM_VARIANT_FILTERS = (None, "gguf", "mlx", "awq", "gptq", "bnb", "fp8")
 HF_MODEL_EXPAND = (
+    "sha",
     "config",
     "safetensors",
     "gguf",
@@ -942,6 +943,7 @@ def parse_model(data: dict) -> ModelInfo | None:
         ),
         license=card_data.get("license"),
         published_at=extract_published_at(data),
+        revision=data.get("sha"),
         downloads=data.get("downloads", 0),
         likes=data.get("likes", 0),
         gguf_variants=gguf_variants,
@@ -1213,6 +1215,7 @@ def models_to_dicts(models: list[ModelInfo]) -> list[dict]:
             "image_token_strategy": model.image_token_strategy,
             "license": model.license,
             "published_at": model.published_at,
+            "revision": model.revision,
             "downloads": model.downloads,
             "likes": model.likes,
             "gguf_variants": [
@@ -1355,6 +1358,7 @@ def dicts_to_models(data: list[dict]) -> list[ModelInfo]:
                 image_token_strategy=d.get("image_token_strategy"),
                 license=d.get("license"),
                 published_at=d.get("published_at"),
+                revision=d.get("revision"),
                 downloads=d.get("downloads", 0),
                 likes=d.get("likes", 0),
                 gguf_variants=gguf_variants,

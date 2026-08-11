@@ -257,7 +257,7 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
     (cache_path / "models.json").write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "cached_at": cached_at,
                 "models": [
                     {
@@ -1595,11 +1595,13 @@ def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
             )
         ],
     )
+    model.revision = "0123456789abcdef"
     captured: dict[str, object] = {}
 
     def fake_run_request(request, backend_name=None):
         captured["artifact"] = request.artifact
         captured["backend_name"] = backend_name
+        captured["trust_remote_code"] = request.trust_remote_code
         return 0
 
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
@@ -1614,6 +1616,9 @@ def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
     assert result.exit_code == 0
     assert captured["artifact"] is None
     assert captured["backend_name"] == "transformers"
+    assert captured["trust_remote_code"] is False
+    assert "Remote code disabled" in result.stdout
+    assert "org/Test-7B@0123456789abcdef" in result.stdout
 
 
 def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
@@ -1932,11 +1937,13 @@ def test_serve_gguf_model_uses_server_request(monkeypatch):
 
 def test_run_vllm_perf_budget_sets_gpu_memory_utilization(monkeypatch):
     model = make_vlm_model()
+    model.revision = "0123456789abcdef"
     captured: dict[str, object] = {}
 
     def fake_run_request(request, backend_name=None):
         captured["gpu_memory_utilization"] = request.gpu_memory_utilization
         captured["backend_name"] = backend_name
+        captured["trust_remote_code"] = request.trust_remote_code
         return 0
 
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
@@ -1953,6 +1960,7 @@ def test_run_vllm_perf_budget_sets_gpu_memory_utilization(monkeypatch):
             "vllm",
             "--image",
             "/tmp/image.png",
+            "--trust-remote-code",
             "--perf-vram",
             "10%",
         ],
@@ -1961,15 +1969,21 @@ def test_run_vllm_perf_budget_sets_gpu_memory_utilization(monkeypatch):
     assert result.exit_code == 0
     assert captured["backend_name"] == "vllm"
     assert captured["gpu_memory_utilization"] == pytest.approx(0.85)
+    assert captured["trust_remote_code"] is True
+    assert "Trusting remote code from Qwen/Qwen2.5-VL-7B-Instruct@0123456789abcdef" in (
+        result.stdout
+    )
 
 
 def test_serve_sglang_perf_budget_sets_gpu_memory_utilization(monkeypatch):
     model = make_vlm_model()
+    model.revision = "0123456789abcdef"
     captured: dict[str, object] = {}
 
     def fake_serve_request(request, backend_name=None):
         captured["gpu_memory_utilization"] = request.gpu_memory_utilization
         captured["backend_name"] = backend_name
+        captured["trust_remote_code"] = request.trust_remote_code
         return 0
 
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
@@ -1984,6 +1998,7 @@ def test_serve_sglang_perf_budget_sets_gpu_memory_utilization(monkeypatch):
             "Qwen/Qwen2.5-VL-7B-Instruct",
             "--backend",
             "sglang",
+            "--trust-remote-code",
             "--perf-vram",
             "10%",
         ],
@@ -1992,6 +2007,10 @@ def test_serve_sglang_perf_budget_sets_gpu_memory_utilization(monkeypatch):
     assert result.exit_code == 0
     assert captured["backend_name"] == "sglang"
     assert captured["gpu_memory_utilization"] == pytest.approx(0.85)
+    assert captured["trust_remote_code"] is True
+    assert "Trusting remote code from Qwen/Qwen2.5-VL-7B-Instruct@0123456789abcdef" in (
+        result.stdout
+    )
 
 
 def test_snippet_no_model_found(monkeypatch):
@@ -2019,9 +2038,11 @@ def test_snippet_passes_options_and_quotes_model_id(monkeypatch):
         backend_name=None,
         hardware=None,
         gpu_memory_utilization=None,
+        trust_remote_code=False,
     ):
         captured["context_length"] = context_length
         captured["max_tokens"] = max_tokens
+        captured["trust_remote_code"] = trust_remote_code
         return "print('ok')"
 
     monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
@@ -2042,7 +2063,34 @@ def test_snippet_passes_options_and_quotes_model_id(monkeypatch):
     assert result.exit_code == 0
     assert captured["context_length"] == 8192
     assert captured["max_tokens"] == 128
+    assert captured["trust_remote_code"] is False
+    assert "Remote code disabled" in result.stdout
     assert shlex.join(["whichvlm", "run", model_id]) in result.stdout
+
+
+def test_snippet_remote_code_opt_in_is_pinned(monkeypatch):
+    model = make_model(model_id="org/Test-7B")
+    model.revision = "0123456789abcdef"
+
+    monkeypatch.setattr(cli_mod, "load_model_catalog", lambda refresh: [model])
+    monkeypatch.setattr("hardware.detector.detect_hardware", lambda: hw_with_gpu(24))
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "snippet",
+            model.id,
+            "--backend",
+            "transformers",
+            "--trust-remote-code",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Trusting remote code from org/Test-7B@0123456789abcdef" in result.stdout
+    assert "model_revision = '0123456789abcdef'" in result.stdout
+    assert "trust_remote_code = True" in result.stdout
+    assert "whichvlm run 'org/Test-7B' --trust-remote-code" in result.stdout
 
 
 @pytest.mark.parametrize(
