@@ -1,0 +1,110 @@
+name: Runtime backend smoke tests
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/runtime-smoke.yml"
+      - "benchmarks/real_hardware.py"
+      - "src/runtime.py"
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ${{ matrix.backend }} / ${{ matrix.model }}
+    runs-on: ${{ fromJSON(matrix.runner) }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: transformers
+            runner: '["ubuntu-latest"]'
+            model: optimum-intel-internal-testing/tiny-random-qwen2vl
+            architecture: qwen2_vl
+            packages: transformers torch torchvision accelerate pillow psutil
+            cpu_only: --cpu-only
+          - backend: llama.cpp
+            runner: '["ubuntu-latest"]'
+            model: ggml-org/Qwen2.5-VL-3B-Instruct-GGUF
+            architecture: qwen2_5_vl
+            packages: llama-cpp-python huggingface-hub pillow psutil
+            cpu_only: --cpu-only
+            model_file: Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf
+            projector_file: mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf
+          - backend: mlx
+            runner: '["macos-14"]'
+            model: mlx-community/SmolVLM-256M-Instruct-4bit
+            architecture: smolvlm
+            packages: mlx-vlm pillow
+          - backend: vllm
+            runner: '["self-hosted", "linux", "x64", "cuda"]'
+            model: optimum-intel-internal-testing/tiny-random-qwen2vl
+            architecture: qwen2_vl
+            packages: vllm psutil pillow
+          - backend: sglang
+            runner: '["self-hosted", "linux", "x64", "cuda"]'
+            model: optimum-intel-internal-testing/tiny-random-qwen2vl
+            architecture: qwen2_vl
+            packages: sglang psutil pillow
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          python-version: "3.11"
+      - name: Install backend
+        run: |
+          uv sync --group dev
+          uv pip install ${{ matrix.packages }}
+      - name: Download smoke image
+        run: >-
+          curl --fail --location
+          --output "$RUNNER_TEMP/runtime-smoke.jpg"
+          https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg
+      - name: Start backend and run inference
+        env:
+          CPU_ONLY: ${{ matrix.cpu_only }}
+        run: >-
+          uv run --no-sync python benchmarks/real_hardware.py runtime-smoke
+          --backend "${{ matrix.backend }}"
+          --model "${{ matrix.model }}"
+          --architecture "${{ matrix.architecture }}"
+          --model-file "${{ matrix.model_file }}"
+          --projector-file "${{ matrix.projector_file }}"
+          --image "$RUNNER_TEMP/runtime-smoke.jpg"
+          --output "$RUNNER_TEMP/runtime-smoke.json"
+          $CPU_ONLY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: runtime-smoke-${{ matrix.backend }}
+          path: ${{ runner.temp }}/runtime-smoke.json
+
+  publish:
+    name: Publish validated backend matrix
+    needs: smoke
+    if: ${{ needs.smoke.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: runtime-smoke-*
+          path: results
+          merge-multiple: true
+      - name: Build result matrix
+        run: |
+          jq --slurp 'sort_by(.backend)' results/*.json > runtime-smoke-results.json
+          {
+            echo "## Validated runtime backends"
+            echo "| Backend | Version | Model |"
+            echo "| --- | --- | --- |"
+            jq -r '.[] | "| \(.backend) | \(.version) | `\(.model)` |"' runtime-smoke-results.json
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: runtime-smoke-results
+          path: runtime-smoke-results.json

@@ -2,10 +2,22 @@ from __future__ import annotations
 
 import argparse
 import base64
+import json
 import mimetypes
 import statistics
+import subprocess
+import sys
 import time
+from importlib import metadata
 from pathlib import Path
+
+BACKEND_DISTRIBUTIONS = {
+    "transformers": "transformers",
+    "llama.cpp": "llama-cpp-python",
+    "mlx": "mlx-vlm",
+    "vllm": "vllm",
+    "sglang": "sglang",
+}
 
 
 def detection(args: argparse.Namespace) -> None:
@@ -147,6 +159,64 @@ def gguf_mmproj(args: argparse.Namespace) -> None:
     )
 
 
+def runtime_smoke(args: argparse.Namespace) -> None:
+    from models.types import GGUFVariant, ModelArtifact, ModelCapabilities, ModelInfo
+    from runtime import generate_run_script
+
+    variant = None
+    artifacts = []
+    if args.model_file:
+        variant = GGUFVariant(args.model_file, "Q4_K_M", 0)
+    if args.projector_file:
+        artifacts.append(
+            ModelArtifact(
+                repo_id=args.model,
+                format="adapter",
+                source_kind="mmproj",
+                filename=args.projector_file,
+            )
+        )
+
+    model_format = {"llama.cpp": "gguf", "mlx": "mlx"}.get(args.backend, "safetensors")
+    model = ModelInfo(
+        id=args.model,
+        family_id=args.architecture.replace("_", ""),
+        name=args.model.rsplit("/", 1)[-1],
+        parameter_count=0,
+        architecture=args.architecture,
+        hf_pipeline_tag="image-text-to-text",
+        model_format=model_format,
+        quantization_type="MLX" if args.backend == "mlx" else None,
+        gguf_variants=[variant] if variant else [],
+        artifacts=artifacts,
+        capabilities=ModelCapabilities(image=True),
+    )
+    script = generate_run_script(
+        model,
+        variant,
+        args.context,
+        args.cpu_only,
+        image_paths=(str(args.image),),
+        max_tokens=args.max_tokens,
+        backend_name=args.backend,
+    )
+    subprocess.run(
+        [sys.executable, "-c", script],
+        input="Describe this image in one sentence.\nexit\n",
+        text=True,
+        check=True,
+    )
+
+    result = {
+        "backend": args.backend,
+        "version": metadata.version(BACKEND_DISTRIBUTIONS[args.backend]),
+        "model": args.model,
+        "status": "passed",
+    }
+    args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(result))
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(required=True)
@@ -169,6 +239,19 @@ def parser() -> argparse.ArgumentParser:
     gguf.add_argument("--max-load-seconds", type=float, default=180.0)
     gguf.add_argument("--min-tokens-per-second", type=float, default=0.2)
     gguf.set_defaults(func=gguf_mmproj)
+
+    smoke = sub.add_parser("runtime-smoke")
+    smoke.add_argument("--backend", choices=BACKEND_DISTRIBUTIONS, required=True)
+    smoke.add_argument("--model", required=True)
+    smoke.add_argument("--architecture", required=True)
+    smoke.add_argument("--model-file")
+    smoke.add_argument("--projector-file")
+    smoke.add_argument("--image", type=Path, required=True)
+    smoke.add_argument("--context", type=int, default=2048)
+    smoke.add_argument("--max-tokens", type=int, default=4)
+    smoke.add_argument("--cpu-only", action="store_true")
+    smoke.add_argument("--output", type=Path, required=True)
+    smoke.set_defaults(func=runtime_smoke)
     return p
 
 

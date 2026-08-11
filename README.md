@@ -185,6 +185,15 @@ uv run python benchmarks/real_hardware.py gguf-mmproj \
   --image ./image.jpg
 ```
 
+The `Runtime backend smoke tests` workflow starts Transformers, llama.cpp, MLX,
+vLLM, and SGLang with the models committed in its matrix. Transformers and
+llama.cpp run on hosted Linux, MLX runs on hosted Apple Silicon, and vLLM and
+SGLang run on self-hosted runners labeled `linux`, `x64`, and `cuda`.
+
+Each successful workflow publishes the backend, installed version, and model as
+JSON and in the job summary. The result matrix is published only after every
+backend passes, so a failed backend is not listed as validated.
+
 ## Current Limits
 
 The model inventory is not complete.
