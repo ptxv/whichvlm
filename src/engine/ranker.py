@@ -40,6 +40,7 @@ from models.benchmark import (
     lookup_benchmark_evidence,
 )
 from models.integrations import (
+    runtime_backends_for_model_capability,
     specialization_tags_for_capabilities,
     specialization_tags_for_data,
 )
@@ -535,6 +536,13 @@ def matches_profile(
     task_profile: str,
     workload: Workload | None = None,
 ) -> bool:
+    if workload is not None and workload.task in {"video", "audio"}:
+        runtime_backends = runtime_backends_for_model_capability(
+            model,
+            workload.task,
+        )
+        if not runtime_backends:
+            return False
     if task_profile.lower() == "any":
         return True
     if workload is not None:

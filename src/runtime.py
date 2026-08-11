@@ -15,11 +15,11 @@ from hardware.types import HardwareInfo, infer_backend_capabilities
 from models.integrations import (
     AUDIO_COMPONENT_ROLES,
     capabilities_for_data,
-    matching_runtime_profiles_for_data,
     pipeline_tag_has_audio_input,
     pipeline_tag_has_image_input,
     pipeline_tag_has_video_input,
     pipeline_tag_has_visual_input,
+    runtime_backends_for_model_capability,
 )
 from models.package_graph import find_projector_artifact, gguf_artifact_status
 from models.types import GGUFArtifactStatus, GGUFVariant, ModelArtifact, ModelInfo
@@ -358,15 +358,9 @@ def has_transformers_runtime_profile(
     model: ModelInfo,
     capability_name: str,
 ) -> bool:
-    return any(
-        capability_name in profile.capability_names
-        and "transformers" in profile.runtime_backends
-        for profile in matching_runtime_profiles_for_data(
-            model.id,
-            model.hf_pipeline_tag,
-            model.tags,
-            model.architecture,
-        )
+    return "transformers" in runtime_backends_for_model_capability(
+        model,
+        capability_name,
     )
 
 

@@ -137,23 +137,14 @@ def test_parse_model_uses_registered_audio_profile_without_runtime_claim():
 
 
 @pytest.mark.parametrize(
-    ("model_id", "architecture", "model_class"),
+    ("model_id", "model_class"),
     [
-        (
-            "Qwen/Qwen2-VL-7B-Instruct",
-            "Qwen2VLForConditionalGeneration",
-            "Qwen2VLForConditionalGeneration",
-        ),
-        (
-            "Qwen/Qwen2.5-VL-7B-Instruct",
-            "Qwen2_5_VLForConditionalGeneration",
-            "Qwen2_5_VLForConditionalGeneration",
-        ),
+        ("Qwen/Qwen2-VL-7B-Instruct", "Qwen2VLForConditionalGeneration"),
+        ("Qwen/Qwen2.5-VL-7B-Instruct", "Qwen2_5_VLForConditionalGeneration"),
     ],
 )
 def test_qwen_vl_video_profiles_have_transformers_runtime_path(
     model_id: str,
-    architecture: str,
     model_class: str,
 ):
     model = parse_model(
@@ -161,7 +152,7 @@ def test_qwen_vl_video_profiles_have_transformers_runtime_path(
             "id": model_id,
             "pipeline_tag": "image-text-to-text",
             "tags": ["safetensors"],
-            "config": {"architectures": [architecture]},
+            "config": {"architectures": [model_class]},
             "safetensors": {"total": 7_000_000_000},
             "siblings": [],
             "cardData": {},

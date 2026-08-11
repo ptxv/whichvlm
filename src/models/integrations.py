@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from models.types import ModelCapabilities
+from models.types import ModelCapabilities, ModelInfo
 
 
 @dataclass(frozen=True)
@@ -196,6 +196,22 @@ def matching_runtime_profiles_for_data(
             profile, model_id, pipeline_tag, tags, architecture
         )
     ]
+
+
+def runtime_backends_for_model_capability(
+    model: ModelInfo,
+    capability_name: str,
+) -> list[str]:
+    backends: list[str] = []
+    for profile in matching_runtime_profiles_for_data(
+        model.id,
+        model.hf_pipeline_tag,
+        model.tags,
+        model.architecture,
+    ):
+        if capability_name in profile.capability_names:
+            _append_unique(backends, profile.runtime_backends)
+    return backends
 
 
 def capability_names_for_data(

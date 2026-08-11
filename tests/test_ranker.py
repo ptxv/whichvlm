@@ -540,12 +540,13 @@ def test_ocr_workload_does_not_inherit_generic_benchmark_scores():
 
 def test_video_workload_does_not_inherit_generic_benchmark_scores():
     video_model = ModelInfo(
-        id="org/Video-VL-7B",
-        family_id="video-vl-7b",
-        name="Video-VL-7B",
+        id="Qwen/Qwen2-VL-7B-Instruct",
+        family_id="qwen-vl",
+        name="Qwen2-VL-7B-Instruct",
         parameter_count=7_000_000_000,
         downloads=1000,
         likes=100,
+        architecture="qwen2vl",
         capabilities=ModelCapabilities(image=True, video=True),
     )
 
@@ -553,7 +554,7 @@ def test_video_workload_does_not_inherit_generic_benchmark_scores():
         [video_model],
         make_hardware(),
         top_n=1,
-        benchmark_scores={"org/Video-VL-7B": 99.0},
+        benchmark_scores={video_model.id: 99.0},
         task_profile="video",
         workload=Workload(task="video", context_length=4096, video_frames=8),
     )
@@ -561,8 +562,8 @@ def test_video_workload_does_not_inherit_generic_benchmark_scores():
     assert results[0].benchmark_source == "none"
 
 
-def test_video_only_model_does_not_match_image_profile():
-    model = ModelInfo(
+def test_discovery_only_media_models_do_not_match_media_profiles():
+    video_model = ModelInfo(
         id="org/Video-7B",
         family_id="video-7b",
         name="Video-7B",
@@ -570,21 +571,32 @@ def test_video_only_model_does_not_match_image_profile():
         hf_pipeline_tag="video-text-to-text",
         capabilities=ModelCapabilities(video=True),
     )
+    audio_model = ModelInfo(
+        id="org/Audio-7B",
+        family_id="audio-7b",
+        name="Audio-7B",
+        parameter_count=7_000_000_000,
+        hf_pipeline_tag="audio-text-to-text",
+        capabilities=ModelCapabilities(audio=True),
+    )
     image_workload = Workload(task="image_qa", context_length=4096, image_count=1)
     video_workload = Workload(task="video", context_length=4096, video_frames=8)
+    audio_workload = Workload(task="audio", context_length=4096, audio_seconds=30)
 
-    assert not matches_profile(model, "vision", image_workload)
-    assert matches_profile(model, "video", video_workload)
+    assert not matches_profile(video_model, "vision", image_workload)
+    assert not matches_profile(video_model, "video", video_workload)
+    assert not matches_profile(audio_model, "audio", audio_workload)
 
 
 def test_audio_workload_does_not_inherit_generic_benchmark_scores():
     audio_model = ModelInfo(
-        id="org/Audio-VL-7B",
-        family_id="audio-vl-7b",
-        name="Audio-VL-7B",
+        id="Qwen/Qwen2-Audio-7B-Instruct",
+        family_id="qwen2-audio",
+        name="Qwen2-Audio-7B-Instruct",
         parameter_count=7_000_000_000,
         downloads=1000,
         likes=100,
+        architecture="qwen2audio",
         capabilities=ModelCapabilities(audio=True),
     )
 
@@ -592,7 +604,7 @@ def test_audio_workload_does_not_inherit_generic_benchmark_scores():
         [audio_model],
         make_hardware(),
         top_n=1,
-        benchmark_scores={"org/Audio-VL-7B": 99.0},
+        benchmark_scores={audio_model.id: 99.0},
         task_profile="audio",
         workload=Workload(task="audio", context_length=4096, audio_seconds=30.0),
     )
