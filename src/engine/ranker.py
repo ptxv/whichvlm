@@ -536,13 +536,6 @@ def matches_profile(
     task_profile: str,
     workload: Workload | None = None,
 ) -> bool:
-    if workload is not None and workload.task in {"video", "audio"}:
-        runtime_backends = runtime_backends_for_model_capability(
-            model,
-            workload.task,
-        )
-        if not runtime_backends:
-            return False
     if task_profile.lower() == "any":
         return True
     if workload is not None:
@@ -964,6 +957,12 @@ def rank_models(
 
     for model in sorted_models:
         if is_excluded_model(model.id):
+            continue
+        if (
+            workload is not None
+            and workload.task in {"video", "audio"}
+            and not runtime_backends_for_model_capability(model, workload.task)
+        ):
             continue
         if not matches_profile(model, task_profile, workload):
             continue
