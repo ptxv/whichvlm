@@ -99,6 +99,21 @@ VLLM_VLM_FAMILIES = frozenset(
 )
 SGLANG_VLM_FAMILIES = VLLM_VLM_FAMILIES
 ALL_OSES = frozenset({"linux", "darwin", "windows"})
+LLAMA_CPP_VLM_PROFILES: dict[str, tuple[tuple[str, ...], str]] = {
+    "qwen-vl": (
+        ("Qwen25VLChatHandler", "Qwen2VLChatHandler"),
+        "qwen2-vl",
+    ),
+    "llava": (
+        ("Llava16ChatHandler", "Llava15ChatHandler"),
+        "llava-1-5",
+    ),
+    "minicpm": (
+        ("MiniCPMv26ChatHandler", "MiniCPMVChatHandler"),
+        "minicpm-v-2.6",
+    ),
+}
+LLAMA_CPP_VLM_FAMILY_ALIASES = {"minicpm-v": "minicpm", "minicpmv": "minicpm"}
 
 COMPATIBILITY_MATRIX = (
     CompatibilityRule(
@@ -220,6 +235,18 @@ def model_family_keys(model: ModelInfo) -> set[str]:
             if family:
                 keys.add(family)
     return {key for key in keys if key}
+
+
+def llama_cpp_vlm_profile(model: ModelInfo) -> tuple[tuple[str, ...], str]:
+    for family_id in model_family_keys(model):
+        family_id = LLAMA_CPP_VLM_FAMILY_ALIASES.get(family_id, family_id)
+        if family_id in LLAMA_CPP_VLM_PROFILES:
+            return LLAMA_CPP_VLM_PROFILES[family_id]
+    raise RuntimeUnsupportedError(
+        f"llama.cpp has no validated multimodal chat handler for {model.id}. "
+        "Use a Qwen-VL, LLaVA, or MiniCPM-V GGUF package, or choose a "
+        "Transformers or MLX package."
+    )
 
 
 def artifact_format(model: ModelInfo, artifact: GGUFVariant | None) -> str:
@@ -1342,6 +1369,7 @@ def generate_llama_cpp_vlm_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
+    handlers, _ = llama_cpp_vlm_profile(model)
     return f'''\
 import base64
 import mimetypes
@@ -1366,22 +1394,8 @@ def image_data_url(path):
     return f"data:{{mime}};base64,{{encoded}}"
 
 
-def chat_handler(model_id, mmproj_path):
-    lower = model_id.lower()
-    preferred = []
-    if "qwen" in lower and "vl" in lower:
-        preferred.extend(["Qwen25VLChatHandler", "Qwen2VLChatHandler"])
-    if "llava" in lower:
-        preferred.extend(["Llava16ChatHandler", "Llava15ChatHandler"])
-    if "minicpm" in lower:
-        preferred.extend(["MiniCPMv26ChatHandler", "MiniCPMVChatHandler"])
-    preferred.extend(["Llava16ChatHandler", "Llava15ChatHandler"])
-
-    seen = set()
-    for name in preferred:
-        if name in seen:
-            continue
-        seen.add(name)
+def chat_handler(mmproj_path):
+    for name in {handlers!r}:
         cls = getattr(llama_chat_format, name, None)
         if cls is not None:
             return cls(clip_model_path=mmproj_path)
@@ -1394,7 +1408,7 @@ def chat_handler(model_id, mmproj_path):
 print(f"Downloading {{model_id}}...")
 model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
 mmproj_path = hf_hub_download(repo_id=model_id, filename=projector_filename)
-handler = chat_handler(model_id, mmproj_path)
+handler = chat_handler(mmproj_path)
 
 load_started_at = time.perf_counter()
 print("Loading model...")
@@ -1450,13 +1464,8 @@ print("\\nBye!")
 '''
 
 
-def llama_cpp_server_chat_format(model_id: str) -> str:
-    value = model_id.lower()
-    if "qwen" in value and "vl" in value:
-        return "qwen2-vl"
-    if "minicpm" in value:
-        return "minicpm-v-2.6"
-    return "llava-1-5"
+def llama_cpp_server_chat_format(model: ModelInfo) -> str:
+    return llama_cpp_vlm_profile(model)[1]
 
 
 def generate_llama_cpp_serve_script(
@@ -1470,7 +1479,7 @@ def generate_llama_cpp_serve_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     projector_filename = projector.filename if projector else None
-    chat_format = llama_cpp_server_chat_format(model.id)
+    chat_format = llama_cpp_server_chat_format(model) if projector else None
     return f'''\
 import subprocess
 import sys

@@ -28,6 +28,7 @@ from runtime import (
     generate_transformers_video_script,
     generate_transformers_vlm_script,
     generate_vllm_vlm_script,
+    llama_cpp_vlm_profile,
     recommended_runtime_backend,
     requires_audio,
     requires_image,
@@ -734,11 +735,42 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
 
     assert "pillow" in deps
     assert script_type == "gguf_vlm"
-    assert "Llava15ChatHandler" in script
+    assert "Qwen25VLChatHandler" in script
+    assert "Llava15ChatHandler" not in script
     assert "clip_model_path=mmproj_path" in script
     assert "projector_filename = 'mmproj-test-f16.gguf'" in script
     assert "image_data_url" in script
     assert "max_tokens=128" in script
+
+
+@pytest.mark.parametrize(
+    ("model_id", "family_id", "handler"),
+    [
+        ("org/qwen2-vl-gguf", "qwen-vl", "Qwen25VLChatHandler"),
+        ("org/llava-gguf", "llava", "Llava16ChatHandler"),
+        ("org/minicpm-v-gguf", "minicpm-v", "MiniCPMv26ChatHandler"),
+    ],
+    ids=("qwen", "llava", "minicpm"),
+)
+def test_llama_cpp_vlm_profile_uses_validated_family_handler(
+    model_id, family_id, handler
+):
+    model = vlm_model(id=model_id, family_id=family_id, architecture=family_id)
+
+    assert llama_cpp_vlm_profile(model)[0][0] == handler
+
+
+def test_llama_cpp_vlm_profile_rejects_unknown_family():
+    model = vlm_model(
+        id="org/Unknown-VL-7B-GGUF",
+        family_id="unknown-vl",
+        architecture="unknownvl",
+    )
+
+    with pytest.raises(RuntimeUnsupportedError, match="validated multimodal") as error:
+        llama_cpp_vlm_profile(model)
+
+    assert "Qwen-VL, LLaVA, or MiniCPM-V" in str(error.value)
 
 
 def test_mlx_vlm_script_uses_mlx_vlm_runner():
