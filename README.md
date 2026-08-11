@@ -89,7 +89,11 @@ whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend transformers --image ./before
 whichvlm snippet Qwen/Qwen2.5-VL-7B-Instruct --image ./image.jpg --context-length 8192
 ```
 
-For vLLM and SGLang, derive backend memory utilization from the same reserve:
+Runtime memory budgets are fractions of each GPU's total memory. `--perf-vram`
+derives that fraction from the usable VRAM budget. Transformers receives the
+effective byte limit through `max_memory`; vLLM and SGLang receive the fraction
+through their native backend options. Runtime commands show both the effective
+bytes and translated backend value when a budget is active.
 
 ```bash
 whichvlm run Qwen/Qwen2.5-VL-7B-Instruct --backend vllm --perf-vram 10% --image ./image.jpg

@@ -890,6 +890,15 @@ def test_vllm_vlm_backend_requires_explicit_linux_cuda_support():
     assert "[metrics] ttft=" in script
 
 
+def test_transformers_memory_budget_uses_total_gpu_memory():
+    script = generate_transformers_text_script(
+        vlm_model(), False, 96, gpu_memory_utilization=0.82
+    )
+
+    assert "get_device_properties(index).total_memory * gpu_memory_fraction" in script
+    assert "mem_get_info" not in script
+
+
 def test_vllm_vlm_script_uses_requested_gpu_memory_utilization():
     script = generate_run_script(
         vlm_model(),

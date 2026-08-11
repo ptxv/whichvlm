@@ -1961,6 +1961,8 @@ def test_run_vllm_perf_budget_sets_gpu_memory_utilization(monkeypatch):
     assert result.exit_code == 0
     assert captured["backend_name"] == "vllm"
     assert captured["gpu_memory_utilization"] == pytest.approx(0.85)
+    assert f"effective_bytes={int(24 * 1024**3 * 0.85)}" in result.stdout
+    assert "vllm.gpu_memory_utilization=0.85" in result.stdout
 
 
 def test_serve_sglang_perf_budget_sets_gpu_memory_utilization(monkeypatch):
@@ -1992,6 +1994,8 @@ def test_serve_sglang_perf_budget_sets_gpu_memory_utilization(monkeypatch):
     assert result.exit_code == 0
     assert captured["backend_name"] == "sglang"
     assert captured["gpu_memory_utilization"] == pytest.approx(0.85)
+    assert f"effective_bytes={int(24 * 1024**3 * 0.85)}" in result.stdout
+    assert "sglang.mem_fraction_static=0.85" in result.stdout
 
 
 def test_snippet_no_model_found(monkeypatch):
@@ -2096,6 +2100,8 @@ def test_snippet_transformers_perf_budget_updates_memory_fraction(monkeypatch):
 
     assert result.exit_code == 0
     assert "gpu_memory_fraction = 0.85" in result.stdout
+    effective_bytes = int(24 * 1024**3 * 0.85)
+    assert f"transformers.max_memory={effective_bytes}" in result.stdout
 
 
 def render_json_output(
