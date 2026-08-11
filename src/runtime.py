@@ -1206,6 +1206,17 @@ def select_backend(
     )
 
 
+def compatible_runtime_backend(
+    model: ModelInfo,
+    artifact: GGUFVariant | None,
+    hardware: HardwareInfo | None = None,
+) -> str | None:
+    for backend in RECOMMENDED_BACKENDS:
+        if backend.supports(model, artifact, hardware):
+            return backend.name
+    return None
+
+
 def recommended_runtime_backend(
     model: ModelInfo,
     artifact: GGUFVariant | None,
@@ -1216,10 +1227,7 @@ def recommended_runtime_backend(
         GGUFArtifactStatus.AVAILABLE,
     }:
         return None
-    for backend in RECOMMENDED_BACKENDS:
-        if backend.supports(model, artifact, hardware):
-            return backend.name
-    return None
+    return compatible_runtime_backend(model, artifact, hardware)
 
 
 def select_serve_backend(

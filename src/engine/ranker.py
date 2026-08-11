@@ -44,6 +44,7 @@ from models.integrations import (
     specialization_tags_for_data,
 )
 from models.types import GGUFVariant, ModelCapabilities, ModelInfo
+from runtime import compatible_runtime_backend
 
 RANKING_ALGORITHM_VERSION = "ranker-v2"
 
@@ -1009,6 +1010,8 @@ def rank_models(
                 hardware_backends=hardware_backends,
                 model_backends=model_backends,
             ):
+                continue
+            if compatible_runtime_backend(model, variant, hardware) is None:
                 continue
             compat = check_compatibility(
                 model,
