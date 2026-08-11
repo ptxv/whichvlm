@@ -24,6 +24,7 @@ from runtime import (
     ServeRequest,
     auto_gpu_memory_utilization,
     find_projector_artifact,
+    format_gpu_memory_utilization,
     generate_run_script,
     normalize_backend_name,
     quote_shell_argument,
@@ -411,7 +412,7 @@ def print_runtime_memory_budget(
         "vllm": "gpu_memory_utilization",
         "sglang": "mem_fraction_static",
     }[backend_name]
-    backend_fraction = f"{utilization:g}"
+    backend_fraction = format_gpu_memory_utilization(utilization)
     for index, gpu in enumerate(hardware.gpus):
         effective_bytes = int(gpu.vram_bytes * float(backend_fraction))
         backend_value = (
