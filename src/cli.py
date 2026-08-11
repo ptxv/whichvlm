@@ -121,12 +121,13 @@ HARDWARE_PANEL = "Hardware"
 OUTPUT_PANEL = "Output"
 GPU_MEMORY_BACKENDS = {"vllm", "sglang"}
 RUNTIME_MEMORY_BUDGET_BACKENDS = {"transformers", "vllm", "sglang"}
+REMOTE_CODE_BACKENDS = {"transformers", "vllm", "sglang"}
 
 
 def show_remote_code_status(
     model: ModelInfo, backend_name: str, trust_remote_code: bool
 ) -> None:
-    if backend_name not in RUNTIME_MEMORY_BUDGET_BACKENDS:
+    if backend_name not in REMOTE_CODE_BACKENDS:
         return
     source = f"{model.id}@{model_revision(model)}"
     if trust_remote_code:

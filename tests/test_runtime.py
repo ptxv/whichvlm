@@ -1113,7 +1113,8 @@ def test_vllm_serve_passes_gpu_memory_utilization(monkeypatch):
     assert "0.82" in captured["cmd"]
 
 
-def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
+@pytest.mark.parametrize("trust_remote_code", [False, True])
+def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch, trust_remote_code):
     model = vlm_model(revision="0123456789abcdef")
     captured: dict[str, list[str]] = {}
 
@@ -1136,7 +1137,7 @@ def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
             host="0.0.0.0",
             port=9000,
             gpu_memory_utilization=0.82,
-            trust_remote_code=True,
+            trust_remote_code=trust_remote_code,
         ),
         backend_name="sglang",
     )
@@ -1144,7 +1145,7 @@ def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
     assert code == 0
     assert "--mem-fraction-static" in captured["cmd"]
     assert "0.82" in captured["cmd"]
-    assert "--trust-remote-code" in captured["cmd"]
+    assert ("--trust-remote-code" in captured["cmd"]) is trust_remote_code
     assert captured["cmd"][captured["cmd"].index("--revision") + 1] == (
         "0123456789abcdef"
     )
