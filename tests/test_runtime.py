@@ -67,6 +67,19 @@ def qwen25_video_model(**kwargs) -> ModelInfo:
     )
 
 
+def qwen2_video_model(**kwargs) -> ModelInfo:
+    return ModelInfo(
+        id=kwargs.pop("id", "Qwen/Qwen2-VL-7B-Instruct"),
+        family_id=kwargs.pop("family_id", "qwen-vl"),
+        name=kwargs.pop("name", "Qwen2-VL-7B-Instruct"),
+        parameter_count=kwargs.pop("parameter_count", 7_000_000_000),
+        architecture=kwargs.pop("architecture", "qwen2vl"),
+        hf_pipeline_tag=kwargs.pop("hf_pipeline_tag", "video-text-to-text"),
+        capabilities=kwargs.pop("capabilities", ModelCapabilities(video=True)),
+        **kwargs,
+    )
+
+
 def qwen2_audio_model(**kwargs) -> ModelInfo:
     return ModelInfo(
         id=kwargs.pop("id", "Qwen/Qwen2-Audio-7B-Instruct"),
@@ -175,9 +188,45 @@ def test_video_only_model_is_not_treated_as_image_vlm():
         generate_run_script(model, None, 4096, False, image_paths=("/tmp/image.png",))
 
 
-def test_qwen25_vl_video_runtime_uses_transformers_video_path():
-    model = qwen25_video_model()
+def test_unprofiled_video_capability_remains_image_only():
+    model = vlm_model(
+        id="llava-hf/llava-onevision-qwen2-7b-ov-hf",
+        family_id="llava",
+        name="LLaVA-OneVision-Qwen2-7B-OV-HF",
+        architecture="llavaonevision",
+        capabilities=ModelCapabilities(image=True, video=True),
+    )
 
+    assert not requires_video(model)
+    with pytest.raises(RuntimeUnsupportedError, match="--image"):
+        generate_run_script(model, None, 4096, False, video_path="/tmp/video.mp4")
+
+
+def test_unprofiled_audio_capability_remains_image_only():
+    model = vlm_model(
+        id="microsoft/Phi-4-multimodal-instruct",
+        family_id="phi-vision",
+        name="Phi-4-multimodal-instruct",
+        architecture="phi4multimodal",
+        capabilities=ModelCapabilities(image=True, audio=True),
+    )
+
+    assert not requires_audio(model)
+    with pytest.raises(RuntimeUnsupportedError, match="--image"):
+        generate_run_script(model, None, 4096, False, audio_path="/tmp/audio.wav")
+
+
+@pytest.mark.parametrize(
+    ("model", "model_class"),
+    [
+        (qwen2_video_model(), "Qwen2VLForConditionalGeneration"),
+        (qwen25_video_model(), "Qwen2_5_VLForConditionalGeneration"),
+    ],
+)
+def test_qwen_vl_video_runtimes_use_transformers_video_path(
+    model: ModelInfo,
+    model_class: str,
+):
     deps, script_type = resolve_model_deps(model, None)
     script = generate_run_script(
         model,
@@ -198,7 +247,7 @@ def test_qwen25_vl_video_runtime_uses_transformers_video_path():
     assert "torchvision" in deps
     assert "qwen-vl-utils" in deps
     assert script_type == "transformers_video"
-    assert "Qwen2_5_VLForConditionalGeneration" in script
+    assert model_class in script
     assert "video_path = '/tmp/video.mp4'" in script
     assert '{"type": "video", "video": video_uri, "fps": 1.0}' in script
     assert "process_vision_info" in script
@@ -207,9 +256,8 @@ def test_qwen25_vl_video_runtime_uses_transformers_video_path():
     compile(script, "<whichvlm-video>", "exec")
 
 
-def test_qwen25_vl_video_runtime_requires_video_path():
-    model = qwen25_video_model()
-
+@pytest.mark.parametrize("model", [qwen2_video_model(), qwen25_video_model()])
+def test_qwen_vl_video_runtimes_require_video_path(model: ModelInfo):
     with pytest.raises(RuntimeUnsupportedError, match="--video"):
         generate_run_script(model, None, 4096, False)
 

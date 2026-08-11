@@ -78,7 +78,7 @@ INTEGRATION_PROFILES: tuple[IntegrationProfile, ...] = (
         tag_patterns=(
             r"(^|[-_/\s])(video|videomme|mvbench|activitynet|nextqa)([-_/\s]|$)",
             r"onevision",
-            r"qwen2[._-]?5[._-]?vl",
+            r"qwen2(?:[._-]?5)?[._-]?vl",
         ),
         component_roles=("language", "video_encoder", "projector", "processor"),
         workload_tasks=("video",),
@@ -99,6 +99,15 @@ INTEGRATION_PROFILES: tuple[IntegrationProfile, ...] = (
 )
 
 RUNTIME_BACKEND_PROFILES: tuple[RuntimeBackendProfile, ...] = (
+    RuntimeBackendProfile(
+        runtime_id="qwen2-vl-video-transformers",
+        capability_names=("video",),
+        tag_patterns=(
+            r"qwen2[._-]?vl",
+            r"qwen2vlforconditionalgeneration",
+        ),
+        runtime_backends=("transformers",),
+    ),
     RuntimeBackendProfile(
         runtime_id="qwen2.5-vl-video-transformers",
         capability_names=("video",),

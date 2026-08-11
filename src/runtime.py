@@ -15,11 +15,11 @@ from hardware.types import HardwareInfo, infer_backend_capabilities
 from models.integrations import (
     AUDIO_COMPONENT_ROLES,
     capabilities_for_data,
+    matching_runtime_profiles_for_data,
     pipeline_tag_has_audio_input,
     pipeline_tag_has_image_input,
     pipeline_tag_has_video_input,
     pipeline_tag_has_visual_input,
-    runtime_backends_for_data,
 )
 from models.package_graph import find_projector_artifact, gguf_artifact_status
 from models.types import GGUFArtifactStatus, GGUFVariant, ModelArtifact, ModelInfo
@@ -354,25 +354,28 @@ def has_audio_input(model: ModelInfo) -> bool:
     )
 
 
-def transformers_runtime_backends(model: ModelInfo) -> list[str]:
-    return runtime_backends_for_data(
-        model.id,
-        model.hf_pipeline_tag,
-        model.tags,
-        model.architecture,
+def has_transformers_runtime_profile(
+    model: ModelInfo,
+    capability_name: str,
+) -> bool:
+    return any(
+        capability_name in profile.capability_names
+        and "transformers" in profile.runtime_backends
+        for profile in matching_runtime_profiles_for_data(
+            model.id,
+            model.hf_pipeline_tag,
+            model.tags,
+            model.architecture,
+        )
     )
 
 
 def is_transformers_video_model(model: ModelInfo) -> bool:
-    return has_video_input(model) and "transformers" in transformers_runtime_backends(
-        model
-    )
+    return has_video_input(model) and has_transformers_runtime_profile(model, "video")
 
 
 def is_transformers_audio_model(model: ModelInfo) -> bool:
-    return has_audio_input(model) and "transformers" in transformers_runtime_backends(
-        model
-    )
+    return has_audio_input(model) and has_transformers_runtime_profile(model, "audio")
 
 
 def prefers_transformers_video_script(model: ModelInfo) -> bool:
@@ -1709,17 +1712,13 @@ def generate_transformers_video_script(
     gpu_memory_utilization: float | None = None,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
+    model_class, processor_class, processor_extra_args = transformers_vlm_profile(model)
     imports = transformers_import_names(
-        "Qwen2_5_VLForConditionalGeneration",
-        "AutoProcessor",
+        model_class,
+        processor_class,
         quantization_import_names(model),
     )
-    processor_arg_lines = processor_kwargs_lines(
-        (
-            "min_pixels=256 * 28 * 28",
-            "max_pixels=1280 * 28 * 28",
-        )
-    )
+    processor_arg_lines = processor_kwargs_lines(processor_extra_args)
     runtime_setup = transformers_runtime_setup(
         quantization_config_lines(model), gpu_memory_utilization
     )
@@ -1742,12 +1741,12 @@ device_map = {device_map}
 try:
     print(f"Loading {{model_id}}...")
     load_started_at = time.perf_counter()
-    processor = AutoProcessor.from_pretrained(
+    processor = {processor_class}.from_pretrained(
         model_id,
         trust_remote_code=True{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+    model = {model_class}.from_pretrained(model_id, **model_kwargs)
     model.eval()
     print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
     print("Ready! Type 'exit' to quit.\\n")
