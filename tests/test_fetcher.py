@@ -276,6 +276,7 @@ def test_parse_model_recovers_qwen36_a3b_active_params_from_name():
     parsed = parse_model(
         {
             "id": "Qwen/Qwen3.6-35B-A3B",
+            "sha": "0123456789abcdef",
             "config": {
                 "architectures": ["Qwen3_5MoeForConditionalGeneration"],
                 "model_type": "qwen3_5_moe",
@@ -290,6 +291,7 @@ def test_parse_model_recovers_qwen36_a3b_active_params_from_name():
     assert parsed.parameter_count == 35_951_822_704
     assert parsed.parameter_count_active == 3_000_000_000
     assert parsed.is_moe is True
+    assert parsed.revision == "0123456789abcdef"
 
 
 def test_models_cache_roundtrip_keeps_published_at():
@@ -300,6 +302,7 @@ def test_models_cache_roundtrip_keeps_published_at():
             name="Qwen3-8B-AWQ",
             parameter_count=8_000_000_000,
             published_at="2025-09-17T12:34:56.000Z",
+            revision="0123456789abcdef",
             downloads=123_456,
             likes=789,
         )
@@ -308,6 +311,7 @@ def test_models_cache_roundtrip_keeps_published_at():
     restored = dicts_to_models(cached)
     assert len(restored) == 1
     assert restored[0].published_at == "2025-09-17T12:34:56.000Z"
+    assert restored[0].revision == "0123456789abcdef"
     assert restored[0].downloads == 123_456
 
 

@@ -92,6 +92,7 @@ class ModelInfo:
     image_token_strategy: str | None = None
     license: str | None = None
     published_at: str | None = None
+    revision: str | None = None
     downloads: int = 0
     likes: int = 0
     gguf_variants: list[GGUFVariant] = field(default_factory=list)

@@ -25,6 +25,7 @@ from runtime import (
     auto_gpu_memory_utilization,
     find_projector_artifact,
     generate_run_script,
+    model_revision,
     normalize_backend_name,
     quote_shell_argument,
     requires_audio,
@@ -118,6 +119,24 @@ RANKING_PANEL = "Ranking"
 WORKLOAD_PANEL = "Workload"
 HARDWARE_PANEL = "Hardware"
 OUTPUT_PANEL = "Output"
+REMOTE_CODE_BACKENDS = frozenset({"transformers", "vllm", "sglang"})
+
+
+def show_remote_code_status(
+    model: ModelInfo, backend_name: str, trust_remote_code: bool
+) -> None:
+    if backend_name not in REMOTE_CODE_BACKENDS:
+        return
+    source = f"{model.id}@{model_revision(model)}"
+    if trust_remote_code:
+        console.print(f"[yellow]Warning:[/] Trusting remote code from {source}.")
+    else:
+        console.print(
+            f"[yellow]Remote code disabled:[/] Refusing to execute code from {source}. "
+            "Use --trust-remote-code to allow it."
+        )
+
+
 GPU_MEMORY_BACKENDS = {"vllm", "sglang"}
 RUNTIME_MEMORY_BUDGET_BACKENDS = {"transformers", "vllm", "sglang"}
 
@@ -1567,6 +1586,11 @@ def run(
         "-b",
         help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
     ),
+    trust_remote_code: bool = typer.Option(
+        False,
+        "--trust-remote-code",
+        help="Allow code from the selected model repository",
+    ),
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
         "--gpu-memory-utilization",
@@ -1724,6 +1748,7 @@ def run(
         raise typer.Exit(code=1)
 
     fmt = variant.quant_type if variant else script_type.upper()
+    show_remote_code_status(model, backend.name, trust_remote_code)
     console.print(f"\n[bold green]Running {model.id}[/] [dim]({fmt})[/]")
     console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]\n")
 
@@ -1739,6 +1764,7 @@ def run(
             max_tokens=max_tokens,
             hardware=hardware,
             gpu_memory_utilization=runtime_gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
         )
         raise typer.Exit(code=run_request(request, backend.name))
     except RuntimeUnsupportedError as e:
@@ -1768,6 +1794,11 @@ def serve(
         "--backend",
         "-b",
         help="Server backend: auto, llama.cpp, vllm, sglang",
+    ),
+    trust_remote_code: bool = typer.Option(
+        False,
+        "--trust-remote-code",
+        help="Allow code from the selected model repository",
     ),
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
@@ -1811,6 +1842,7 @@ def serve(
         raise typer.Exit(code=1)
 
     fmt = variant.quant_type if variant else backend.name.upper()
+    show_remote_code_status(model, backend.name, trust_remote_code)
     console.print(f"\n[bold green]Serving {model.id}[/] [dim]({fmt})[/]")
     console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]")
     console.print(f"[dim]Listening on http://{host}:{port}[/]\n")
@@ -1825,6 +1857,7 @@ def serve(
             host=host,
             port=port,
             gpu_memory_utilization=runtime_gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
         )
         raise typer.Exit(code=serve_request(request, backend.name))
     except RuntimeUnsupportedError as e:
@@ -1868,6 +1901,11 @@ def snippet(
         "--backend",
         "-b",
         help="Runtime backend: auto, transformers, llama.cpp, mlx, vllm, sglang",
+    ),
+    trust_remote_code: bool = typer.Option(
+        False,
+        "--trust-remote-code",
+        help="Allow code from the selected model repository",
     ),
     gpu_memory_utilization: Optional[str] = typer.Option(
         None,
@@ -1947,6 +1985,7 @@ def snippet(
             backend_name=backend.name,
             hardware=hardware,
             gpu_memory_utilization=runtime_gpu_memory_utilization,
+            trust_remote_code=trust_remote_code,
         )
     except RuntimeUnsupportedError as e:
         console.print(f"[red]Error:[/] {e}")
@@ -1954,6 +1993,9 @@ def snippet(
 
     dep_str = " ".join(f"--with {d}" for d in deps)
     run_command = f"whichvlm run {quote_shell_argument(model.id)}"
+    if trust_remote_code:
+        run_command += " --trust-remote-code"
+    show_remote_code_status(model, backend.name, trust_remote_code)
     console.print(f"\n[bold]{model.id}[/]")
     console.print(f"[dim]# Run directly:[/]  {run_command}")
     console.print(f"[dim]# Or manually:[/]   uv run --no-project {dep_str} script.py\n")
