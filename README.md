@@ -160,6 +160,11 @@ The source layout is under `src`. Tests live under `tests`. Avoid importing priv
 
 These use real hardware, downloads, and runtime dependencies.
 
+Runtime selection reads `src/data/runtime_compatibility.json`. Each record links
+the backend version and exact model revision to its smoke evidence and last-tested
+date. Records older than 90 days are ignored, so this file is the source of
+truth for the runtime support documented and enforced by `whichvlm`.
+
 Peak-memory calibrations are loaded from
 `src/data/vram_calibrations.json`. A record affects estimates only when it
 includes the model ID and revision, artifact, GPU, runtime version, benchmark
