@@ -222,14 +222,14 @@ def model_family_keys(model: ModelInfo) -> set[str]:
     return {key for key in keys if key}
 
 
-def llama_cpp_vlm_profile(model: ModelInfo) -> tuple[tuple[str, ...], str]:
+def llama_cpp_vlm_profile(model: ModelInfo) -> tuple[str, str]:
     family_ids = model_family_keys(model)
     if "qwen-vl" in family_ids:
-        return ("Qwen25VLChatHandler", "Qwen2VLChatHandler"), "qwen2-vl"
+        return "Qwen25VLChatHandler", "qwen2.5-vl"
     if "llava" in family_ids:
-        return ("Llava16ChatHandler", "Llava15ChatHandler"), "llava-1-5"
+        return "Llava15ChatHandler", "llava-1-5"
     if "minicpm" in family_ids:
-        return ("MiniCPMv26ChatHandler", "MiniCPMVChatHandler"), "minicpm-v-2.6"
+        return "MiniCPMv26ChatHandler", "minicpm-v-2.6"
     raise RuntimeUnsupportedError(
         f"llama.cpp has no validated multimodal chat handler for {model.id}. "
         "Use a Qwen-VL, LLaVA, or MiniCPM-V GGUF package, or choose a "
@@ -1357,7 +1357,7 @@ def generate_llama_cpp_vlm_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
-    handlers, _ = llama_cpp_vlm_profile(model)
+    handler_name, _ = llama_cpp_vlm_profile(model)
     return f'''\
 import base64
 import mimetypes
@@ -1383,14 +1383,13 @@ def image_data_url(path):
 
 
 def chat_handler(mmproj_path):
-    for name in {handlers!r}:
-        cls = getattr(llama_chat_format, name, None)
-        if cls is not None:
-            return cls(clip_model_path=mmproj_path)
-    raise SystemExit(
-        "llama-cpp-python does not expose a compatible multimodal chat handler "
-        f"for {{model_id}}. Install a newer llama-cpp-python or use Transformers/MLX."
-    )
+    cls = getattr(llama_chat_format, {handler_name!r}, None)
+    if cls is None:
+        raise SystemExit(
+            "llama-cpp-python does not expose a compatible multimodal chat handler "
+            f"for {{model_id}}. Install a newer llama-cpp-python or use Transformers/MLX."
+        )
+    return cls(clip_model_path=mmproj_path)
 
 
 print(f"Downloading {{model_id}}...")
