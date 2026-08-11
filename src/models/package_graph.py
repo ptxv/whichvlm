@@ -141,6 +141,7 @@ def build_lineage(
 def build_artifacts(
     model_id: str,
     *,
+    revision: str | None = None,
     model_format: str,
     quantization_type: str | None,
     access: str,
@@ -153,6 +154,7 @@ def build_artifacts(
         ModelArtifact(
             repo_id=model_id,
             format="adapter",
+            revision=revision,
             quantization=None,
             file_size_bytes=size,
             access=access,
@@ -168,6 +170,7 @@ def build_artifacts(
             ModelArtifact(
                 repo_id=model_id,
                 format="gguf",
+                revision=revision,
                 quantization=v.quant_type,
                 file_size_bytes=v.file_size_bytes,
                 access=access,
@@ -186,6 +189,7 @@ def build_artifacts(
         ModelArtifact(
             repo_id=model_id,
             format=fmt,
+            revision=revision,
             quantization=quantization_type,
             file_size_bytes=file_size,
             access=access,
@@ -268,6 +272,7 @@ def artifact_to_dict(artifact: ModelArtifact) -> dict:
     return {
         "repo_id": artifact.repo_id,
         "format": artifact.format,
+        "revision": artifact.revision,
         "quantization": artifact.quantization,
         "file_size_bytes": artifact.file_size_bytes,
         "access": artifact.access,
@@ -281,6 +286,7 @@ def artifact_from_dict(data: dict) -> ModelArtifact:
     return ModelArtifact(
         repo_id=data.get("repo_id", ""),
         format=data.get("format", "other"),
+        revision=data.get("revision"),
         quantization=data.get("quantization"),
         file_size_bytes=data.get("file_size_bytes"),
         access=data.get("access", "unknown"),

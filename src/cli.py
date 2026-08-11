@@ -22,6 +22,7 @@ from runtime import (
     RuntimeRequest,
     RuntimeUnsupportedError,
     ServeRequest,
+    artifact_revision,
     auto_gpu_memory_utilization,
     find_projector_artifact,
     generate_run_script,
@@ -1725,6 +1726,7 @@ def run(
 
     fmt = variant.quant_type if variant else script_type.upper()
     console.print(f"\n[bold green]Running {model.id}[/] [dim]({fmt})[/]")
+    console.print(f"[dim]Revision: {artifact_revision(model, variant)}[/]")
     console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]\n")
 
     try:
@@ -1812,6 +1814,7 @@ def serve(
 
     fmt = variant.quant_type if variant else backend.name.upper()
     console.print(f"\n[bold green]Serving {model.id}[/] [dim]({fmt})[/]")
+    console.print(f"[dim]Revision: {artifact_revision(model, variant)}[/]")
     console.print(f"[dim]Setting up isolated env with: {', '.join(deps)}[/]")
     console.print(f"[dim]Listening on http://{host}:{port}[/]\n")
 
@@ -1955,6 +1958,7 @@ def snippet(
     dep_str = " ".join(f"--with {d}" for d in deps)
     run_command = f"whichvlm run {quote_shell_argument(model.id)}"
     console.print(f"\n[bold]{model.id}[/]")
+    console.print(f"[dim]Revision: {artifact_revision(model, variant)}[/]")
     console.print(f"[dim]# Run directly:[/]  {run_command}")
     console.print(f"[dim]# Or manually:[/]   uv run --no-project {dep_str} script.py\n")
     console.print(Syntax(code, "python", theme="monokai"))

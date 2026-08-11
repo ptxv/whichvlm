@@ -639,6 +639,81 @@ def test_runtime_scripts_escape_external_values():
     assert shlex.split(command)[2] == model_id
 
 
+def test_runtime_scripts_pin_cached_artifact_revision():
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    variant = GGUFVariant(
+        filename="test-q4.gguf",
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+    )
+    model = vlm_model(
+        artifacts=[
+            ModelArtifact(
+                repo_id="Qwen/Qwen2.5-VL-7B-Instruct",
+                format="safetensors",
+                revision=revision,
+            ),
+            ModelArtifact(
+                repo_id="Qwen/Qwen2.5-VL-7B-Instruct",
+                format="gguf",
+                revision=revision,
+                filename=variant.filename,
+            ),
+        ],
+    )
+    projector = ModelArtifact(
+        repo_id=model.id,
+        format="adapter",
+        revision=revision,
+        filename="mmproj.gguf",
+    )
+
+    llama_scripts = [
+        generate_llama_cpp_text_script(model, variant, 4096, False, 512),
+        generate_llama_cpp_vlm_script(
+            model, variant, projector, 4096, False, "/tmp/image.png", 512
+        ),
+        generate_llama_cpp_serve_script(
+            model, variant, projector, 4096, False, "127.0.0.1", 8000
+        ),
+    ]
+    for script in llama_scripts:
+        assert f"revision = {revision!r}" in script
+        assert "revision=revision" in script
+
+    transformers_scripts = [
+        generate_transformers_text_script(model, False, 512),
+        generate_transformers_vlm_script(model, ("/tmp/image.png",), False, 512),
+        generate_transformers_video_script(
+            qwen25_video_model(artifacts=model.artifacts),
+            "/tmp/video.mp4",
+            False,
+            512,
+        ),
+        generate_transformers_audio_script(
+            qwen2_audio_model(artifacts=model.artifacts),
+            "/tmp/audio.wav",
+            False,
+            512,
+        ),
+    ]
+    for script in transformers_scripts:
+        assert f"revision={revision!r}" in script
+        assert 'revision=model_kwargs["revision"]' in script
+
+    mlx_script = generate_mlx_vlm_script(model, "/tmp/image.png", 512)
+    assert "load(model_id, revision=revision)" in mlx_script
+    assert f"revision = {revision!r}" in mlx_script
+
+    vllm_script = generate_vllm_vlm_script(model, 4096, "/tmp/image.png", 512)
+    assert "revision=revision" in vllm_script
+    assert "code_revision=revision" in vllm_script
+    assert "tokenizer_revision=revision" in vllm_script
+
+    sglang_script = generate_sglang_vlm_script(model, 4096, "/tmp/image.png", 512)
+    assert "revision=revision" in sglang_script
+
+
 def test_runtime_detects_vlm_from_architecture():
     model = parse_model(
         {
@@ -1004,7 +1079,16 @@ def test_transformers_backend_is_not_a_server_backend():
 
 
 def test_vllm_serve_uses_openai_server_command(monkeypatch):
-    model = vlm_model()
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    model = vlm_model(
+        artifacts=[
+            ModelArtifact(
+                repo_id="Qwen/Qwen2.5-VL-7B-Instruct",
+                format="safetensors",
+                revision=revision,
+            )
+        ]
+    )
     captured: dict[str, list[str]] = {}
 
     class Result:
@@ -1046,6 +1130,12 @@ def test_vllm_serve_uses_openai_server_command(monkeypatch):
         "--max-model-len",
         "8192",
         "--trust-remote-code",
+        "--revision",
+        revision,
+        "--code-revision",
+        revision,
+        "--tokenizer-revision",
+        revision,
     ]
 
 
@@ -1082,7 +1172,16 @@ def test_vllm_serve_passes_gpu_memory_utilization(monkeypatch):
 
 
 def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
-    model = vlm_model()
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    model = vlm_model(
+        artifacts=[
+            ModelArtifact(
+                repo_id="Qwen/Qwen2.5-VL-7B-Instruct",
+                format="safetensors",
+                revision=revision,
+            )
+        ]
+    )
     captured: dict[str, list[str]] = {}
 
     class Result:
@@ -1109,5 +1208,6 @@ def test_sglang_serve_passes_gpu_memory_utilization(monkeypatch):
     )
 
     assert code == 0
+    assert captured["cmd"][captured["cmd"].index("--revision") + 1] == revision
     assert "--mem-fraction-static" in captured["cmd"]
     assert "0.82" in captured["cmd"]

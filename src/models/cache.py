@@ -14,7 +14,7 @@ from utils import cache_dir
 CACHE_DIR = cache_dir()
 CACHE_FILE = CACHE_DIR / "models.json"
 DEFAULT_TTL_SECONDS = 6 * 3600
-CACHE_SCHEMA_VERSION = 2
+CACHE_SCHEMA_VERSION = 3
 DEFAULT_SOURCE = {"name": "huggingface"}
 
 

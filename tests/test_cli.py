@@ -45,6 +45,8 @@ from runtime import generate_run_script
 from utils import current_version
 from engine.types import CompatibilityResult
 from hardware.types import BackendCapability, GPUInfo, HardwareInfo, has_backend
+from models.cache import CACHE_SCHEMA_VERSION
+from models.fetcher import models_to_dicts
 from models.types import GGUFVariant, ModelArtifact, ModelCapabilities, ModelInfo
 from output.display import display_json
 
@@ -257,7 +259,7 @@ def test_list_command_runs_ranking_from_cache(tmp_path):
     (cache_path / "models.json").write_text(
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": CACHE_SCHEMA_VERSION,
                 "cached_at": cached_at,
                 "models": [
                     {
@@ -1102,7 +1104,9 @@ def make_model(
     gguf_variants=None,
     parameter_count=7_000_000_000,
     parameter_count_active=None,
+    revision=None,
 ):
+    variants = gguf_variants or []
     return ModelInfo(
         id=model_id,
         family_id="test-7b",
@@ -1111,7 +1115,19 @@ def make_model(
         parameter_count_active=parameter_count_active,
         downloads=downloads,
         likes=10,
-        gguf_variants=gguf_variants or [],
+        gguf_variants=variants,
+        artifacts=(
+            [
+                ModelArtifact(
+                    repo_id=model_id,
+                    format="gguf" if variants else "safetensors",
+                    revision=revision,
+                    filename=variants[0].filename if variants else None,
+                )
+            ]
+            if revision
+            else []
+        ),
     )
 
 
@@ -1146,6 +1162,45 @@ def make_audio_model(model_id="Qwen/Qwen2-Audio-7B-Instruct"):
         architecture="qwen2audio",
         hf_pipeline_tag="audio-text-to-text",
     )
+
+
+def test_cached_model_revision_changes_only_on_refresh(monkeypatch):
+    cached_revision = "0123456789abcdef0123456789abcdef01234567"
+    refreshed_revision = "89abcdef0123456789abcdef0123456789abcdef"
+    cached_model = make_model(
+        model_id="org/Test-7B",
+        revision=cached_revision,
+    )
+    refreshed_model = make_model(
+        model_id="org/Test-7B",
+        revision=refreshed_revision,
+    )
+
+    cached = models_to_dicts([cached_model])
+    saved = {}
+    fetch_calls = 0
+
+    async def fake_fetch_models(include_vision=True):
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return [refreshed_model]
+
+    def fake_save_cache(models, *, source):
+        saved["models"] = models
+
+    monkeypatch.setattr("models.cache.load_cache", lambda **kwargs: cached)
+    monkeypatch.setattr("models.cache.save_cache", fake_save_cache)
+    monkeypatch.setattr("models.fetcher.fetch_models", fake_fetch_models)
+
+    first = cli_mod.load_model_catalog(refresh=False)
+    second = cli_mod.load_model_catalog(refresh=False)
+    refreshed = cli_mod.load_model_catalog(refresh=True)
+
+    assert first[0].artifacts[0].revision == cached_revision
+    assert second[0].artifacts[0].revision == cached_revision
+    assert refreshed[0].artifacts[0].revision == refreshed_revision
+    assert saved["models"][0]["artifacts"][0]["revision"] == refreshed_revision
+    assert fetch_calls == 1
 
 
 def test_search_model_exact_match():
@@ -1585,6 +1640,7 @@ def test_transformers_chat_script_provides_disk_offload_folder():
 
 
 def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
+    revision = "0123456789abcdef0123456789abcdef01234567"
     model = make_model(
         model_id="org/Test-7B",
         gguf_variants=[
@@ -1594,6 +1650,7 @@ def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
                 file_size_bytes=4_000_000_000,
             )
         ],
+        revision=revision,
     )
     captured: dict[str, object] = {}
 
@@ -1612,6 +1669,7 @@ def test_run_explicit_transformers_does_not_select_gguf(monkeypatch):
     )
 
     assert result.exit_code == 0
+    assert f"Revision: {revision}" in result.stdout
     assert captured["artifact"] is None
     assert captured["backend_name"] == "transformers"
 
@@ -1894,6 +1952,7 @@ def test_run_qwen2_audio_requires_audio_path(monkeypatch):
 
 
 def test_serve_gguf_model_uses_server_request(monkeypatch):
+    revision = "0123456789abcdef0123456789abcdef01234567"
     model = make_model(
         model_id="org/Test-7B-GGUF",
         gguf_variants=[
@@ -1903,6 +1962,7 @@ def test_serve_gguf_model_uses_server_request(monkeypatch):
                 file_size_bytes=4_000_000_000,
             )
         ],
+        revision=revision,
     )
     captured: dict[str, object] = {}
 
@@ -1924,6 +1984,7 @@ def test_serve_gguf_model_uses_server_request(monkeypatch):
     )
 
     assert result.exit_code == 0
+    assert f"Revision: {revision}" in result.stdout
     assert captured["artifact"].filename == "test-q4.gguf"
     assert captured["backend_name"] == "llama.cpp"
     assert captured["host"] == "0.0.0.0"
@@ -2004,7 +2065,11 @@ def test_snippet_no_model_found(monkeypatch):
 
 def test_snippet_passes_options_and_quotes_model_id(monkeypatch):
     model_id = "org/Test-7B'\"; injected = true\n# \\\\ 雪"
-    model = make_model(model_id=model_id)
+    revision = "0123456789abcdef0123456789abcdef01234567"
+    model = make_model(
+        model_id=model_id,
+        revision=revision,
+    )
     captured = {}
 
     def fake_generate_run_script(
@@ -2040,6 +2105,7 @@ def test_snippet_passes_options_and_quotes_model_id(monkeypatch):
     )
 
     assert result.exit_code == 0
+    assert f"Revision: {revision}" in result.stdout
     assert captured["context_length"] == 8192
     assert captured["max_tokens"] == 128
     assert shlex.join(["whichvlm", "run", model_id]) in result.stdout
@@ -2124,6 +2190,7 @@ def json_output_case() -> tuple[CompatibilityResult, HardwareInfo]:
             ModelArtifact(
                 repo_id="test-org/Test-7B",
                 format="mlx",
+                revision="0123456789abcdef0123456789abcdef01234567",
                 quantization="MLX",
                 access="gated",
                 backend_support=["mlx", "metal"],
@@ -2222,6 +2289,7 @@ def test_json_output_includes_diagnostics_when_requested():
     assert entry["vram_notes"] == ["KV cache uses parameter-count fallback"]
     assert entry["base_models"] == ["base/Test-7B"]
     assert artifact["format"] == "mlx"
+    assert artifact["revision"] == "0123456789abcdef0123456789abcdef01234567"
     assert artifact["access"] == "gated"
     assert artifact["backend_support"] == ["mlx", "metal"]
     assert entry["lineage"]["base_model_ids"] == ["base/Test-7B"]

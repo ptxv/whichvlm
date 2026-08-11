@@ -33,6 +33,7 @@ def artifact_dict(artifact: ModelArtifact) -> dict:
     return {
         "repo_id": artifact.repo_id,
         "format": artifact.format,
+        "revision": artifact.revision,
         "quantization": artifact.quantization,
         "file_size_bytes": artifact.file_size_bytes,
         "access": artifact.access,

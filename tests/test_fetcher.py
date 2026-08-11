@@ -363,6 +363,7 @@ def test_models_cache_roundtrip_keeps_vlm_package_graph():
                 ModelArtifact(
                     repo_id="community/Qwen2.5-VL-7B-MLX",
                     format="mlx",
+                    revision="0123456789abcdef0123456789abcdef01234567",
                     quantization="MLX",
                     access="ungated",
                     backend_support=["mlx", "metal"],
@@ -376,6 +377,9 @@ def test_models_cache_roundtrip_keeps_vlm_package_graph():
 
     assert restored[0].base_models == ["Qwen/Qwen2.5-VL-7B-Instruct"]
     assert restored[0].artifacts[0].format == "mlx"
+    assert restored[0].artifacts[0].revision == (
+        "0123456789abcdef0123456789abcdef01234567"
+    )
     assert restored[0].artifacts[0].backend_support == ["mlx", "metal"]
     assert restored[0].lineage.variant_of == "Qwen/Qwen2.5-VL-7B-Instruct"
 
@@ -491,6 +495,7 @@ def test_parse_model_builds_vlm_package_metadata():
     parsed = parse_model(
         {
             "id": "Qwen/Qwen2.5-VL-7B-Instruct",
+            "sha": "0123456789abcdef0123456789abcdef01234567",
             "pipeline_tag": "image-text-to-text",
             "tags": ["vision-language", "safetensors"],
             "gated": False,
@@ -510,6 +515,7 @@ def test_parse_model_builds_vlm_package_metadata():
     assert parsed.tags == ["vision-language", "safetensors"]
     assert parsed.capabilities.image is True
     assert parsed.artifacts[0].format == "safetensors"
+    assert parsed.artifacts[0].revision == "0123456789abcdef0123456789abcdef01234567"
     assert parsed.artifacts[0].access == "ungated"
     assert parsed.parameter_count == 7_000_000_000
     assert parsed.components[0].role == "language"
