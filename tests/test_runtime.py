@@ -741,6 +741,60 @@ def test_gguf_vlm_script_uses_llama_cpp_projector_artifact():
     assert "max_tokens=128" in script
 
 
+@pytest.mark.parametrize(
+    ("model_repo_id", "projector_repo_id"),
+    [
+        ("org/Test-VL-7B-GGUF", "org/Test-VL-7B-mmproj"),
+        ("org/Test-VL-7B", "org/Test-VL-7B"),
+    ],
+)
+def test_gguf_vlm_scripts_download_from_artifact_repositories(
+    model_repo_id, projector_repo_id
+):
+    variant = GGUFVariant(
+        filename="test-q4.gguf",
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+    )
+    projector = ModelArtifact(
+        repo_id=projector_repo_id,
+        format="adapter",
+        filename="mmproj-test-f16.gguf",
+        source_kind="mmproj",
+    )
+    model = vlm_model(
+        id="org/Test-VL-7B",
+        gguf_variants=[variant],
+        model_format="gguf",
+        artifacts=[
+            ModelArtifact(
+                repo_id=model_repo_id,
+                format="gguf",
+                filename=variant.filename,
+                source_kind="gguf_variant",
+            ),
+            projector,
+        ],
+    )
+
+    scripts = (
+        generate_llama_cpp_vlm_script(
+            model, variant, projector, 4096, False, "/tmp/image.png", 128
+        ),
+        generate_llama_cpp_serve_script(
+            model, variant, projector, 4096, False, "127.0.0.1", 8000
+        ),
+    )
+
+    for script in scripts:
+        assert f"model_repo_id = {model_repo_id!r}" in script
+        assert f"projector_repo_id = {projector_repo_id!r}" in script
+        assert (
+            "hf_hub_download(repo_id=model_repo_id, filename=model_filename)" in script
+        )
+        assert "repo_id=projector_repo_id, filename=projector_filename" in script
+
+
 def test_mlx_vlm_script_uses_mlx_vlm_runner():
     model = vlm_model(
         model_format="mlx",
