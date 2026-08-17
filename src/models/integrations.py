@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from models.types import ModelCapabilities
+from models.types import ModelCapabilities, ModelInfo
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,7 @@ INTEGRATION_PROFILES: tuple[IntegrationProfile, ...] = (
         tag_patterns=(
             r"(^|[-_/\s])(video|videomme|mvbench|activitynet|nextqa)([-_/\s]|$)",
             r"onevision",
-            r"qwen2[._-]?5[._-]?vl",
+            r"qwen2(?:[._-]?5)?[._-]?vl",
         ),
         component_roles=("language", "video_encoder", "projector", "processor"),
         workload_tasks=("video",),
@@ -99,6 +99,15 @@ INTEGRATION_PROFILES: tuple[IntegrationProfile, ...] = (
 )
 
 RUNTIME_BACKEND_PROFILES: tuple[RuntimeBackendProfile, ...] = (
+    RuntimeBackendProfile(
+        runtime_id="qwen2-vl-video-transformers",
+        capability_names=("video",),
+        tag_patterns=(
+            r"qwen2[._-]?vl",
+            r"qwen2vlforconditionalgeneration",
+        ),
+        runtime_backends=("transformers",),
+    ),
     RuntimeBackendProfile(
         runtime_id="qwen2.5-vl-video-transformers",
         capability_names=("video",),
@@ -187,6 +196,22 @@ def matching_runtime_profiles_for_data(
             profile, model_id, pipeline_tag, tags, architecture
         )
     ]
+
+
+def runtime_backends_for_model_capability(
+    model: ModelInfo,
+    capability_name: str,
+) -> list[str]:
+    backends: list[str] = []
+    for profile in matching_runtime_profiles_for_data(
+        model.id,
+        model.hf_pipeline_tag,
+        model.tags,
+        model.architecture,
+    ):
+        if capability_name in profile.capability_names:
+            _append_unique(backends, profile.runtime_backends)
+    return backends
 
 
 def capability_names_for_data(

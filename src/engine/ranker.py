@@ -40,6 +40,7 @@ from models.benchmark import (
     lookup_benchmark_evidence,
 )
 from models.integrations import (
+    runtime_backends_for_model_capability,
     specialization_tags_for_capabilities,
     specialization_tags_for_data,
 )
@@ -956,6 +957,12 @@ def rank_models(
 
     for model in sorted_models:
         if is_excluded_model(model.id):
+            continue
+        if (
+            workload is not None
+            and workload.task in {"video", "audio"}
+            and not runtime_backends_for_model_capability(model, workload.task)
+        ):
             continue
         if not matches_profile(model, task_profile, workload):
             continue

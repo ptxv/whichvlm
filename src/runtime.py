@@ -19,7 +19,7 @@ from models.integrations import (
     pipeline_tag_has_image_input,
     pipeline_tag_has_video_input,
     pipeline_tag_has_visual_input,
-    runtime_backends_for_data,
+    runtime_backends_for_model_capability,
 )
 from models.package_graph import find_projector_artifact, gguf_artifact_status
 from models.types import GGUFArtifactStatus, GGUFVariant, ModelArtifact, ModelInfo
@@ -354,25 +354,22 @@ def has_audio_input(model: ModelInfo) -> bool:
     )
 
 
-def transformers_runtime_backends(model: ModelInfo) -> list[str]:
-    return runtime_backends_for_data(
-        model.id,
-        model.hf_pipeline_tag,
-        model.tags,
-        model.architecture,
+def has_transformers_runtime_profile(
+    model: ModelInfo,
+    capability_name: str,
+) -> bool:
+    return "transformers" in runtime_backends_for_model_capability(
+        model,
+        capability_name,
     )
 
 
 def is_transformers_video_model(model: ModelInfo) -> bool:
-    return has_video_input(model) and "transformers" in transformers_runtime_backends(
-        model
-    )
+    return has_video_input(model) and has_transformers_runtime_profile(model, "video")
 
 
 def is_transformers_audio_model(model: ModelInfo) -> bool:
-    return has_audio_input(model) and "transformers" in transformers_runtime_backends(
-        model
-    )
+    return has_audio_input(model) and has_transformers_runtime_profile(model, "audio")
 
 
 def prefers_transformers_video_script(model: ModelInfo) -> bool:
@@ -899,7 +896,7 @@ class TransformersBackend(Backend):
                 *transformers_quant_deps(model),
             ]
             if is_transformers_video_model(model):
-                deps.append("qwen-vl-utils")
+                deps.extend(["qwen-vl-utils", "av"])
             return deps
         if is_transformers_video_model(model):
             return [
@@ -908,6 +905,7 @@ class TransformersBackend(Backend):
                 "torchvision",
                 "accelerate",
                 "qwen-vl-utils",
+                "av",
                 "psutil",
                 *transformers_quant_deps(model),
             ]
@@ -1767,17 +1765,13 @@ def generate_transformers_video_script(
     gpu_memory_utilization: float | None = None,
 ) -> str:
     device_map = '"cpu"' if cpu_only else '"auto"'
+    model_class, processor_class, processor_extra_args = transformers_vlm_profile(model)
     imports = transformers_import_names(
-        "Qwen2_5_VLForConditionalGeneration",
-        "AutoProcessor",
+        model_class,
+        processor_class,
         quantization_import_names(model),
     )
-    processor_arg_lines = processor_kwargs_lines(
-        (
-            "min_pixels=256 * 28 * 28",
-            "max_pixels=1280 * 28 * 28",
-        )
-    )
+    processor_arg_lines = processor_kwargs_lines(processor_extra_args)
     runtime_setup = transformers_runtime_setup(
         quantization_config_lines(model),
         gpu_memory_utilization,
@@ -1787,8 +1781,8 @@ def generate_transformers_video_script(
 import shutil
 import tempfile
 import time
-from pathlib import Path
 
+import av
 import psutil
 import torch
 from qwen_vl_utils import process_vision_info
@@ -1796,20 +1790,27 @@ from transformers import {imports}
 
 model_id = {model.id!r}
 video_path = {video_path!r}
-video_uri = Path(video_path).expanduser().resolve().as_uri()
 device_map = {device_map}
 {runtime_setup}
 try:
     print(f"Loading {{model_id}}...")
     load_started_at = time.perf_counter()
-    processor = AutoProcessor.from_pretrained(
+    processor = {processor_class}.from_pretrained(
         model_id,
         trust_remote_code=True,
         revision=revision{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+    model = {model_class}.from_pretrained(model_id, **model_kwargs)
     model.eval()
+    with av.open(video_path) as container:
+        source_fps = float(container.streams.video[0].average_rate or 1)
+        frame_step = max(round(source_fps), 1)
+        video_frames = [
+            frame.to_image()
+            for index, frame in enumerate(container.decode(video=0))
+            if index % frame_step == 0
+        ]
     print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
     print("Ready! Type 'exit' to quit.\\n")
     while True:
@@ -1825,7 +1826,12 @@ try:
             {{
                 "role": "user",
                 "content": [
-                    {{"type": "video", "video": video_uri, "fps": 1.0}},
+                    {{
+                        "type": "video",
+                        "video": video_frames,
+                        "sample_fps": 1.0,
+                        "raw_fps": source_fps,
+                    }},
                     {{"type": "text", "text": text}},
                 ],
             }}
@@ -1839,6 +1845,7 @@ try:
             messages,
             return_video_kwargs=True,
         )
+        video_kwargs["fps"] = video_kwargs["fps"][0]
         inputs = processor(
             text=[prompt],
             images=image_inputs,

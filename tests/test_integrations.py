@@ -136,13 +136,23 @@ def test_parse_model_uses_registered_audio_profile_without_runtime_claim():
     assert runtime_backends_for_capabilities(model.capabilities) == []
 
 
-def test_qwen25_vl_video_profile_has_transformers_runtime_path():
+@pytest.mark.parametrize(
+    ("model_id", "model_class"),
+    [
+        ("Qwen/Qwen2-VL-7B-Instruct", "Qwen2VLForConditionalGeneration"),
+        ("Qwen/Qwen2.5-VL-7B-Instruct", "Qwen2_5_VLForConditionalGeneration"),
+    ],
+)
+def test_qwen_vl_video_profiles_have_transformers_runtime_path(
+    model_id: str,
+    model_class: str,
+):
     model = parse_model(
         {
-            "id": "Qwen/Qwen2.5-VL-7B-Instruct",
+            "id": model_id,
             "pipeline_tag": "image-text-to-text",
             "tags": ["safetensors"],
-            "config": {"architectures": ["Qwen2_5_VLForConditionalGeneration"]},
+            "config": {"architectures": [model_class]},
             "safetensors": {"total": 7_000_000_000},
             "siblings": [],
             "cardData": {},
@@ -179,10 +189,11 @@ def test_qwen25_vl_video_profile_has_transformers_runtime_path():
     assert recommended_runtime_backend(model, None, linux_cuda_hardware()) == "vllm"
     assert "torchvision" in deps
     assert "qwen-vl-utils" in deps
+    assert "av" in deps
     assert script_type == "transformers_vlm"
-    assert "Qwen2_5_VLForConditionalGeneration" in script
+    assert model_class in script
     assert "video_path = '/tmp/video.mp4'" in script
-    assert '{"type": "video", "video": video_uri, "fps": 1.0}' in script
+    assert '"video": video_frames' in script
     assert "process_vision_info" in script
 
 
