@@ -107,7 +107,7 @@ Runtime support is intentionally guarded:
 
 `whichvlm` tracks a VLM as a package graph:
 
-- `ModelArtifact`: repo, file format, quantization, access, backend support, source kind, filename.
+- `ModelArtifact`: repo, revision, file format, quantization, access, backend support, source kind, filename.
 - `ModelComponent`: language tower, vision encoder, projector, processor, tokenizer, merged checkpoint, adapter.
 - `ModelLineage`: base models, merged parents, variant relation, and fused/merged status.
 

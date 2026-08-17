@@ -28,6 +28,7 @@ class ModelArtifact:
     backend_support: list[str] = field(default_factory=list)
     source_kind: str = "unknown"
     filename: str | None = None
+    revision: str | None = None
 
 
 @dataclass

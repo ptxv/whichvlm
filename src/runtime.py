@@ -416,6 +416,17 @@ def requires_audio(model: ModelInfo) -> bool:
     return is_transformers_audio_model(model)
 
 
+def artifact_revision(
+    model: ModelInfo, variant: GGUFVariant | None = None
+) -> str | None:
+    for artifact in model.artifacts:
+        if artifact.repo_id == model.id and (
+            variant is None or artifact.filename == variant.filename
+        ):
+            return artifact.revision
+    return None
+
+
 def resolve_model_deps(
     model: ModelInfo,
     variant: GGUFVariant | None,
@@ -662,12 +673,14 @@ def print_decode_metrics(started_at, first_token_at, token_count):
 def transformers_runtime_setup(
     quantization_lines: str,
     gpu_memory_utilization: float | None = None,
+    revision: str | None = None,
 ) -> str:
     gpu_memory_fraction = format_gpu_memory_utilization(gpu_memory_utilization)
     return f"""\
 offload_folder = tempfile.mkdtemp(prefix="whichvlm_transformers_offload_")
 process = psutil.Process()
 gpu_memory_fraction = {gpu_memory_fraction}
+revision = {revision!r}
 
 
 def cuda_memory_limits():
@@ -707,6 +720,7 @@ model_kwargs = dict(
     device_map=device_map,
     torch_dtype=torch_dtype,
     trust_remote_code=True,
+    revision=revision,
     offload_folder=offload_folder,
     offload_state_dict=True,
     attn_implementation="sdpa",
@@ -1003,6 +1017,18 @@ class VLLMBackend(Backend):
             str(request.context_length),
             "--trust-remote-code",
         ]
+        revision = artifact_revision(request.model, request.artifact)
+        if revision:
+            cmd.extend(
+                [
+                    "--revision",
+                    revision,
+                    "--code-revision",
+                    revision,
+                    "--tokenizer-revision",
+                    revision,
+                ]
+            )
         if request.gpu_memory_utilization is not None:
             cmd.extend(
                 [
@@ -1077,6 +1103,9 @@ class SGLangBackend(Backend):
             str(request.context_length),
             "--trust-remote-code",
         ]
+        revision = artifact_revision(request.model, request.artifact)
+        if revision:
+            cmd.extend(["--revision", revision])
         if request.gpu_memory_utilization is not None:
             cmd.extend(
                 [
@@ -1272,6 +1301,7 @@ def generate_llama_cpp_text_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
+    revision = artifact_revision(model, variant)
     return f'''\
 import psutil
 import time
@@ -1282,10 +1312,13 @@ from llama_cpp import Llama
 {metrics}
 model_id = {model.id!r}
 model_filename = {variant.filename!r}
+revision = {revision!r}
 quant_type = {variant.quant_type!r}
 
 print(f"Downloading {{model_id}} ({{quant_type}})...")
-model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
+model_path = hf_hub_download(
+    repo_id=model_id, filename=model_filename, revision=revision
+)
 load_started_at = time.perf_counter()
 print("Loading model...")
 llm = Llama(
@@ -1342,6 +1375,8 @@ def generate_llama_cpp_vlm_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     metrics = llama_decode_metrics_block()
+    revision = artifact_revision(model, variant)
+    projector_revision = projector.revision
     return f'''\
 import base64
 import mimetypes
@@ -1355,6 +1390,8 @@ from llama_cpp import llama_chat_format
 model_id = {model.id!r}
 model_filename = {variant.filename!r}
 projector_filename = {projector.filename!r}
+revision = {revision!r}
+projector_revision = {projector_revision!r}
 image_path = {image_path!r}
 {metrics}
 
@@ -1392,8 +1429,12 @@ def chat_handler(model_id, mmproj_path):
 
 
 print(f"Downloading {{model_id}}...")
-model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
-mmproj_path = hf_hub_download(repo_id=model_id, filename=projector_filename)
+model_path = hf_hub_download(
+    repo_id=model_id, filename=model_filename, revision=revision
+)
+mmproj_path = hf_hub_download(
+    repo_id=model_id, filename=projector_filename, revision=projector_revision
+)
 handler = chat_handler(model_id, mmproj_path)
 
 load_started_at = time.perf_counter()
@@ -1470,7 +1511,9 @@ def generate_llama_cpp_serve_script(
 ) -> str:
     n_gpu = 0 if cpu_only else -1
     projector_filename = projector.filename if projector else None
+    projector_revision = projector.revision if projector else None
     chat_format = llama_cpp_server_chat_format(model.id)
+    revision = artifact_revision(model, variant)
     return f'''\
 import subprocess
 import sys
@@ -1480,9 +1523,13 @@ from huggingface_hub import hf_hub_download
 model_id = {model.id!r}
 model_filename = {variant.filename!r}
 projector_filename = {projector_filename!r}
+revision = {revision!r}
+projector_revision = {projector_revision!r}
 
 print(f"Downloading {{model_id}}...")
-model_path = hf_hub_download(repo_id=model_id, filename=model_filename)
+model_path = hf_hub_download(
+    repo_id=model_id, filename=model_filename, revision=revision
+)
 cmd = [
     sys.executable,
     "-m",
@@ -1499,7 +1546,9 @@ cmd = [
     "{port}",
 ]
 if projector_filename is not None:
-    mmproj_path = hf_hub_download(repo_id=model_id, filename=projector_filename)
+    mmproj_path = hf_hub_download(
+        repo_id=model_id, filename=projector_filename, revision=projector_revision
+    )
     cmd.extend(
         [
             "--clip_model_path",
@@ -1525,7 +1574,9 @@ def generate_transformers_text_script(
         ("TextIteratorStreamer", *quantization_import_names(model)),
     )
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        artifact_revision(model),
     )
     return f'''\
 import shutil
@@ -1543,7 +1594,11 @@ device_map = {device_map}
 try:
     print(f"Loading {{model_id}}...")
     load_started_at = time.perf_counter()
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id,
+        trust_remote_code=True,
+        revision=revision,
+    )
     model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
     model.eval()
     print(f"Loaded in {{time.perf_counter() - load_started_at:.2f}}s")
@@ -1611,7 +1666,9 @@ def generate_transformers_vlm_script(
     )
     processor_arg_lines = processor_kwargs_lines(processor_extra_args)
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        artifact_revision(model),
     )
     return f'''\
 import shutil
@@ -1634,7 +1691,8 @@ try:
     load_started_at = time.perf_counter()
     processor = {processor_class}.from_pretrained(
         model_id,
-        trust_remote_code=True{processor_arg_lines},
+        trust_remote_code=True,
+        revision=revision{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
     model = {model_class}.from_pretrained(model_id, **model_kwargs)
@@ -1721,7 +1779,9 @@ def generate_transformers_video_script(
         )
     )
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        artifact_revision(model),
     )
     return f'''\
 import shutil
@@ -1744,7 +1804,8 @@ try:
     load_started_at = time.perf_counter()
     processor = AutoProcessor.from_pretrained(
         model_id,
-        trust_remote_code=True{processor_arg_lines},
+        trust_remote_code=True,
+        revision=revision{processor_arg_lines},
     )
     tokenizer = processor.tokenizer
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
@@ -1819,7 +1880,9 @@ def generate_transformers_audio_script(
         quantization_import_names(model),
     )
     runtime_setup = transformers_runtime_setup(
-        quantization_config_lines(model), gpu_memory_utilization
+        quantization_config_lines(model),
+        gpu_memory_utilization,
+        artifact_revision(model),
     )
     return f'''\
 import shutil
@@ -1838,7 +1901,11 @@ device_map = {device_map}
 try:
     print(f"Loading {{model_id}}...")
     load_started_at = time.perf_counter()
-    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+    processor = AutoProcessor.from_pretrained(
+        model_id,
+        trust_remote_code=True,
+        revision=revision,
+    )
     tokenizer = processor.tokenizer
     model = Qwen2AudioForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
     model.eval()
@@ -1898,6 +1965,7 @@ finally:
 
 
 def generate_mlx_vlm_script(model: ModelInfo, image_path: str, max_tokens: int) -> str:
+    revision = artifact_revision(model)
     return f'''\
 from mlx_vlm import generate, load
 
@@ -1907,10 +1975,11 @@ except ImportError:
     apply_chat_template = None
 
 model_id = {model.id!r}
+revision = {revision!r}
 image_path = {image_path!r}
 
 print(f"Loading {{model_id}}...")
-model, processor = load(model_id)
+model, processor = load(model_id, revision=revision)
 print("Ready! Type 'exit' to quit.\\n")
 
 while True:
@@ -1954,6 +2023,7 @@ def generate_vllm_vlm_script(
     metrics = backend_decode_metrics_block()
     quantization = vllm_quantization(model)
     utilization = format_gpu_memory_utilization(gpu_memory_utilization)
+    revision = artifact_revision(model)
     return f'''\
 import base64
 import mimetypes
@@ -1964,6 +2034,7 @@ import torch
 from vllm import LLM, SamplingParams
 
 model_id = {model.id!r}
+revision = {revision!r}
 image_path = {image_path!r}
 quantization = {quantization!r}
 {metrics}
@@ -1981,6 +2052,9 @@ load_started_at = time.perf_counter()
 llm = LLM(
     model=model_id,
     trust_remote_code=True,
+    revision=revision,
+    code_revision=revision,
+    tokenizer_revision=revision,
     dtype="auto",
     quantization=quantization,
     max_model_len={context_length},
@@ -2029,6 +2103,7 @@ def generate_sglang_vlm_script(
 ) -> str:
     metrics = backend_decode_metrics_block()
     utilization = format_gpu_memory_utilization(gpu_memory_utilization)
+    revision = artifact_revision(model)
     return f'''\
 import psutil
 import time
@@ -2037,6 +2112,7 @@ import torch
 from sglang import Engine
 
 model_id = {model.id!r}
+revision = {revision!r}
 image_path = {image_path!r}
 {metrics}
 
@@ -2046,6 +2122,7 @@ if __name__ == "__main__":
     engine = Engine(
         model_path=model_id,
         trust_remote_code=True,
+        revision=revision,
         context_length={context_length},
         mem_fraction_static={utilization},
         log_level="error",

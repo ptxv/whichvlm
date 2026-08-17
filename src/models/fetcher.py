@@ -59,6 +59,7 @@ TASK_EVAL_KEYWORDS: dict[str, tuple[str, ...]] = {
 VLM_PIPELINE_TAGS = discovery_pipeline_tags()
 VLM_VARIANT_FILTERS = (None, "gguf", "mlx", "awq", "gptq", "bnb", "fp8")
 HF_MODEL_EXPAND = (
+    "sha",
     "config",
     "safetensors",
     "gguf",
@@ -802,6 +803,7 @@ def parse_model(data: dict) -> ModelInfo | None:
     )
     artifacts = build_artifacts(
         model_id,
+        revision=data.get("sha"),
         model_format=model_format,
         quantization_type=quantization_type,
         access=access,
