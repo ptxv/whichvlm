@@ -17,6 +17,7 @@ from runtime import (
     ServeRequest,
     auto_gpu_memory_utilization,
     backend_try_command,
+    compatible_runtime_backend,
     generate_llama_cpp_serve_script,
     generate_llama_cpp_text_script,
     generate_llama_cpp_vlm_script,
@@ -949,6 +950,21 @@ def test_recommended_runtime_backend_prefers_vllm_for_linux_cuda_vlm():
     assert (
         recommended_runtime_backend(vlm_model(), None, linux_cuda_hardware()) == "vllm"
     )
+
+
+def test_compatible_runtime_backend_ignores_artifact_availability():
+    model = vlm_model()
+    artifact = GGUFVariant(
+        filename="Test-7B.Q4_K_M.gguf",
+        quant_type="Q4_K_M",
+        file_size_bytes=4_000_000_000,
+        hypothetical=True,
+    )
+
+    assert compatible_runtime_backend(model, artifact, linux_cuda_hardware()) == (
+        "llama.cpp"
+    )
+    assert recommended_runtime_backend(model, artifact, linux_cuda_hardware()) is None
 
 
 def test_recommended_runtime_backend_infers_missing_gpu_capabilities():

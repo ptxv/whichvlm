@@ -196,6 +196,36 @@ def test_cpu_only_backend_filters_out_non_gguf_models():
     assert results[0].model.id == "Qwen/Qwen3-8B-GGUF"
 
 
+def test_ranker_requires_supported_runtime_family():
+    unsupported = ModelInfo(
+        id="HuggingFaceM4/Idefics3-8B-Llama3",
+        family_id="idefics",
+        name="Idefics3-8B-Llama3",
+        parameter_count=8_000_000_000,
+        model_format="safetensors",
+        artifacts=[
+            ModelArtifact(
+                repo_id="HuggingFaceM4/Idefics3-8B-Llama3",
+                format="safetensors",
+                backend_support=["cuda"],
+            )
+        ],
+        capabilities=ModelCapabilities(image=True),
+    )
+    supported = ModelInfo(
+        id="Qwen/Qwen2.5-VL-7B-Instruct",
+        family_id="qwen-vl",
+        name="Qwen2.5-VL-7B-Instruct",
+        parameter_count=7_000_000_000,
+        model_format="safetensors",
+        capabilities=ModelCapabilities(image=True),
+    )
+
+    results = rank_models([unsupported, supported], make_hardware(), task_profile="any")
+
+    assert [result.model.id for result in results] == [supported.id]
+
+
 def test_architecture_marks_transformers_vlm_for_vision_profile():
     model = ModelInfo(
         id="org/ConfigOnly-3B",
@@ -484,7 +514,7 @@ def test_general_profile_excludes_specialized_models():
 def test_ocr_workload_prioritizes_ocr_evidence():
     generic = ModelInfo(
         id="org/Generic-VL-7B",
-        family_id="generic-vl-7b",
+        family_id="qwen-vl",
         name="Generic-VL-7B",
         parameter_count=7_000_000_000,
         downloads=1000,
@@ -494,7 +524,7 @@ def test_ocr_workload_prioritizes_ocr_evidence():
     )
     ocr_model = ModelInfo(
         id="org/OCR-VL-7B",
-        family_id="ocr-vl-7b",
+        family_id="llava",
         name="OCR-VL-7B",
         parameter_count=7_000_000_000,
         downloads=1000,
@@ -518,7 +548,7 @@ def test_ocr_workload_prioritizes_ocr_evidence():
 def test_ocr_workload_does_not_inherit_generic_benchmark_scores():
     model = ModelInfo(
         id="org/Generic-OCR-VL-7B",
-        family_id="generic-ocr-vl-7b",
+        family_id="qwen-vl",
         name="Generic-OCR-VL-7B",
         parameter_count=7_000_000_000,
         downloads=1000,
@@ -544,6 +574,7 @@ def test_video_workload_does_not_inherit_generic_benchmark_scores():
         family_id="qwen-vl",
         name="Video-VL-7B",
         parameter_count=7_000_000_000,
+        architecture="qwen2_5_vl",
         downloads=1000,
         likes=100,
         architecture="qwen2_5_vl",
@@ -584,6 +615,7 @@ def test_audio_workload_does_not_inherit_generic_benchmark_scores():
         family_id="qwen2-audio",
         name="Audio-VL-7B",
         parameter_count=7_000_000_000,
+        architecture="qwen2audio",
         downloads=1000,
         likes=100,
         architecture="qwen2audio",

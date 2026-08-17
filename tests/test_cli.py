@@ -2237,6 +2237,9 @@ def test_json_output_defaults_to_compact():
 
     assert compact_entry["model_id"] == "test-org/Test-7B"
     assert compact_entry["recommended_runtime_backend"] is None
+    assert compact_entry["artifact_ready"] is True
+    assert compact_entry["runtime_ready"] is False
+    assert compact_entry["runnable"] is False
     assert compact_entry["benchmark_source"] == "line_interp"
     assert compact_entry["ranking_evidence"] == "benchmark score"
     assert compact_entry["vram_required_range_bytes"] == [
@@ -2247,6 +2250,43 @@ def test_json_output_defaults_to_compact():
     assert "artifacts" not in compact_entry
     assert "lineage" not in compact_entry
     assert "budget_notes" not in compact["hardware"]
+
+
+@pytest.mark.parametrize(
+    ("model_id", "family_id", "runtime_backend", "runtime_ready"),
+    [
+        ("Qwen/Qwen2.5-VL-7B-Instruct", "qwen-vl", "vllm", True),
+        ("HuggingFaceM4/Idefics3-8B-Llama3", "idefics", None, False),
+    ],
+)
+def test_json_output_reflects_runtime_readiness(
+    model_id,
+    family_id,
+    runtime_backend,
+    runtime_ready,
+):
+    model = ModelInfo(
+        id=model_id,
+        family_id=family_id,
+        name=model_id.rsplit("/", 1)[-1],
+        parameter_count=7_000_000_000,
+        capabilities=ModelCapabilities(image=True),
+    )
+    result = CompatibilityResult(
+        model=model,
+        gguf_variant=None,
+        can_run=True,
+        vram_required_bytes=8_000_000_000,
+        vram_available_bytes=24_000_000_000,
+    )
+
+    entry = render_json_output(result, hw_with_gpu(24))["models"][0]
+
+    assert entry["recommended_runtime_backend"] == runtime_backend
+    assert entry["artifact_ready"] is True
+    assert entry["runtime_ready"] is runtime_ready
+    assert entry["can_run"] is True
+    assert entry["runnable"] is runtime_ready
 
 
 def test_json_output_marks_hypothetical_gguf_unavailable():
@@ -2261,12 +2301,14 @@ def test_json_output_marks_hypothetical_gguf_unavailable():
     entry = render_json_output(result, hardware)["models"][0]
 
     assert entry["artifact_status"] == "hypothetical"
+    assert entry["artifact_ready"] is False
     assert entry["downloadable"] is False
     assert entry["can_run"] is True
     assert entry["runnable"] is False
     assert entry["file_size_bytes"] is None
     assert entry["estimated_file_size_bytes"] == 4_000_000_000
     assert entry["recommended_runtime_backend"] is None
+    assert entry["runtime_ready"] is True
 
 
 def test_json_output_includes_diagnostics_when_requested():
